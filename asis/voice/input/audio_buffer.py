@@ -1,16 +1,44 @@
 """
-Forza AI Voice System
 Audio buffering.
 
-Provides a thread-safe buffer for microphone audio.
+Thread-safe buffer for microphone audio. Works without numpy (pure
+python lists); uses numpy when available for concatenation.
 """
 
 from __future__ import annotations
 
 from collections import deque
 from threading import Lock
+from typing import Any
 
-import numpy as np
+
+def _flatten(samples: Any) -> list[float]:
+    if samples is None:
+        return []
+    try:
+        import numpy as np  # type: ignore
+
+        if isinstance(samples, np.ndarray):
+            return [float(v) for v in samples.flatten().tolist()]
+    except ImportError:
+        pass
+    if isinstance(samples, (bytes, bytearray)):
+        return [float(b) for b in samples]
+    if isinstance(samples, (list, tuple)):
+        out: list[float] = []
+        for item in samples:
+            if isinstance(item, (list, tuple)):
+                out.extend(float(v) for v in item)
+            else:
+                try:
+                    out.append(float(item))  # type: ignore[arg-type]
+                except (TypeError, ValueError):
+                    continue
+        return out
+    try:
+        return [float(samples)]  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return []
 
 
 class AudioBuffer:
@@ -30,7 +58,7 @@ class AudioBuffer:
         self.sample_rate = sample_rate
         self.max_samples = int(max_seconds * sample_rate)
 
-        self._buffer: deque[np.ndarray] = deque()
+        self._buffer: deque[list[float]] = deque()
         self._sample_count = 0
         self._lock = Lock()
 
@@ -47,97 +75,74 @@ class AudioBuffer:
 
         return self.sample_count / self.sample_rate
 
-    def write(self, audio: np.ndarray) -> None:
-        """
-        Add audio samples to the buffer.
+    def write(self, audio: Any) -> None:
+        """Add audio samples to the buffer."""
 
-        Args:
-            audio: Audio samples as a NumPy array.
-        """
+        samples = _flatten(audio)
 
-        samples = np.asarray(audio, dtype=np.float32).flatten()
-
-        if samples.size == 0:
+        if not samples:
             return
 
         with self._lock:
             self._buffer.append(samples)
-            self._sample_count += samples.size
+            self._sample_count += len(samples)
 
             while self._sample_count > self.max_samples:
                 oldest = self._buffer.popleft()
-                self._sample_count -= oldest.size
+                self._sample_count -= len(oldest)
 
-    def read(self, seconds: float | None = None) -> np.ndarray:
-        """
-        Read buffered audio without removing it.
-
-        Args:
-            seconds: Optional amount of audio to return.
-                     If omitted, returns everything.
-
-        Returns:
-            Copy of the requested audio samples.
-        """
-
+    def _concat(self) -> list[float]:
         with self._lock:
             if not self._buffer:
-                return np.empty(0, dtype=np.float32)
+                return []
+            return [v for chunk in self._buffer for v in chunk]
 
-            audio = np.concatenate(tuple(self._buffer))
+    def read(self, seconds: float | None = None) -> list[float]:
+        """Read buffered audio without removing it."""
+
+        audio = self._concat()
+
+        if not audio:
+            return []
 
         if seconds is None:
-            return audio
+            return list(audio)
 
         if seconds <= 0:
             raise ValueError("seconds must be greater than zero.")
 
-        sample_count = min(
-            int(seconds * self.sample_rate),
-            audio.size,
-        )
+        sample_count = min(int(seconds * self.sample_rate), len(audio))
 
-        return audio[-sample_count:].copy()
+        return audio[-sample_count:]
 
-    def consume(self, seconds: float | None = None) -> np.ndarray:
-        """
-        Read and remove audio from the buffer.
-
-        Args:
-            seconds: Optional amount of audio to consume.
-                     If omitted, consumes everything.
-
-        Returns:
-            Consumed audio samples.
-        """
+    def consume(self, seconds: float | None = None) -> list[float]:
+        """Read and remove audio from the buffer."""
 
         with self._lock:
             if not self._buffer:
-                return np.empty(0, dtype=np.float32)
+                return []
 
-            audio = np.concatenate(tuple(self._buffer))
+            audio = [v for chunk in self._buffer for v in chunk]
 
             if seconds is None:
-                self.clear()
+                self._buffer.clear()
+                self._sample_count = 0
                 return audio
 
             if seconds <= 0:
                 raise ValueError("seconds must be greater than zero.")
 
-            sample_count = min(
-                int(seconds * self.sample_rate),
-                audio.size,
-            )
+            sample_count = min(int(seconds * self.sample_rate), len(audio))
 
-            result = audio[-sample_count:].copy()
-
+            result = audio[-sample_count:]
             remaining = audio[:-sample_count]
 
-            self.clear()
+            self._buffer.clear()
+            self._sample_count = 0
 
-            if remaining.size:
+            if remaining:
                 self._buffer.append(remaining)
-                self._sample_count = remaining.size
+                self._sample_count = len(remaining)
 
             return result
 
