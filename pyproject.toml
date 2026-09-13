@@ -33,6 +33,7 @@ voice = [
     "torchaudio",
     "speechbrain",
     "openwakeword",
+    "pyttsx3",
     "pycaw; sys_platform == 'win32'",
     "comtypes; sys_platform == 'win32'",
     "pywin32; sys_platform == 'win32'",
