@@ -41,9 +41,12 @@ class EventType(StrEnum):
     VOICE_STT_STARTED = "voice.stt.started"
     VOICE_STT_READY = "voice.stt.ready"
     VOICE_SPEAKER_IDENTIFIED = "voice.speaker.identified"
+    VOICE_WAKE_WORD_DETECTED = "voice.wake_word.detected"
     VOICE_TTS_STARTED = "voice.tts.started"
     VOICE_TTS_FINISHED = "voice.tts.finished"
     VOICE_OUTPUT = "voice.output"
+    VOICE_ERROR = "voice.error"
+    VOICE_STOPPED = "voice.stopped"
 
     INTERRUPT_REQUESTED = "interrupt.requested"
     INTERRUPT_CANCELLED = "interrupt.cancelled"
