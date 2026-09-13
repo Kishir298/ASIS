@@ -35,9 +35,7 @@ class TranscriptionNormalizer:
         fuzzy_threshold: float = 0.82,
     ) -> None:
         if not 0.0 <= fuzzy_threshold <= 1.0:
-            raise ValueError(
-                "fuzzy_threshold must be between 0.0 and 1.0."
-            )
+            raise ValueError("fuzzy_threshold must be between 0.0 and 1.0.")
 
         self.fuzzy_threshold = fuzzy_threshold
 
@@ -54,18 +52,13 @@ class TranscriptionNormalizer:
 
         if custom_corrections:
             self.corrections.update(
-                {
-                    key.lower(): value
-                    for key, value in custom_corrections.items()
-                }
+                {key.lower(): value for key, value in custom_corrections.items()}
             )
 
         if known_words:
             self.known_words.extend(known_words)
 
-        self.known_words = list(
-            dict.fromkeys(self.known_words)
-        )
+        self.known_words = list(dict.fromkeys(self.known_words))
 
     def normalize(self, text: str) -> NormalizationResult:
         """Normalize a transcription."""
@@ -82,15 +75,11 @@ class TranscriptionNormalizer:
         normalized = self._clean_text(original)
         corrections: list[str] = []
 
-        normalized, exact_corrections = (
-            self._apply_exact_corrections(normalized)
-        )
+        normalized, exact_corrections = self._apply_exact_corrections(normalized)
 
         corrections.extend(exact_corrections)
 
-        normalized, fuzzy_corrections = (
-            self._apply_fuzzy_corrections(normalized)
-        )
+        normalized, fuzzy_corrections = self._apply_fuzzy_corrections(normalized)
 
         corrections.extend(fuzzy_corrections)
 
@@ -122,9 +111,7 @@ class TranscriptionNormalizer:
                     text,
                 )
 
-                corrections.append(
-                    f"{source} -> {replacement}"
-                )
+                corrections.append(f"{source} -> {replacement}")
 
         return text, corrections
 
@@ -144,9 +131,7 @@ class TranscriptionNormalizer:
         words = text.split()
 
         for index, word in enumerate(words):
-            cleaned = word.strip(
-                ".,!?;:\"'()[]{}"
-            )
+            cleaned = word.strip(".,!?;:\"'()[]{}")
 
             if len(cleaned) < 4:
                 continue
@@ -159,23 +144,13 @@ class TranscriptionNormalizer:
             if cleaned.lower() == replacement.lower():
                 continue
 
-            punctuation_before = word[: len(word) - len(word.lstrip(
-                ".,!?;:\"'()[]{}"
-            ))]
+            punctuation_before = word[: len(word) - len(word.lstrip(".,!?;:\"'()[]{}"))]
 
-            punctuation_after = word[
-                len(word.rstrip(".,!?;:\"'()[]{}")):
-            ]
+            punctuation_after = word[len(word.rstrip(".,!?;:\"'()[]{}")) :]
 
-            words[index] = (
-                f"{punctuation_before}"
-                f"{replacement}"
-                f"{punctuation_after}"
-            )
+            words[index] = f"{punctuation_before}{replacement}{punctuation_after}"
 
-            corrections.append(
-                f"{cleaned} -> {replacement}"
-            )
+            corrections.append(f"{cleaned} -> {replacement}")
 
         return " ".join(words), corrections
 
