@@ -29,7 +29,6 @@ from __future__ import annotations
 import platform
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -41,8 +40,7 @@ VENV_DIR = ROOT / ".venv"
 def ensure_uv() -> None:
     if shutil.which("uv") is None:
         raise RuntimeError(
-            "uv was not found on PATH. Install it from "
-            "https://docs.astral.sh/uv/"
+            "uv was not found on PATH. Install it from https://docs.astral.sh/uv/"
         )
 
 
@@ -72,9 +70,7 @@ def get_base_python() -> str:
         if candidate:
             return candidate
 
-    raise RuntimeError(
-        f"uv could not locate Python {PYTHON_VERSION}."
-    )
+    raise RuntimeError(f"uv could not locate Python {PYTHON_VERSION}.")
 
 
 def create_venv(base_python: str) -> None:
@@ -83,9 +79,7 @@ def create_venv(base_python: str) -> None:
         return
 
     print(f"Creating virtual environment with Python {PYTHON_VERSION}...")
-    subprocess.check_call(
-        [base_python, "-m", "venv", "--without-pip", str(VENV_DIR)]
-    )
+    subprocess.check_call([base_python, "-m", "venv", "--without-pip", str(VENV_DIR)])
 
 
 def install_venv_interpreter(base_python: str) -> None:

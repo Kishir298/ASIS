@@ -12,9 +12,9 @@ VOICE_ROOT = Path(__file__).resolve().parent
 if str(VOICE_ROOT) not in sys.path:
     sys.path.insert(0, str(VOICE_ROOT))
 
-from config.platform import get_platform, is_supported_platform
-from input.microphone import Microphone, MicrophoneConfig
-from recognition.speech_to_text import SpeechTranscriber
+from config.platform import get_platform, is_supported_platform  # noqa: E402
+from input.microphone import Microphone, MicrophoneConfig  # noqa: E402
+from recognition.speech_to_text import SpeechTranscriber  # noqa: E402
 
 
 def print_section(title: str) -> None:

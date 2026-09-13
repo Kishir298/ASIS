@@ -6,11 +6,10 @@ Real-time speech segment detection.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 import numpy as np
-
 from input.microphone import Microphone
 from input.vad import VoiceActivityDetector
 
@@ -47,9 +46,7 @@ class SpeechDetector:
             raise ValueError("minimum_duration must be greater than zero.")
 
         if maximum_duration <= minimum_duration:
-            raise ValueError(
-                "maximum_duration must be greater than minimum_duration."
-            )
+            raise ValueError("maximum_duration must be greater than minimum_duration.")
 
         self.microphone = microphone
         self.vad = vad
@@ -63,7 +60,7 @@ class SpeechDetector:
 
     def listen(
         self,
-        on_speech: Optional[Callable[[SpeechSegment], None]] = None,
+        on_speech: Callable[[SpeechSegment], None] | None = None,
         stop_event=None,
     ) -> None:
         """
@@ -84,8 +81,8 @@ class SpeechDetector:
         speech_audio: list[np.ndarray] = []
 
         speaking = False
-        speech_start_time: Optional[float] = None
-        last_speech_time: Optional[float] = None
+        speech_start_time: float | None = None
+        last_speech_time: float | None = None
 
         try:
             while True:
@@ -112,8 +109,7 @@ class SpeechDetector:
 
                     if (
                         speech_start_time is not None
-                        and now - speech_start_time
-                        >= self.maximum_duration
+                        and now - speech_start_time >= self.maximum_duration
                     ):
                         segment = self._create_segment(speech_audio)
 
@@ -129,8 +125,7 @@ class SpeechDetector:
 
                     if (
                         last_speech_time is not None
-                        and now - last_speech_time
-                        >= self.silence_duration
+                        and now - last_speech_time >= self.silence_duration
                     ):
                         segment = self._create_segment(speech_audio)
 
@@ -170,7 +165,7 @@ class SpeechDetector:
     @staticmethod
     def _emit(
         segment: SpeechSegment,
-        callback: Optional[Callable[[SpeechSegment], None]],
+        callback: Callable[[SpeechSegment], None] | None,
     ) -> None:
         """Send a completed segment to the callback."""
 
