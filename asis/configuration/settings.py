@@ -73,12 +73,28 @@ class SpeechToTextSettings:
 class TTSSettings:
     engine: str
     voice: str
+    sample_rate: int = 16_000
 
 
 @dataclass(frozen=True)
 class SpeakerSettings:
     engine: str
     confidence: float
+    threshold: float = 0.6
+    metric: str = "cosine"
+
+
+@dataclass(frozen=True)
+class WakeSettings:
+    engine: str = "mock"
+    threshold: float = 0.5
+    model: str = ""
+
+
+@dataclass(frozen=True)
+class VadSettings:
+    engine: str = "mock"
+    threshold: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -90,6 +106,8 @@ class VoiceSettings:
     stt: SpeechToTextSettings = field(default_factory=SpeechToTextSettings)
     tts: TTSSettings = field(default_factory=TTSSettings)
     speaker: SpeakerSettings = field(default_factory=SpeakerSettings)
+    wake: WakeSettings = field(default_factory=WakeSettings)
+    vad: VadSettings = field(default_factory=VadSettings)
 
 
 @dataclass(frozen=True)
@@ -184,10 +202,22 @@ def load_settings() -> Settings:
             tts=TTSSettings(
                 engine=environment.VOICE_TTS_ENGINE,
                 voice=environment.VOICE_TTS_VOICE,
+                sample_rate=environment.VOICE_TTS_SAMPLE_RATE,
             ),
             speaker=SpeakerSettings(
                 engine=environment.VOICE_SPEAKER_ENGINE,
                 confidence=environment.VOICE_SPEAKER_CONFIDENCE,
+                threshold=environment.VOICE_SPEAKER_THRESHOLD,
+                metric=environment.VOICE_SPEAKER_METRIC,
+            ),
+            wake=WakeSettings(
+                engine=environment.VOICE_WAKE_ENGINE,
+                threshold=environment.VOICE_WAKE_THRESHOLD,
+                model=environment.VOICE_WAKE_MODEL,
+            ),
+            vad=VadSettings(
+                engine=environment.VOICE_VAD_ENGINE,
+                threshold=environment.VOICE_VAD_THRESHOLD,
             ),
         ),
         runtime=RuntimeSettings(

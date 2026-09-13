@@ -113,6 +113,12 @@ def handle_message(
 
 def entry(argv: Sequence[str] | None = None) -> int:
     """Console entry point for A.S.I.S."""
+    raw = list(argv) if argv is not None else sys.argv[1:]
+    if raw and raw[0] == "voice":
+        from asis.cli.voice import run_voice
+
+        return run_voice(raw[1:])
+
     args = build_parser().parse_args(argv)
 
     if args.version:

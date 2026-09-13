@@ -1,25 +1,32 @@
 """
 Voice pipeline for A.S.I.S.
 
-Coordinates replaceable providers: capture -> transcribe -> identify
-speaker -> synthesize -> output. Emits voice events and honors the
-``voice`` interruption scope so active speech can be cancelled.
+Coordinates replaceable providers: capture -> VAD -> wake word ->
+transcribe -> identify speaker -> synthesize -> output. Emits voice
+events and honors the ``voice`` interruption scope so active speech
+can be cancelled. Depends on interfaces only, never on concrete
+Whisper/openWakeWord/TTS/sounddevice implementations.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
+from asis.errors import VoiceError
 from asis.events.bus import EventBus
-from asis.events.events import Event, EventType
+from asis.events.events import EventType
 from asis.logging.logger import get_logger
 from asis.system.interrupt import InterruptCoordinator
 
-from .models import AudioData, SpeakerResult, TranscriptionResult
+from .models import AudioData, SpeakerResult, TranscriptionResult, VoiceEvent
 from .providers import (
     AudioInputProvider,
     AudioOutputProvider,
     SpeakerIdentifier,
     SpeechRecognizer,
     TextToSpeechProvider,
+    VadDetector,
+    WakeWordDetector,
 )
 
 _VOICE_SCOPE = "voice"
@@ -37,6 +44,9 @@ class VoicePipeline:
         audio_output: AudioOutputProvider,
         event_bus: EventBus | None = None,
         interrupts: InterruptCoordinator | None = None,
+        vad: VadDetector | None = None,
+        wake_word_detector: WakeWordDetector | None = None,
+        normalizer=None,
     ) -> None:
         self.audio_input = audio_input
         self.speech_recognizer = speech_recognizer
@@ -45,7 +55,15 @@ class VoicePipeline:
         self.audio_output = audio_output
         self.event_bus = event_bus
         self.interrupts = interrupts
+        self.vad = vad
+        self.wake_word_detector = wake_word_detector
+        self.normalizer = normalizer
         self._logger = get_logger("voice.pipeline")
+
+    # -- internals -----------------------------------------------------
+    def _check(self) -> None:
+        if self.interrupts is not None:
+            self.interrupts.check(_VOICE_SCOPE)
 
     def _publish(
         self,
@@ -54,75 +72,206 @@ class VoicePipeline:
     ) -> None:
         if self.event_bus is None:
             return
+        event = VoiceEvent(event_type=event_type, payload=dict(data)).to_event()
+        self.event_bus.publish(event)
 
-        self.event_bus.publish(
-            Event(
-                type=event_type,
-                data=data,
-                source="voice",
-            )
-        )
+    def _fail(self, message: str, exc: Exception | None = None) -> VoiceError:
+        self._publish(EventType.VOICE_ERROR, message=message)
+        self._logger.error("voice error: %s", message)
+        if isinstance(exc, VoiceError):
+            return exc
+        return VoiceError(message) if exc is None else VoiceError(f"{message}: {exc}")
 
-    def _expects_input(self) -> AudioData:
-        if self.interrupts is not None:
-            self.interrupts.check(_VOICE_SCOPE)
-
-        audio = self.audio_input.read(1024)
+    # -- stages (each independently testable) --------------------------
+    def listen(self, num_samples: int = 1024) -> AudioData:
+        """Capture one audio segment (cancellable)."""
+        self._check()
+        try:
+            audio = self.audio_input.read(num_samples)
+        except Exception as exc:
+            raise self._fail("audio capture failed", exc) from exc
         self._publish(EventType.VOICE_INPUT)
-
-        if self.interrupts is not None:
-            self.interrupts.check(_VOICE_SCOPE)
-
+        self._check()
         return audio
 
+    def check_voice_activity(self, audio: AudioData) -> bool:
+        """Return True when audio likely contains speech (VAD gate)."""
+        if self.vad is None:
+            return True
+        try:
+            return bool(self.vad.is_speech(audio))
+        except Exception as exc:
+            raise self._fail("VAD failed", exc) from exc
+
+    def detect_wake_word(self, audio: AudioData) -> bool:
+        """Audio wake-word check; publishes event when detected."""
+        if self.wake_word_detector is None:
+            return True
+        try:
+            detected = bool(self.wake_word_detector.detect(audio))
+        except Exception as exc:
+            raise self._fail("wake-word detection failed", exc) from exc
+        if detected:
+            self._publish(
+                EventType.VOICE_WAKE_WORD_DETECTED,
+                phrases=list(self.wake_word_detector.phrases),
+            )
+            self._logger.info("wake word detected")
+        return detected
+
+    def detect_wake_text(self, text: str) -> bool:
+        """Text-surface wake check via the detector fallback."""
+        if self.wake_word_detector is None:
+            return True
+        try:
+            detected = bool(self.wake_word_detector.detect_text(text))
+        except Exception:
+            return False
+        if detected:
+            self._publish(EventType.VOICE_WAKE_WORD_DETECTED, text=text[:120])
+        return detected
+
     def transcribe(self, audio: AudioData) -> TranscriptionResult:
-        """Convert audio into text."""
+        """Convert audio into text (cancellable around inference)."""
+        self._check()
         self._publish(EventType.VOICE_STT_STARTED)
 
-        result = self.speech_recognizer.transcribe(audio)
+        try:
+            result = self.speech_recognizer.transcribe(audio)
+        except Exception as exc:
+            raise self._fail("speech recognition failed", exc) from exc
 
+        self._check()
         self._publish(
             EventType.VOICE_STT_READY,
             text=result.text,
             language=result.language,
         )
-
+        self._logger.info("STT ready (%d chars)", len(result.text))
         return result
 
     def identify_speaker(self, audio: AudioData) -> SpeakerResult:
-        """Identify the speaker of the audio."""
-        result = self.speaker_identifier.identify(audio)
+        """Identify the speaker of the audio (cancellable)."""
+        self._check()
+        try:
+            result = self.speaker_identifier.identify(audio)
+        except Exception as exc:
+            raise self._fail("speaker identification failed", exc) from exc
 
+        self._check()
         self._publish(
             EventType.VOICE_SPEAKER_IDENTIFIED,
             speaker_id=result.speaker_id,
             is_known=result.is_known,
         )
-
         return result
 
+    def normalize_text(self, text: str) -> str:
+        """Optionally normalize STT output; passthrough when unset."""
+        if self.normalizer is None:
+            return text
+        try:
+            result = self.normalizer.normalize(text)
+            return result.normalized_text
+        except Exception as exc:
+            self._logger.warning("normalization failed: %s", exc)
+            return text
+
     def speak(self, text: str) -> AudioData:
-        """Synthesize and output speech."""
-        self._publish(EventType.VOICE_TTS_STARTED, text=text)
+        """Synthesize and output speech (cancellable)."""
+        self._check()
+        self._publish(EventType.VOICE_TTS_STARTED, text=text[:200])
 
-        audio = self.tts.synthesize(text)
+        try:
+            audio = self.tts.synthesize(text)
+        except Exception as exc:
+            raise self._fail("TTS synthesis failed", exc) from exc
 
-        if self.interrupts is not None:
-            self.interrupts.check(_VOICE_SCOPE)
+        self._check()
 
-        self.audio_output.play(audio)
+        try:
+            self.audio_output.play(audio)
+        except Exception as exc:
+            raise self._fail("audio output failed", exc) from exc
 
+        self._check()
         self._publish(EventType.VOICE_TTS_FINISHED)
         self._publish(EventType.VOICE_OUTPUT)
-
+        self._logger.info("TTS finished (%d chars)", len(text))
         return audio
+
+    # -- legacy helpers ------------------------------------------------
+    def _expects_input(self) -> AudioData:
+        return self.listen(1024)
 
     def listen_and_transcribe(self) -> TranscriptionResult:
         """Capture a segment and transcribe it."""
         audio = self._expects_input()
         return self.transcribe(audio)
 
+    # -- full orchestration --------------------------------------------
+    def run_once(
+        self,
+        process_fn: Callable[[str, SpeakerResult], str] | None = None,
+        require_wake_word: bool = False,
+        num_samples: int = 1024,
+    ) -> dict:
+        """Run input->VAD->STT->speaker->A.S.I.S.->TTS->output once.
+
+        Returns a dict with ``text``, ``speaker``, ``response`` and
+        ``status`` (``spoken`` | ``no-speech`` | ``no-wake-word``).
+        ``process_fn`` maps (text, speaker) -> response text; defaults
+        to echoing the transcript. Never bypasses tool permissions —
+        callers must route ``process_fn`` through A.S.I.S. intelligence.
+        """
+        audio = self.listen(num_samples)
+
+        if not self.check_voice_activity(audio):
+            return {"status": "no-speech", "text": "", "speaker": None, "response": ""}
+
+        result = self.transcribe(audio)
+        text = self.normalize_text(result.text)
+
+        if require_wake_word and not self.detect_wake_text(text):
+            return {
+                "status": "no-wake-word",
+                "text": text,
+                "speaker": None,
+                "response": "",
+            }
+
+        speaker = self.identify_speaker(audio)
+
+        if process_fn is None:
+            response = text
+        else:
+            self._check()
+            response = process_fn(text, speaker)
+            self._check()
+
+        if not response or not response.strip():
+            return {
+                "status": "spoken",
+                "text": text,
+                "speaker": speaker,
+                "response": "",
+            }
+
+        self.speak(response)
+        return {
+            "status": "spoken",
+            "text": text,
+            "speaker": speaker,
+            "response": response,
+        }
+
     def stop(self) -> None:
-        """Stop active voice operations."""
-        self.audio_input.stop()
-        self.audio_output.stop()
+        """Stop active voice operations and release audio resources."""
+        try:
+            self.audio_input.stop()
+        finally:
+            try:
+                self.audio_output.stop()
+            finally:
+                self._publish(EventType.VOICE_STOPPED)
+                self._logger.info("voice pipeline stopped")
