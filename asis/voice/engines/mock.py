@@ -13,9 +13,12 @@ from ..models import AudioData, SpeakerResult, TranscriptionResult
 from ..providers import (
     AudioInputProvider,
     AudioOutputProvider,
+    SpeakerEmbeddingProvider,
     SpeakerIdentifier,
     SpeechRecognizer,
     TextToSpeechProvider,
+    VadDetector,
+    WakeWordDetector,
 )
 
 
@@ -120,3 +123,61 @@ class MockTextToSpeech(TextToSpeechProvider):
             samples=[0, 0, 0],
             sample_rate=self._sample_rate,
         )
+
+
+class MockWakeWordDetector(WakeWordDetector):
+    """Scriptable wake-word detector; no audio model required."""
+
+    def __init__(
+        self,
+        phrases: Iterable[str] = ("hey asis",),
+        results: Iterable[bool] | None = None,
+        default: bool = True,
+    ) -> None:
+        self._phrases = tuple(
+            {p.strip().casefold() for p in phrases if p.strip()} or {"hey asis"}
+        )
+        self._results = list(results) if results is not None else []
+        self._default = default
+        self.checked: list[AudioData] = []
+
+    @property
+    def phrases(self) -> tuple[str, ...]:
+        return self._phrases
+
+    def detect(self, audio: AudioData) -> bool:
+        self.checked.append(audio)
+        if self._results:
+            return bool(self._results.pop(0))
+        return bool(self._default)
+
+
+class MockSpeakerEmbeddingProvider(SpeakerEmbeddingProvider):
+    """Deterministic embedding provider for tests."""
+
+    def __init__(self, embedding: list[float] | None = None) -> None:
+        self._embedding = list(embedding) if embedding is not None else [1.0, 0.0, 0.0]
+        self.embedded: list[AudioData] = []
+
+    def embed(self, audio: AudioData) -> list[float]:
+        self.embedded.append(audio)
+        return list(self._embedding)
+
+
+class MockVadDetector(VadDetector):
+    """Scriptable VAD; defaults to speech present."""
+
+    def __init__(
+        self,
+        results: Iterable[bool] | None = None,
+        default: bool = True,
+    ) -> None:
+        self._results = list(results) if results is not None else []
+        self._default = default
+        self.checked: list[AudioData] = []
+
+    def is_speech(self, audio: AudioData) -> bool:
+        self.checked.append(audio)
+        if self._results:
+            return bool(self._results.pop(0))
+        return bool(self._default)
