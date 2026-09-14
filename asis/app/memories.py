@@ -3,8 +3,7 @@ Automatic long-term memory extraction for A.S.I.S.
 
 Explicit personal facts are detected from user text and persisted
 without needing model inference. Patterns are conservative: only clear,
-self-reported facts are stored. Adapted from the original Forza logic
-and rebranded for A.S.I.S.
+self-reported facts are stored.
 """
 
 from __future__ import annotations

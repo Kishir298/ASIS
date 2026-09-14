@@ -1,6 +1,38 @@
 # A.S.I.S. — A Smart Intelligence System
 
-Intelligence layer of the R.I.S.A.R.M.S. ecosystem.
+Intelligence/assistant layer of the R.I.S.A.R.M.S. ecosystem. Runs
+independently — no C.O.R.E. or R.E.S.C.S. required (both are future
+integration boundaries; see `docs/integration.md`).
+
+## Status
+
+| Area | Status |
+|---|---|
+| Repository structure | Implemented |
+| Configuration + validation | Implemented |
+| AI provider abstraction | Implemented |
+| Ollama provider | Implemented (optional dep) |
+| Conversation / context | Implemented |
+| Local memory (SQLite) | Implemented |
+| Tools (`echo`, `current_time`) | Implemented |
+| Permissions / confirmation | Implemented (no dangerous tools ship) |
+| Voice architecture + mocks | Implemented |
+| Local STT / TTS / speaker / wake / VAD | Implemented (optional deps) |
+| CLI (`asis`, `asis voice`) | Implemented |
+| C.O.R.E. integration | Future (mock adapter) |
+| R.E.S.C.S. integration | Future (placeholder adapter) |
+
+## Docs
+
+| File | Covers |
+|---|---|
+| `docs/architecture.md` | runtime, lifecycle, identity, errors, logging |
+| `docs/configuration.md` | settings, precedence, validation, paths |
+| `docs/ai-memory.md` | providers, inference, conversation, memory |
+| `docs/tools-permissions.md` | tools, permissions, sandbox, secrets |
+| `docs/voice.md` | pipeline, engines, mock-vs-real matrix |
+| `docs/cli-testing.md` | CLI flags, tests, dependencies, workflow |
+| `docs/integration.md` | C.O.R.E. / R.E.S.C.S. future boundaries |
 
 ## Layout
 
