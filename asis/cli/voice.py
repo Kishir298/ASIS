@@ -92,14 +92,15 @@ def _build_providers(args) -> dict:
     # TTS
     if args.tts_engine is not None:
         eng = args.tts_engine.lower()
+        tts_rate = settings.voice.tts.sample_rate or settings.voice.sample_rate
         if eng == "mock":
-            tts = MockTextToSpeech(sample_rate=settings.voice.sample_rate)
+            tts = MockTextToSpeech(sample_rate=tts_rate)
         elif eng in {"pyttsx3", "local"}:
             from asis.voice.tts.pyttsx3_engine import Pyttsx3Engine
 
             tts = Pyttsx3Engine(
                 voice=args.tts_voice or settings.voice.tts.voice,
-                sample_rate=settings.voice.sample_rate,
+                sample_rate=tts_rate,
             )
         else:
             raise ASISError(f"unsupported TTS engine: {args.tts_engine}")

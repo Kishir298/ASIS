@@ -85,7 +85,11 @@ def create_speaker_identifier() -> SpeakerIdentifier:
         )
         store_path = Path(settings.paths.data) / "voice" / "speakers.json"
         return EmbeddingSpeakerIdentifier(
-            embedding_provider=SpeechBrainEmbeddingProvider(device="cpu"),
+            embedding_provider=SpeechBrainEmbeddingProvider(
+                device=settings.voice.speaker.device or "cpu",
+                model=settings.voice.speaker.model
+                or "speechbrain/spkrec-ecapa-voxceleb",
+            ),
             store=SpeakerStore(store_path),
             threshold=float(threshold),
             metric=settings.voice.speaker.metric or "cosine",
@@ -126,13 +130,13 @@ def create_tts() -> TextToSpeechProvider:
 
 
 def create_audio_input(segments: list[AudioData] | None = None) -> AudioInputProvider:
-    """Build the configured audio input engine."""
-    engine = getattr(settings.voice, "input_engine", "mock")
-    # input engine lives under voice vad/input config; default mock for safety.
-    # Sounddevice is selected via ASIS_VOICE_VAD_ENGINE? No — explicit opt-in:
-    # only mock is default; sounddevice requires explicit factory arg below.
-    _ = engine
-    return MockAudioInput(segments or [])
+    """Build the configured audio input engine (default mock for safety)."""
+    engine = (settings.voice.input_engine or "mock").lower()
+    if engine in {"mock", ""}:
+        return MockAudioInput(segments or [])
+    if engine in {"sounddevice", "microphone", "real"}:
+        return create_real_audio_input()
+    raise _unsupported(engine, "audio input")
 
 
 def create_real_audio_input(
@@ -153,8 +157,13 @@ def create_real_audio_input(
 
 
 def create_audio_output() -> AudioOutputProvider:
-    """Build the configured audio output engine (default mock)."""
-    return MockAudioOutput()
+    """Build the configured audio output engine (default mock for safety)."""
+    engine = (settings.voice.output_engine or "mock").lower()
+    if engine in {"mock", ""}:
+        return MockAudioOutput()
+    if engine in {"sounddevice", "real"}:
+        return create_real_audio_output()
+    raise _unsupported(engine, "audio output")
 
 
 def create_real_audio_output(
