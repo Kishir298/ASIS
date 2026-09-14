@@ -80,6 +80,8 @@ platform defaults when unset.
 
 ## Reference
 
-`.env.example` documents all 52 variables with type, range, and default.
-It is cross-checked against `settings.py` — if they ever disagree, the
-code wins and the file must be fixed.
+`.env.example` documents all 52 variables with type, range, and default
+(46 set explicitly; the 6 `ASIS_*_DIRECTORY` path overrides appear
+commented-out since platform defaults apply). It is cross-checked
+against `settings.py` — if they ever disagree, the code wins and the
+file must be fixed.
