@@ -38,6 +38,26 @@ pip install -e .            # base
 pip install -e ".[voice]"   # voice extras (microphone, STT, TTS, VAD)
 ```
 
+## Configuration
+
+One validated layer: `asis/configuration` → typed `settings` →
+components. Copy `.env.example` to `.env` (or export variables
+directly); see the example file for every variable, default, type,
+and range.
+
+```python
+from asis.configuration import load_settings, settings
+
+settings.ai.model          # typed access, never os.getenv in app code
+fresh = load_settings()    # independent reload (tests/development)
+custom = load_settings({"ASIS_AI_MODEL": "x"})  # explicit overrides win
+```
+
+Precedence: explicit overrides > process environment > `.env` >
+built-in defaults. Empty values count as unset; present-but-invalid
+values raise `ConfigurationError`. Paths resolve via `platformdirs`
+outside the repository (overridable with `ASIS_*_DIRECTORY`).
+
 ## Test
 
 ```bash
