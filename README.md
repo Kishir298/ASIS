@@ -19,6 +19,8 @@ integration boundaries; see `docs/integration.md`).
 | Voice architecture + mocks | Implemented |
 | Local STT / TTS / speaker / wake / VAD | Implemented (optional deps) |
 | CLI (`asis`, `asis voice`) | Implemented |
+| Conversation history / memory recall in CLI | Not wired (subsystems implemented, see docs/ai-memory.md) |
+| Tool execution from application code | Not wired (subsystem implemented, `--list-tools` only) |
 | C.O.R.E. integration | Future (mock adapter) |
 | R.E.S.C.S. integration | Future (placeholder adapter) |
 
@@ -89,6 +91,15 @@ Precedence: explicit overrides > process environment > `.env` >
 built-in defaults. Empty values count as unset; present-but-invalid
 values raise `ConfigurationError`. Paths resolve via `platformdirs`
 outside the repository (overridable with `ASIS_*_DIRECTORY`).
+
+## Chat behavior
+
+Each CLI input is processed statelessly: a fresh `[system, user]`
+pair is sent to the provider, with auto-extracted memories persisted
+to the local SQLite store. `ConversationSession`, `ContextAssembler`
+and `InferenceEngine` (history, memory-aware prompts, cancellable
+inference) are implemented and tested but not yet wired into the CLI —
+see `docs/ai-memory.md` for the exact boundary.
 
 ## Test
 
