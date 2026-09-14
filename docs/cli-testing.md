@@ -25,11 +25,17 @@ failures exit `2` unless `--debug` re-raises.
 python3 -m pytest -q        # full suite: 128 tests, ~1s
 ```
 
-| File | Tests | Covers |
+| File | Collected tests | Covers |
 |---|---|---|
 | `test_configuration.py` | 49 | defaults/overrides/precedence/validation/paths/voice |
 | `test_voice.py` | 28 | models/buffer/engines/pipeline/CLI, mock-only |
-| `test_ai/memory/tools/cli/…` | 51 | providers, lifecycle, registry, parsers, events |
+| `test_ai.py` | 9 | providers, manager, conversation, context, inference |
+| `test_app.py` | 6 | auto-memory extraction and result handling |
+| `test_cli.py` | 7 | entry point, flags, REPL shutdown, memory building |
+| `test_events.py` | 5 | event bus and event types |
+| `test_identity.py` | 5 | identity rendering, personality template |
+| `test_memory.py` | 10 | manager, storage, search, models |
+| `test_tools.py` | 9 | registry, router, executor, permissions, provided tools |
 
 Mock providers everywhere: **no Ollama, microphone, speakers, GPU,
 models, internet, CORE, or RESCS required**. No coverage gate is
@@ -38,7 +44,10 @@ claim 100% coverage.
 
 ## Dependencies (`pyproject.toml`, `requires-python = >=3.11`)
 
-- **Core (mandatory):** `platformdirs`, `psutil`, `python-dotenv`.
+- **Core (mandatory):** `platformdirs`, `psutil` (declared in
+  `pyproject.toml`/`requirements/base.txt` but not yet imported by any
+  `asis/` module — reserved for future system/resource features),
+  `python-dotenv`.
 - **AI (optional):** `requests`, `ollama`.
 - **Voice (optional):** `numpy`, `scipy`, `sounddevice`, `soundfile`,
   `silero-vad`, `faster-whisper`, `torch`, `torchaudio`, `speechbrain`,
