@@ -21,7 +21,7 @@ Conversation Engine            asis/ai/conversation.py (bounded session)
  │
  ├── Memory                    asis/memory/ (local SQLite, see docs/ai-memory.md)
  │
- ├── Model Provider            asis/ai/ (mock default, Ollama optional)
+ ├── Model Provider            asis/ai/ (Ollama default, mock for tests/dev)
  │
  └── Tool System               asis/tools/ (registry → router → executor)
        │
@@ -31,6 +31,17 @@ Conversation Engine            asis/ai/conversation.py (bounded session)
        ▼
     Tool Execution             bounded by tools.timeout
 ```
+
+**Runtime wiring status (important):** the shipped CLI chat path is
+**stateless** — each input builds a fresh `[system, user]` message pair
+(`asis/cli/main.py:handle_message()`); `ConversationSession`,
+`ContextAssembler` and `InferenceEngine` are fully implemented and
+tested (`asis/ai/`) but are not yet wired into the CLI REPL or voice
+loop. Likewise, memories are **written** from user text
+(`store_auto_memories`) but are not yet recalled into prompts, and the
+tool system (registry/router/executor + permissions) is complete but
+no production code path executes a tool — only `--list-tools` touches
+the provided tools.
 
 There is **no agentic loop**: inference is a single
 context → model → response pass per turn (`asis/ai/inference.py`).
@@ -67,7 +78,8 @@ engines are explicit opt-ins via `ASIS_VOICE_*_ENGINE`. Details in
 
 `asis/system/lifecycle.py` starts components in registration order and
 stops them in reverse; per-component stop failures are logged, not
-re-raised. `ASISRuntime` (`asis/system/runtime.py`) tracks
+re-raised, and startup failure stops already-started components.
+`ASISRuntime` (`asis/system/runtime.py`) tracks
 `CREATED → STARTING → RUNNING → STOPPING → STOPPED/FAILED` and cancels
 all interrupt scopes on stop. Shutdown is triggered by the configured
 phrase (default `asis shutdown`) in the CLI/voice REPLs, by
@@ -107,6 +119,9 @@ asis/
 ├── tools/            registry, router, executor, provided tools
 └── voice/            canonical voice subsystem
 ```
+
+Not present: `asis/__main__.py` — there is no `python -m asis`; use the
+installed `asis` command.
 
 ## Error hierarchy
 
