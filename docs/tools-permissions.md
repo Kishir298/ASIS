@@ -14,6 +14,13 @@ explicit tool requests through registry → router → executor.
 No dangerous tools ship today. `ToolResult(success, data, error,
 tool_name)` is frozen; non-`ToolResult` returns are wrapped.
 
+**Wiring status:** the tool subsystem (registry, router, executor,
+authorization, timeouts) is implemented and fully tested, but no
+production code path executes a tool today — the CLI only lists them
+(`--list-tools`). The model can never call tools by itself, and the
+execution path exists ready for application code to route requests
+through it.
+
 Mechanics (`asis/tools/`): `ToolRegistry` (thread-safe, rejects
 duplicates with `ToolValidationError`), `ToolRouter` (unknown names
 → `failure("Tool not found")`, executor defaults to
