@@ -45,6 +45,14 @@ Conversation Context  ≠  Permanent Memory
   to `context_char_limit` + fixed rules; history tail-sliced to
   `max_context_messages`. History itself is never char-truncated.
 
+**Wiring status:** these classes are implemented and tested but the
+shipped CLI chat path (`asis/cli/main.py:handle_message()`) does not
+use them yet — each CLI input builds a fresh `[system, user]` pair, so
+multi-turn history and memory recall are not part of live responses.
+Stored memories are therefore write-only from the CLI (see below).
+Wiring `ConversationSession` + `ContextAssembler` into the CLI is the
+natural next step and requires no new subsystems.
+
 ## Memory (`asis/memory/`)
 
 | Piece | Status |
@@ -52,7 +60,8 @@ Conversation Context  ≠  Permanent Memory
 | `MemoryManager` (remember/recall/search/forget) | Implemented |
 | SQLite file storage (`memories` table, category/importance index) | Implemented |
 | LIKE search (`importance DESC, created_at DESC`) | Implemented (no embeddings/vector search) |
-| Auto-extraction (`my name is…`, `I like…`, `I'm building…`) | Implemented (`asis/app/memories.py`, wired into chat CLI) |
+| Auto-extraction (`my name is…`, `I like…`, `I'm building…`) | Implemented (`asis/app/memories.py`, invoked by chat CLI) |
+| Recall into prompts | **Not wired** — manager supports it; CLI never feeds memories to the model |
 | Cloud sync | Future — R.E.S.C.S. responsibility, not A.S.I.S. |
 
 Database lives at `settings.paths.memory / settings.memory.database_name`
