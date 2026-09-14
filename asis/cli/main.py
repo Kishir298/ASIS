@@ -13,7 +13,6 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from asis import APP_NAME, __version__
 from asis.ai import AIManager, AIMessage, MessageRole
 from asis.ai.providers import MockAIProvider, OllamaProvider
 from asis.app import store_auto_memories
@@ -26,6 +25,13 @@ from asis.tools.provided import CurrentTimeTool, EchoTool
 
 def build_memory(db_path: str | Path | None = None) -> MemoryManager:
     """Build the local memory manager backed by a SQL file database."""
+    from asis.errors import ConfigurationError
+
+    if settings.memory.provider.strip().lower() != "local":
+        raise ConfigurationError(
+            "Invalid configuration memory.provider: only 'local' is "
+            f"supported, received {settings.memory.provider!r}."
+        )
     path = (
         Path(db_path)
         if db_path
@@ -122,7 +128,7 @@ def entry(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.version:
-        print(f"{APP_NAME} {__version__}")
+        print(f"{settings.app_name} {settings.app_version}")
         return 0
 
     if args.identify:

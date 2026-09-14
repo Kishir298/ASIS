@@ -30,6 +30,8 @@ def create_provider(provider_name: str | None = None) -> AIProvider:
             model=settings.ai.model,
             host=settings.ai.endpoint,
             timeout=settings.ai.request_timeout,
+            temperature=settings.ai.temperature,
+            retries=settings.network.retries,
         )
 
     raise InferenceError(f"Unknown AI provider: {name}")

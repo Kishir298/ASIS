@@ -34,12 +34,14 @@ class ContextAssembler:
         identity: Identity,
         memory_context_provider: MemoryContextProvider | None = None,
         max_context_messages: int | None = None,
+        context_char_limit: int | None = None,
     ) -> None:
         self.identity = identity
         self.memory_context_provider = memory_context_provider
         self.max_context_messages = (
             max_context_messages or settings.ai.max_context_messages
         )
+        self.context_char_limit = context_char_limit or settings.ai.context_char_limit
 
     def system_prompt(self) -> str:
         """Build the full system prompt for this identity."""
@@ -49,7 +51,10 @@ class ContextAssembler:
             memory_context = self.memory_context_provider()
 
             if memory_context.strip():
-                sections.append(memory_context.strip())
+                text = memory_context.strip()
+                if len(text) > self.context_char_limit:
+                    text = text[: self.context_char_limit]
+                sections.append(text)
 
         sections.append(_MEMORY_RULES)
 

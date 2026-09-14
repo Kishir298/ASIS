@@ -23,10 +23,16 @@ class OllamaProvider(AIProvider):
         model: str = "qwen2.5:3b",
         host: str = "http://127.0.0.1:11434",
         timeout: float = 120.0,
+        temperature: float | None = None,
+        request_timeout: float | None = None,
+        retries: int = 0,
     ) -> None:
         self._model = model
         self.host = host.rstrip("/")
-        self.timeout = timeout
+        # Explicit timeout wins; request_timeout mirrors settings naming.
+        self.timeout = timeout if request_timeout is None else request_timeout
+        self.temperature = temperature
+        self.retries = max(0, int(retries))
 
     @property
     def name(self) -> str:
@@ -36,12 +42,12 @@ class OllamaProvider(AIProvider):
     def model(self) -> str:
         return self._model
 
-    def available(self) -> bool:
+    def available(self, timeout: float | None = None) -> bool:
         """Return True when the Ollama server is reachable."""
         try:
             response = requests.get(
                 f"{self.host}/api/tags",
-                timeout=5,
+                timeout=self.timeout if timeout is None else timeout,
             )
             return response.ok
 
@@ -54,7 +60,7 @@ class OllamaProvider(AIProvider):
         *,
         stream: bool,
     ) -> dict:
-        return {
+        payload: dict = {
             "model": self._model,
             "messages": [
                 {
@@ -65,6 +71,9 @@ class OllamaProvider(AIProvider):
             ],
             "stream": stream,
         }
+        if self.temperature is not None:
+            payload["options"] = {"temperature": self.temperature}
+        return payload
 
     def _communication_error(self, exc: Exception) -> InferenceError:
         return InferenceError(f"Could not communicate with Ollama: {exc}")
@@ -73,17 +82,20 @@ class OllamaProvider(AIProvider):
         self,
         messages: Sequence[AIMessage],
     ) -> AIResponse:
-        """Send a non-streaming chat request."""
-        try:
-            response = requests.post(
-                f"{self.host}/api/chat",
-                json=self._payload(messages, stream=False),
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-
-        except requests.RequestException as exc:
-            raise self._communication_error(exc) from exc
+        """Send a non-streaming chat request (retried per configuration)."""
+        attempts = 1 + self.retries
+        for attempt in range(attempts):
+            try:
+                response = requests.post(
+                    f"{self.host}/api/chat",
+                    json=self._payload(messages, stream=False),
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                break
+            except requests.RequestException as exc:
+                if attempt + 1 >= attempts:
+                    raise self._communication_error(exc) from exc
 
         data = response.json()
         content = (data.get("message") or {}).get("content")
