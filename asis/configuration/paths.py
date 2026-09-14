@@ -30,34 +30,52 @@ def _with_name(base: Path, name: str) -> Path:
     return base / name
 
 
-def get_data_directory() -> Path:
+def _apply_override(default: Path, override: Path | None) -> Path:
+    """Return an explicit directory override, or the platform default."""
+    return override if override is not None else default
+
+
+def get_data_directory(override: Path | None = None) -> Path:
     """Return A.S.I.S. persistent application-data directory."""
-    return _with_name(Path(user_data_dir(defaults.APP_NAME)), _DATA_SUBDIR)
+    return _apply_override(
+        _with_name(Path(user_data_dir(defaults.APP_NAME)), _DATA_SUBDIR), override
+    )
 
 
-def get_config_directory() -> Path:
+def get_config_directory(override: Path | None = None) -> Path:
     """Return A.S.I.S. user configuration directory."""
-    return _with_name(Path(user_config_dir(defaults.APP_NAME)), _CONFIG_SUBDIR)
+    return _apply_override(
+        _with_name(Path(user_config_dir(defaults.APP_NAME)), _CONFIG_SUBDIR),
+        override,
+    )
 
 
-def get_cache_directory() -> Path:
+def get_cache_directory(override: Path | None = None) -> Path:
     """Return A.S.I.S. cache directory."""
-    return _with_name(Path(user_cache_dir(defaults.APP_NAME)), _CACHE_SUBDIR)
+    return _apply_override(
+        _with_name(Path(user_cache_dir(defaults.APP_NAME)), _CACHE_SUBDIR), override
+    )
 
 
-def get_log_directory() -> Path:
+def get_log_directory(override: Path | None = None) -> Path:
     """Return A.S.I.S. log directory."""
-    return _with_name(Path(user_data_dir(defaults.APP_NAME)), _LOGS_SUBDIR)
+    return _apply_override(
+        _with_name(Path(user_data_dir(defaults.APP_NAME)), _LOGS_SUBDIR), override
+    )
 
 
-def get_memory_directory() -> Path:
+def get_memory_directory(override: Path | None = None) -> Path:
     """Return A.S.I.S. persistent local-memory directory."""
-    return _with_name(Path(user_data_dir(defaults.APP_NAME)), _MEMORY_SUBDIR)
+    return _apply_override(
+        _with_name(Path(user_data_dir(defaults.APP_NAME)), _MEMORY_SUBDIR), override
+    )
 
 
-def get_runtime_directory() -> Path:
+def get_runtime_directory(override: Path | None = None) -> Path:
     """Return a temporary runtime directory, not for permanent data."""
-    return Path(tempfile.gettempdir()) / defaults.APP_NAME / _RUNTIME_SUBDIR
+    return _apply_override(
+        Path(tempfile.gettempdir()) / defaults.APP_NAME / _RUNTIME_SUBDIR, override
+    )
 
 
 def ensure_directories() -> dict[str, Path]:

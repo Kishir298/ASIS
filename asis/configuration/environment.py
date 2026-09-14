@@ -4,18 +4,33 @@ Environment configuration for A.S.I.S.
 Environment variables override built-in defaults. A ``.env`` file in the
 project root or user configuration directory is loaded when present.
 Secrets must never be hardcoded here.
+
+Reads are lazy: every ``get_*`` call consults the current process
+environment (plus explicit programmatic overrides), so
+``load_settings()`` always reflects the environment at call time.
+A present-but-invalid value raises ``ConfigurationError``; it is never
+silently replaced by the default. Empty values count as unset.
+
+Precedence (highest wins): explicit overrides > process environment >
+``.env`` files > built-in defaults.
 """
 
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-from . import defaults
+from asis.errors import ConfigurationError
 
 _PROJECT_ROOT_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+
+# Explicit programmatic overrides (highest precedence). Used by
+# ``load_settings(env=...)`` and tests; never mutated by app code.
+_EXPLICIT: dict[str, str] = {}
 
 
 def _load_env_files() -> None:
@@ -31,144 +46,111 @@ def _load_env_files() -> None:
 
     for candidate in candidates:
         if candidate.exists():
+            # Existing process variables always win over .env content.
             load_dotenv(candidate, override=False)
 
 
-def _get(name: str) -> str | None:
-    """Return an environment variable, treating empty values as unset."""
-    value = os.getenv(name)
+def load_env_file(path: str | Path, override: bool = False) -> bool:
+    """Load one extra ``.env`` file (tests/development). Returns True if read."""
+    candidate = Path(path).expanduser()
+    if not candidate.exists():
+        return False
+    load_dotenv(candidate, override=override)
+    return True
 
+
+def set_explicit(mapping: Mapping[str, str] | None) -> None:
+    """Replace the explicit override mapping (use ``override_env`` instead)."""
+    _EXPLICIT.clear()
+    if mapping:
+        _EXPLICIT.update({str(k): str(v) for k, v in mapping.items()})
+
+
+@contextmanager
+def override_env(mapping: Mapping[str, str]) -> Iterator[None]:
+    """Temporarily layer explicit overrides (highest precedence)."""
+    previous = dict(_EXPLICIT)
+    _EXPLICIT.update({str(k): str(v) for k, v in mapping.items()})
+    try:
+        yield
+    finally:
+        _EXPLICIT.clear()
+        _EXPLICIT.update(previous)
+
+
+def _raw(name: str) -> str | None:
+    """Return the raw value for a variable, or None when unset/empty."""
+    if name in _EXPLICIT:
+        value: str | None = _EXPLICIT[name]
+    else:
+        value = os.getenv(name)
     if value is None:
         return None
-
     value = value.strip()
     return value if value else None
 
 
 def get_string(name: str, default: str) -> str:
-    return _get(name) or default
+    """Return a string variable, or the default when unset/empty."""
+    value = _raw(name)
+    return value if value is not None else default
+
+
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on", "enabled"})
+_FALSE_VALUES = frozenset({"0", "false", "no", "off", "disabled"})
 
 
 def get_bool(name: str, default: bool) -> bool:
-    value = _get(name)
-
+    """Return a boolean variable; raise on present-but-unrecognized values."""
+    value = _raw(name)
     if value is None:
         return default
-
-    return value.lower() in {"1", "true", "yes", "on", "enabled"}
+    lowered = value.lower()
+    if lowered in _TRUE_VALUES:
+        return True
+    if lowered in _FALSE_VALUES:
+        return False
+    raise ConfigurationError(
+        f"Invalid configuration value for {name}: expected a boolean "
+        f"({'/'.join(sorted(_TRUE_VALUES | _FALSE_VALUES))}), "
+        f"received {value!r}."
+    )
 
 
 def get_int(name: str, default: int) -> int:
-    value = _get(name)
-
+    """Return an integer variable; raise on present-but-invalid values."""
+    value = _raw(name)
     if value is None:
         return default
-
     try:
-        return int(value)
+        return int(value, 10)
     except ValueError:
-        return default
+        raise ConfigurationError(
+            f"Invalid configuration value for {name}: expected an integer, "
+            f"received {value!r}."
+        ) from None
 
 
 def get_float(name: str, default: float) -> float:
-    value = _get(name)
-
+    """Return a float variable; raise on present-but-invalid values."""
+    value = _raw(name)
     if value is None:
         return default
-
     try:
         return float(value)
     except ValueError:
-        return default
+        raise ConfigurationError(
+            f"Invalid configuration value for {name}: expected a number, "
+            f"received {value!r}."
+        ) from None
+
+
+def get_path(name: str) -> Path | None:
+    """Return an optional directory override as an absolute expanded path."""
+    value = _raw(name)
+    if value is None:
+        return None
+    return Path(value).expanduser().absolute()
 
 
 _load_env_files()
-
-# Identity
-IDENTITY_NAME = get_string("ASIS_IDENTITY_NAME", defaults.APP_NAME)
-IDENTITY_TITLE = get_string("ASIS_IDENTITY_TITLE", defaults.IDENTITY_TITLE)
-APP_VERSION = get_string("ASIS_APP_VERSION", defaults.APP_VERSION)
-SHUTDOWN_PHRASE = get_string("ASIS_SHUTDOWN_PHRASE", defaults.SHUTDOWN_PHRASE)
-
-# Runtime
-DEBUG = get_bool("ASIS_DEBUG", defaults.DEBUG)
-LOG_LEVEL = get_string("ASIS_LOG_LEVEL", defaults.LOG_LEVEL)
-
-# AI
-AI_PROVIDER = get_string("ASIS_AI_PROVIDER", defaults.AI_PROVIDER)
-AI_MODEL = get_string("ASIS_AI_MODEL", defaults.AI_MODEL)
-AI_ENDPOINT = get_string("ASIS_AI_ENDPOINT", defaults.AI_ENDPOINT)
-
-AI_REQUEST_TIMEOUT = get_int("ASIS_AI_REQUEST_TIMEOUT", defaults.AI_REQUEST_TIMEOUT)
-AI_TEMPERATURE = get_float("ASIS_AI_TEMPERATURE", defaults.AI_TEMPERATURE)
-AI_MAX_CONTEXT_MESSAGES = get_int(
-    "ASIS_AI_MAX_CONTEXT_MESSAGES", defaults.AI_MAX_CONTEXT_MESSAGES
-)
-AI_CONTEXT_CHAR_LIMIT = get_int(
-    "ASIS_AI_CONTEXT_CHAR_LIMIT", defaults.AI_CONTEXT_CHAR_LIMIT
-)
-
-# Conversation
-CONVERSATION_MAX_HISTORY = get_int(
-    "ASIS_CONVERSATION_MAX_HISTORY", defaults.CONVERSATION_MAX_HISTORY
-)
-
-# Memory
-MEMORY_PROVIDER = get_string("ASIS_MEMORY_PROVIDER", defaults.MEMORY_PROVIDER)
-MEMORY_DATABASE_NAME = get_string(
-    "ASIS_MEMORY_DATABASE_NAME", defaults.MEMORY_DATABASE_NAME
-)
-
-# Voice
-VOICE_SAMPLE_RATE = get_int("ASIS_VOICE_SAMPLE_RATE", defaults.VOICE_SAMPLE_RATE)
-VOICE_CHANNELS = get_int("ASIS_VOICE_CHANNELS", defaults.VOICE_CHANNELS)
-VOICE_BLOCK_SIZE = get_int("ASIS_VOICE_BLOCK_SIZE", defaults.VOICE_BLOCK_SIZE)
-VOICE_STT_ENGINE = get_string("ASIS_VOICE_STT_ENGINE", defaults.VOICE_STT_ENGINE)
-VOICE_STT_MODEL = get_string("ASIS_VOICE_STT_MODEL", defaults.VOICE_STT_MODEL)
-VOICE_STT_DEVICE = get_string("ASIS_VOICE_STT_DEVICE", defaults.VOICE_STT_DEVICE)
-VOICE_STT_COMPUTE_TYPE = get_string(
-    "ASIS_VOICE_STT_COMPUTE_TYPE", defaults.VOICE_STT_COMPUTE_TYPE
-)
-VOICE_STT_LANGUAGE = get_string("ASIS_VOICE_STT_LANGUAGE", defaults.VOICE_STT_LANGUAGE)
-VOICE_TTS_ENGINE = get_string("ASIS_VOICE_TTS_ENGINE", defaults.VOICE_TTS_ENGINE)
-VOICE_TTS_VOICE = get_string("ASIS_VOICE_TTS_VOICE", defaults.VOICE_TTS_VOICE)
-VOICE_TTS_SAMPLE_RATE = get_int(
-    "ASIS_VOICE_TTS_SAMPLE_RATE", defaults.VOICE_TTS_SAMPLE_RATE
-)
-VOICE_SPEAKER_ENGINE = get_string(
-    "ASIS_VOICE_SPEAKER_ENGINE", defaults.VOICE_SPEAKER_ENGINE
-)
-VOICE_SPEAKER_CONFIDENCE = get_float(
-    "ASIS_VOICE_SPEAKER_CONFIDENCE", defaults.VOICE_SPEAKER_CONFIDENCE
-)
-VOICE_SPEAKER_THRESHOLD = get_float(
-    "ASIS_VOICE_SPEAKER_THRESHOLD", defaults.VOICE_SPEAKER_THRESHOLD
-)
-VOICE_SPEAKER_METRIC = get_string(
-    "ASIS_VOICE_SPEAKER_METRIC", defaults.VOICE_SPEAKER_METRIC
-)
-VOICE_WAKE_WORD = get_string("ASIS_VOICE_WAKE_WORD", defaults.VOICE_WAKE_WORD)
-VOICE_WAKE_ENGINE = get_string("ASIS_VOICE_WAKE_ENGINE", defaults.VOICE_WAKE_ENGINE)
-VOICE_WAKE_THRESHOLD = get_float(
-    "ASIS_VOICE_WAKE_THRESHOLD", defaults.VOICE_WAKE_THRESHOLD
-)
-VOICE_WAKE_MODEL = get_string("ASIS_VOICE_WAKE_MODEL", defaults.VOICE_WAKE_MODEL)
-VOICE_VAD_ENGINE = get_string("ASIS_VOICE_VAD_ENGINE", defaults.VOICE_VAD_ENGINE)
-VOICE_VAD_THRESHOLD = get_float(
-    "ASIS_VOICE_VAD_THRESHOLD", defaults.VOICE_VAD_THRESHOLD
-)
-
-# Network
-NETWORK_TIMEOUT = get_int("ASIS_NETWORK_TIMEOUT", defaults.NETWORK_TIMEOUT)
-NETWORK_RETRIES = get_int("ASIS_NETWORK_RETRIES", defaults.NETWORK_RETRIES)
-
-# Tools
-TOOL_TIMEOUT = get_int("ASIS_TOOL_TIMEOUT", defaults.TOOL_TIMEOUT)
-
-# Security / permissions
-REQUIRE_CONFIRMATION_FOR_DANGEROUS = get_bool(
-    "ASIS_CONFIRM_DANGEROUS_TOOLS", defaults.REQUIRE_CONFIRMATION_FOR_DANGEROUS
-)
-
-# Runtime
-SHUTDOWN_TIMEOUT = get_int("ASIS_SHUTDOWN_TIMEOUT", defaults.SHUTDOWN_TIMEOUT)

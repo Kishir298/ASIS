@@ -2,6 +2,8 @@
 A.S.I.S. configuration subsystem.
 """
 
-from .settings import settings
+from asis.errors import ConfigurationError
 
-__all__ = ["settings"]
+from .settings import Settings, load_settings, settings
+
+__all__ = ["ConfigurationError", "Settings", "load_settings", "settings"]
