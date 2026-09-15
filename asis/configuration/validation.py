@@ -211,6 +211,10 @@ def validate_settings(settings: Settings) -> Settings:
 
     # C.O.R.E. uplink (optional infrastructure; standalone by default)
     _require_non_empty("core", "host", settings.core.host)
+    if "\x00" in settings.core.host:
+        raise ConfigurationError(
+            "Invalid configuration core.host: must not contain NUL bytes."
+        )
     port = settings.core.port
     if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
         raise ConfigurationError(
@@ -234,6 +238,17 @@ def validate_settings(settings: Settings) -> Settings:
         if not isinstance(getattr(settings.core, field_name), bool):
             raise ConfigurationError(
                 f"Invalid configuration core.{field_name}: expected a boolean."
+            )
+    for field_name in ("device_file", "ca_file"):
+        value = getattr(settings.core, field_name)
+        if not isinstance(value, str):
+            raise ConfigurationError(
+                f"Invalid configuration core.{field_name}: expected a string."
+            )
+        if "\x00" in value:
+            raise ConfigurationError(
+                f"Invalid configuration core.{field_name}: "
+                "must not contain NUL bytes."
             )
 
     # Paths

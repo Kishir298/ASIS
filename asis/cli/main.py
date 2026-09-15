@@ -9,6 +9,7 @@ message processing, and a stdin REPL.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -63,10 +64,59 @@ def build_assistant(
     memory: MemoryManager,
     mode: AssistantMode | str | None = None,
     workspace: str | Path | None = None,
+    core=None,
 ) -> AssistantApp:
     """Build the stateful assistant owning one conversation session."""
     return AssistantApp(
-        identity=identity, ai=ai, memory=memory, mode=mode, workspace=workspace
+        identity=identity,
+        ai=ai,
+        memory=memory,
+        mode=mode,
+        workspace=workspace,
+        core=core,
+    )
+
+
+def core_credential() -> str | None:
+    """Return the runtime-only CORE provisioning credential, if present.
+
+    Read from ``ASIS_CORE_CREDENTIAL`` at call time; never persisted,
+    never logged, never inserted into prompts or tool results. ``None``
+    means standalone operation (CORE tools report ``CORE_UNAVAILABLE``).
+    """
+    text = (os.getenv("ASIS_CORE_CREDENTIAL") or "").strip()
+    return text or None
+
+
+def build_core_manager(settings_obj=None):
+    """Build the optional CORE connection manager from centralized settings.
+
+    Returns ``None`` when ``ASIS_CORE_ENABLED`` is false (standalone).
+    Otherwise returns a ``CoreConnectionManager`` owning the single
+    CORE-CLIENT session for this process. Callers must ``start()`` it
+    (bounded, never fatal to local operation) and ``stop()`` it on
+    shutdown to destroy the ephemeral session.
+    """
+    from asis.integrations.core.adapter import RealCoreAdapter
+    from asis.integrations.core.connection import (
+        build_connection_manager_from_settings,
+    )
+
+    resolved = settings_obj if settings_obj is not None else settings
+    core = resolved.core
+    if not core.enabled:
+        return None
+    adapter = RealCoreAdapter(
+        host=core.host,
+        port=core.port,
+        device_file=core.device_file,
+        ca_file=core.ca_file,
+        insecure=core.insecure,
+        connect_timeout=core.connect_timeout,
+        request_timeout=core.request_timeout,
+    )
+    return build_connection_manager_from_settings(
+        resolved, adapter, credential_provider=core_credential
     )
 
 
@@ -240,28 +290,53 @@ def entry(argv: Sequence[str] | None = None) -> int:
     event_bus = EventBus()
     ai = AIManager(provider=provider, event_bus=event_bus)
     memory = build_memory(args.memory_db)
-    app = build_assistant(
-        identity, ai, memory, mode=args.mode, workspace=args.workspace
-    )
 
-    if args.message is not None:
-        print(handle_message(identity, ai, memory, args.message, assistant=app))
-        return 0
+    # Optional CORE uplink: one manager, one adapter, one connection for
+    # this process. Disabled/unreachable -> standalone; local chat, memory,
+    # tools, A.S.C.S. and voice paths are unaffected.
+    from asis.system.context import RuntimeContext
 
-    print(identity.greeting)
-    shutdown = settings.identity.shutdown_phrase.lower()
-    for raw in sys.stdin:
-        message = raw.strip()
-        if not message:
-            continue
-        if message.lower() == shutdown:
-            print("Shutting down.")
-            break
-        mode_reply = handle_mode_command(app, message)
-        if mode_reply is not None:
-            print(mode_reply)
-            continue
-        print(handle_message(identity, ai, memory, message, assistant=app))
+    core_manager = build_core_manager()
+    core_ctx: RuntimeContext | None = None
+    if core_manager is not None:
+        core_ctx = RuntimeContext()
+        core_manager.start(core_ctx)
+    try:
+        app = build_assistant(
+            identity,
+            ai,
+            memory,
+            mode=args.mode,
+            workspace=args.workspace,
+            core=core_manager,
+        )
+
+        if args.message is not None:
+            print(handle_message(identity, ai, memory, args.message, assistant=app))
+            return 0
+
+        print(identity.greeting)
+        shutdown = settings.identity.shutdown_phrase.lower()
+        for raw in sys.stdin:
+            message = raw.strip()
+            if not message:
+                continue
+            if message.lower() == shutdown:
+                print("Shutting down.")
+                break
+            mode_reply = handle_mode_command(app, message)
+            if mode_reply is not None:
+                print(mode_reply)
+                continue
+            print(handle_message(identity, ai, memory, message, assistant=app))
+    finally:
+        # Bounded shutdown: stop new CORE operations, disconnect the
+        # device client, and clear the ephemeral session state.
+        if core_manager is not None and core_ctx is not None:
+            try:
+                core_manager.stop(core_ctx)
+            except Exception:
+                pass
     return 0
 
 

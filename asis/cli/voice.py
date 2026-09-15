@@ -302,7 +302,7 @@ def run_voice(argv: list[str] | None = None) -> int:
 
     # Lazy import to keep CLI import light
     from asis.app.assistant import AssistantApp
-    from asis.cli.main import _provider, build_memory
+    from asis.cli.main import _provider, build_core_manager, build_memory
     from asis.system.context import RuntimeContext
     from asis.voice.input.utterance import UtteranceConfig, capture_utterance
     from asis.voice.runner import VoiceRunner, VoiceRunnerConfig
@@ -389,6 +389,14 @@ def run_voice(argv: list[str] | None = None) -> int:
     interrupts.register("voice")
     ai = AIManager(provider=provider, event_bus=event_bus)
     memory = build_memory(args.memory_db)
+    # Same single CORE session as the text CLI: voice reuses the shared
+    # AssistantApp path (no VoiceCoreClient). Disabled/unreachable means
+    # CORE tools fail safe and spoken responses stay local.
+    core_manager = build_core_manager()
+    core_ctx: RuntimeContext | None = None
+    if core_manager is not None:
+        core_ctx = RuntimeContext()
+        core_manager.start(core_ctx)
     app = AssistantApp(
         identity=identity,
         ai=ai,
@@ -396,6 +404,7 @@ def run_voice(argv: list[str] | None = None) -> int:
         interrupts=interrupts,
         mode=args.mode,
         workspace=args.workspace,
+        core=core_manager,
     )
 
     # Bounded utterance capture reusing the same input + VAD (no re-init).
@@ -476,6 +485,9 @@ def run_voice(argv: list[str] | None = None) -> int:
     finally:
         with contextlib.suppress(Exception):
             runner.stop(ctx)
+        if core_manager is not None and core_ctx is not None:
+            with contextlib.suppress(Exception):
+                core_manager.stop(core_ctx)
         reason = summary.get("reason") if isinstance(summary, dict) else "?"
         logger.info("voice shutdown complete (%s)", reason)
     if args.debug and isinstance(summary, dict):
