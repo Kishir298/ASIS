@@ -155,7 +155,8 @@ def run_voice(argv: list[str] | None = None) -> int:
         logger.info("voice debug mode on")
 
     # Lazy import to keep CLI import light
-    from asis.cli.main import _provider, build_memory, handle_message
+    from asis.app.assistant import AssistantApp
+    from asis.cli.main import _provider, build_memory
 
     identity = build_identity()
     try:
@@ -182,6 +183,7 @@ def run_voice(argv: list[str] | None = None) -> int:
     interrupts.register("voice")
     ai = AIManager(provider=provider, event_bus=event_bus)
     memory = build_memory(args.memory_db)
+    app = AssistantApp(identity=identity, ai=ai, memory=memory, interrupts=interrupts)
 
     pipeline = VoicePipeline(
         audio_input=engines["audio_input"],
@@ -216,7 +218,7 @@ def run_voice(argv: list[str] | None = None) -> int:
     turns = 0
 
     def process_fn(text: str, _speaker) -> str:
-        return handle_message(identity, ai, memory, text)
+        return app.chat(text)
 
     try:
         while True:

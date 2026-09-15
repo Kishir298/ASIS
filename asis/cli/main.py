@@ -13,9 +13,9 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from asis.ai import AIManager, AIMessage, MessageRole
+from asis.ai import AIManager
 from asis.ai.providers import MockAIProvider, OllamaProvider
-from asis.app import store_auto_memories
+from asis.app.assistant import AssistantApp
 from asis.configuration import settings
 from asis.events import EventBus
 from asis.identity import Identity, build_identity
@@ -50,8 +50,19 @@ def _provider(provider_name: str, model: str):
             model=model,
             host=settings.ai.endpoint,
             timeout=settings.ai.request_timeout,
+            temperature=settings.ai.temperature,
+            retries=settings.network.retries,
         )
     raise ValueError(f"Unsupported AI provider: {provider_name}")
+
+
+def build_assistant(
+    identity: Identity,
+    ai: AIManager,
+    memory: MemoryManager,
+) -> AssistantApp:
+    """Build the stateful assistant owning one conversation session."""
+    return AssistantApp(identity=identity, ai=ai, memory=memory)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -105,16 +116,16 @@ def handle_message(
     ai: AIManager,
     memory: MemoryManager,
     message: str,
+    assistant: AssistantApp | None = None,
 ) -> str:
-    """Process one user message, persisting any explicit memories."""
-    store_auto_memories(message, memory)
-    response = ai.chat(
-        [
-            AIMessage(role=MessageRole.SYSTEM, content=identity.system_prompt()),
-            AIMessage(role=MessageRole.USER, content=message),
-        ]
-    )
-    return response.content
+    """Process one user message through the stateful assistant pipeline.
+
+    When ``assistant`` is provided the call joins its owned conversation
+    session; otherwise a single-turn assistant is used (backwards
+    compatible for direct callers and tests).
+    """
+    app = assistant or AssistantApp(identity=identity, ai=ai, memory=memory)
+    return app.chat(message)
 
 
 def entry(argv: Sequence[str] | None = None) -> int:
@@ -145,9 +156,10 @@ def entry(argv: Sequence[str] | None = None) -> int:
     event_bus = EventBus()
     ai = AIManager(provider=provider, event_bus=event_bus)
     memory = build_memory(args.memory_db)
+    app = build_assistant(identity, ai, memory)
 
     if args.message is not None:
-        print(handle_message(identity, ai, memory, args.message))
+        print(handle_message(identity, ai, memory, args.message, assistant=app))
         return 0
 
     print(identity.greeting)
@@ -159,7 +171,7 @@ def entry(argv: Sequence[str] | None = None) -> int:
         if message.lower() == shutdown:
             print("Shutting down.")
             break
-        print(handle_message(identity, ai, memory, message))
+        print(handle_message(identity, ai, memory, message, assistant=app))
     return 0
 
 

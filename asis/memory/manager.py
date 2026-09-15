@@ -28,6 +28,100 @@ _MEMORY_RULES = (
     "- Do not mention the memory system unless asked."
 )
 
+_STOPWORDS = frozenset(
+    {
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "why",
+        "how",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "do",
+        "does",
+        "did",
+        "done",
+        "have",
+        "has",
+        "had",
+        "having",
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "but",
+        "if",
+        "then",
+        "else",
+        "for",
+        "of",
+        "at",
+        "by",
+        "to",
+        "in",
+        "on",
+        "with",
+        "about",
+        "into",
+        "you",
+        "your",
+        "yours",
+        "me",
+        "my",
+        "mine",
+        "we",
+        "our",
+        "ours",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "there",
+        "here",
+        "please",
+        "tell",
+        "know",
+        "remember",
+        "recall",
+        "something",
+        "anything",
+    }
+)
+
+
+def _query_keywords(query: str) -> list[str]:
+    """Extract significant search tokens from a natural-language query."""
+    import re
+
+    tokens = re.findall(r"[A-Za-z0-9']+", query.lower())
+    keywords: list[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        cleaned = token.strip("'")
+        if len(cleaned) < 3 or cleaned in _STOPWORDS or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        keywords.append(cleaned)
+    # Fall back to the raw stripped query when everything was filtered,
+    # so very short inputs (e.g. a name) still search.
+    if not keywords:
+        fallback = query.strip()
+        if fallback:
+            keywords.append(fallback[:64])
+    return keywords
+
 
 class MemoryManager:
     """High-level interface for A.S.I.S. persistent memory."""
@@ -129,7 +223,11 @@ class MemoryManager:
         return replace(memory, importance=importance)
 
     def build_memory_context(self) -> str:
-        """Build the long-term memory section for the system prompt."""
+        """Build the long-term memory section for the system prompt.
+
+        Legacy full-dump path kept for backwards compatibility. Prefer
+        :meth:`search_context` for query-scoped retrieval during inference.
+        """
         by_category = {
             category: self.storage.list_all(category=category)
             for category in MemoryCategory
@@ -147,4 +245,47 @@ class MemoryManager:
 
         lines.extend(["", *_MEMORY_RULES.splitlines()])
 
+        return "\n".join(lines)
+
+    def search_context(self, query: str, limit: int = 5) -> str:
+        """Build a query-scoped memory section for the system prompt.
+
+        Retrieves only memories relevant to ``query`` via the existing
+        storage text search. Keywords are extracted from the query so a
+        natural question (``what is my name?``) still matches a stored
+        fact (``User's name is ...``). Returns ``""`` when there is
+        nothing relevant so inference proceeds normally. Stored memories
+        are treated as data and are clearly separated from system
+        instructions by the caller.
+        """
+        text = (query or "").strip()
+        if not text:
+            return ""
+
+        keywords = _query_keywords(text)
+        if not keywords:
+            return ""
+
+        seen: dict[int | None, Any] = {}
+        ordered: list[Any] = []
+        for keyword in keywords[:8]:
+            try:
+                matches = self.storage.search(keyword)
+            except Exception:
+                raise
+            for item in matches:
+                key = item.memory_id if item.memory_id is not None else id(item)
+                if key not in seen:
+                    seen[key] = True
+                    ordered.append(item)
+
+        if not ordered:
+            return ""
+
+        ordered.sort(
+            key=lambda m: (-m.importance, m.content),
+        )
+        scoped = ordered[: max(1, limit)]
+        lines: list[str] = ["RELEVANT MEMORIES:"]
+        lines.extend(f"- {item.content}" for item in scoped)
         return "\n".join(lines)
