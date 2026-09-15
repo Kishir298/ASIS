@@ -100,6 +100,22 @@ class RuntimeSettings:
 
 
 @dataclass(frozen=True)
+class CoreSettings:
+    """Optional C.O.R.E. infrastructure connection (standalone by default)."""
+
+    enabled: bool
+    host: str
+    port: int
+    device_file: str
+    ca_file: str
+    insecure: bool
+    connect_timeout: int
+    request_timeout: int
+    reconnect_enabled: bool
+    reconnect_delay: int
+
+
+@dataclass(frozen=True)
 class IdentitySettings:
     name: str
     title: str
@@ -130,6 +146,7 @@ class Settings:
     memory: MemorySettings
     voice: VoiceSettings
     runtime: RuntimeSettings
+    core: CoreSettings
     paths: PathSettings
 
 
@@ -194,6 +211,18 @@ def load_settings() -> Settings:
             shutdown_timeout=environment.SHUTDOWN_TIMEOUT,
             debug=environment.DEBUG,
             log_level=environment.LOG_LEVEL,
+        ),
+        core=CoreSettings(
+            enabled=environment.CORE_ENABLED,
+            host=environment.CORE_HOST,
+            port=environment.CORE_PORT,
+            device_file=environment.CORE_DEVICE_FILE,
+            ca_file=environment.CORE_CA_FILE,
+            insecure=environment.CORE_INSECURE,
+            connect_timeout=environment.CORE_CONNECT_TIMEOUT,
+            request_timeout=environment.CORE_REQUEST_TIMEOUT,
+            reconnect_enabled=environment.CORE_RECONNECT_ENABLED,
+            reconnect_delay=environment.CORE_RECONNECT_DELAY,
         ),
         paths=PathSettings(
             data=get_data_directory(),
