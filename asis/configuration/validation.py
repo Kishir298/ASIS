@@ -171,6 +171,19 @@ def validate_settings(settings: Settings) -> Settings:
     _require_non_empty("voice.vad", "engine", settings.voice.vad.engine)
     _require_unit_interval("voice.vad", "threshold", settings.voice.vad.threshold)
 
+    # Voice: utterance bounds (must stay positive to avoid infinite capture)
+    for field_name in ("max_utterance_s", "silence_s"):
+        value = getattr(settings.voice, field_name)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not float(value) > 0
+        ):
+            raise ConfigurationError(
+                f"Invalid configuration voice.{field_name}: expected a "
+                f"positive number, received {value!r}."
+            )
+
     # Runtime
     _require_positive_int(
         "runtime", "shutdown_timeout", settings.runtime.shutdown_timeout

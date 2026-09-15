@@ -109,6 +109,8 @@ class VoiceSettings:
     channels: int
     block_size: int
     wake_word: str
+    max_utterance_s: float = 15.0
+    silence_s: float = 0.8
     input_engine: str = "mock"
     output_engine: str = "mock"
     stt: SpeechToTextSettings = field(default_factory=SpeechToTextSettings)
@@ -233,6 +235,10 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
                 channels=get_i("ASIS_VOICE_CHANNELS", d.VOICE_CHANNELS),
                 block_size=get_i("ASIS_VOICE_BLOCK_SIZE", d.VOICE_BLOCK_SIZE),
                 wake_word=get_s("ASIS_VOICE_WAKE_WORD", d.VOICE_WAKE_WORD),
+                max_utterance_s=get_f(
+                    "ASIS_VOICE_MAX_UTTERANCE_S", d.VOICE_MAX_UTTERANCE_S
+                ),
+                silence_s=get_f("ASIS_VOICE_SILENCE_S", d.VOICE_SILENCE_S),
                 input_engine=get_s("ASIS_VOICE_INPUT_ENGINE", d.VOICE_INPUT_ENGINE),
                 output_engine=get_s("ASIS_VOICE_OUTPUT_ENGINE", d.VOICE_OUTPUT_ENGINE),
                 stt=SpeechToTextSettings(

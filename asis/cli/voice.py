@@ -47,12 +47,43 @@ def build_voice_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stt-model", default=None, help="STT model name")
     parser.add_argument("--tts-engine", default=None, help="TTS engine (mock|pyttsx3)")
     parser.add_argument("--tts-voice", default=None, help="TTS voice")
+    parser.add_argument("--tts-rate", type=int, default=None, help="TTS speaking rate")
     parser.add_argument(
         "--speaker-engine", default=None, help="speaker engine (mock|embedding)"
     )
     parser.add_argument("--wake-word", default=None, help="wake phrase")
     parser.add_argument(
+        "--wake-engine", default=None, help="wake engine (mock|openwakeword)"
+    )
+    parser.add_argument("--wake-threshold", type=float, default=None)
+    parser.add_argument("--vad-engine", default=None, help="VAD engine (mock|silero)")
+    parser.add_argument("--vad-threshold", type=float, default=None)
+    parser.add_argument(
+        "--input-engine", default=None, help="audio input (mock|sounddevice)"
+    )
+    parser.add_argument(
+        "--output-engine", default=None, help="audio output (mock|sounddevice)"
+    )
+    parser.add_argument(
         "--no-wake-word", action="store_true", help="disable wake-word gating"
+    )
+    parser.add_argument("--max-utterance-s", type=float, default=None)
+    parser.add_argument("--silence-s", type=float, default=None)
+    parser.add_argument(
+        "--register-speaker",
+        default=None,
+        metavar="SPEAKER_ID",
+        help="register a speaker from WAV sample(s) and exit (explicit only)",
+    )
+    parser.add_argument(
+        "--sample",
+        action="append",
+        default=None,
+        metavar="WAV",
+        help="voice sample for --register-speaker (repeatable)",
+    )
+    parser.add_argument(
+        "--list-speakers", action="store_true", help="list known speakers and exit"
     )
     parser.add_argument(
         "--provider", default=settings.ai.provider, choices=["mock", "ollama"]
@@ -76,6 +107,35 @@ def build_voice_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--debug", action="store_true")
     return parser
+
+
+def _load_wav_sample(path: str) -> AudioData:
+    """Load a WAV file as canonical AudioData (stdlib only, no persistence)."""
+    import wave
+    from pathlib import Path
+
+    p = Path(path).expanduser()
+    if not p.exists():
+        raise ASISError(f"sample not found: {path}")
+    with wave.open(str(p), "rb") as wf:
+        n_channels = wf.getnchannels()
+        sample_rate = wf.getframerate()
+        n_frames = wf.getnframes()
+        raw = wf.readframes(n_frames)
+        sampwidth = wf.getsampwidth()
+    import struct
+
+    fmt = {1: "b", 2: "h", 4: "i"}.get(sampwidth)
+    if fmt is None:
+        raise ASISError(f"unsupported sample width in {path}")
+    count = n_frames * n_channels
+    values = struct.unpack("<" + fmt * count, raw) if count else ()
+    scale = float(2 ** (8 * sampwidth - 1))
+    mono: list[float] = []
+    for i in range(n_frames):
+        frame = values[i * n_channels : (i + 1) * n_channels]
+        mono.append(sum(float(v) / scale for v in frame) / max(1, n_channels))
+    return AudioData(samples=mono, sample_rate=int(sample_rate or 16_000), channels=1)
 
 
 def _build_providers(args) -> dict:
@@ -102,18 +162,25 @@ def _build_providers(args) -> dict:
         stt = vf.create_speech_recognizer()
 
     # TTS
-    if args.tts_engine is not None:
-        eng = args.tts_engine.lower()
+    if (
+        args.tts_engine is not None
+        or args.tts_voice is not None
+        or args.tts_rate is not None
+    ):
+        eng = (args.tts_engine or settings.voice.tts.engine or "mock").lower()
         tts_rate = settings.voice.tts.sample_rate or settings.voice.sample_rate
         if eng == "mock":
             tts = MockTextToSpeech(sample_rate=tts_rate)
         elif eng in {"pyttsx3", "local"}:
             from asis.voice.tts.pyttsx3_engine import Pyttsx3Engine
 
-            tts = Pyttsx3Engine(
-                voice=args.tts_voice or settings.voice.tts.voice,
-                sample_rate=tts_rate,
-            )
+            kwargs: dict = {
+                "voice": args.tts_voice or settings.voice.tts.voice,
+                "sample_rate": tts_rate,
+            }
+            if args.tts_rate is not None:
+                kwargs["rate"] = int(args.tts_rate)
+            tts = Pyttsx3Engine(**kwargs)
         else:
             raise ASISError(f"unsupported TTS engine: {args.tts_engine}")
     else:
@@ -132,35 +199,102 @@ def _build_providers(args) -> dict:
     else:
         speaker = vf.create_speaker_identifier()
 
-    # Wake word
+    # Wake word: honor --wake-engine/--wake-word/--wake-threshold without
+    # silently downgrading a configured real engine to mock.
     if args.no_wake_word:
         wake = None
-    elif args.wake_word is not None:
-        wake = MockWakeWordDetector(phrases=(args.wake_word,))
+    else:
+        wake_engine = (args.wake_engine or settings.voice.wake.engine or "mock").lower()
+        phrases = (args.wake_word or settings.voice.wake_word or "hey asis",)
+        threshold = (
+            float(args.wake_threshold)
+            if args.wake_threshold is not None
+            else float(settings.voice.wake.threshold)
+        )
+        if wake_engine in {"mock", "", "keyphrase", "text"}:
+            wake = MockWakeWordDetector(phrases=phrases)
+        elif wake_engine in {"openwakeword", "open_wake_word", "audio"}:
+            from asis.voice.engines.openwakeword import OpenWakeWordDetector
+
+            wake = OpenWakeWordDetector(
+                phrases=phrases,
+                threshold=threshold,
+                model_path=settings.voice.wake.model or None,
+            )
+        else:
+            try:
+                wake = vf.create_wake_word_detector()
+            except ASISError:
+                wake = MockWakeWordDetector(phrases=phrases)
+
+    # VAD: honor --vad-engine/--vad-threshold.
+    if args.vad_engine is not None or args.vad_threshold is not None:
+        eng = (args.vad_engine or settings.voice.vad.engine or "mock").lower()
+        threshold = (
+            float(args.vad_threshold)
+            if args.vad_threshold is not None
+            else float(settings.voice.vad.threshold)
+        )
+        if eng in {"mock", ""}:
+            vad = MockVadDetector()
+        elif eng in {"silero", "silero-vad", "silero_vad"}:
+            from asis.voice.input.vad import SileroVadDetector
+
+            vad = SileroVadDetector(
+                sample_rate=settings.voice.sample_rate,
+                threshold=threshold,
+            )
+        else:
+            raise ASISError(f"unsupported VAD engine: {args.vad_engine}")
     else:
         try:
-            wake = vf.create_wake_word_detector()
+            vad = vf.create_vad()
         except ASISError:
-            wake = MockWakeWordDetector(phrases=(settings.voice.wake_word,))
+            vad = MockVadDetector()
 
-    try:
-        vad = vf.create_vad()
-    except ASISError:
-        vad = MockVadDetector()
+    # Audio I/O: follow configured engines (no more hardcoded mocks).
+    if args.input_engine is not None:
+        eng = args.input_engine.lower()
+        if eng == "mock":
+            audio_input = MockAudioInput([])
+        elif eng in {"sounddevice", "microphone", "real"}:
+            audio_input = vf.create_real_audio_input()
+        else:
+            raise ASISError(f"unsupported input engine: {args.input_engine}")
+    else:
+        try:
+            audio_input = vf.create_audio_input()
+        except ASISError:
+            audio_input = MockAudioInput([])
+
+    if args.output_engine is not None:
+        eng = args.output_engine.lower()
+        if eng == "mock":
+            audio_output = MockAudioOutput()
+        elif eng in {"sounddevice", "real"}:
+            audio_output = vf.create_real_audio_output()
+        else:
+            raise ASISError(f"unsupported output engine: {args.output_engine}")
+    else:
+        try:
+            audio_output = vf.create_audio_output()
+        except ASISError:
+            audio_output = MockAudioOutput()
 
     return {
-        "audio_input": MockAudioInput([]),
+        "audio_input": audio_input,
         "vad": vad,
         "wake_word": wake,
         "speech_recognizer": stt,
         "speaker_identifier": speaker,
         "tts": tts,
-        "audio_output": MockAudioOutput(),
+        "audio_output": audio_output,
     }
 
 
 def run_voice(argv: list[str] | None = None) -> int:
     """Entry for ``asis voice``; returns process exit code."""
+
     logger = get_logger("voice.runtime")
     args = build_voice_parser().parse_args(argv)
     if args.debug:
@@ -169,8 +303,68 @@ def run_voice(argv: list[str] | None = None) -> int:
     # Lazy import to keep CLI import light
     from asis.app.assistant import AssistantApp
     from asis.cli.main import _provider, build_memory
+    from asis.system.context import RuntimeContext
+    from asis.voice.input.utterance import UtteranceConfig, capture_utterance
+    from asis.voice.runner import VoiceRunner, VoiceRunnerConfig
 
     identity = build_identity()
+
+    # -- speaker management subcommands (explicit registration only) ------
+    if args.list_speakers:
+        try:
+            from pathlib import Path
+
+            from asis.voice.speaker.store import SpeakerStore
+
+            store = SpeakerStore(Path(settings.paths.data) / "voice" / "speakers.json")
+            profiles = store.list_profiles()
+            if not profiles:
+                print("No known speakers.")
+            else:
+                for p in profiles:
+                    print(f"{p.speaker_id} (samples={len(p.embeddings)})")
+            return 0
+        except Exception as exc:
+            print(f"voice startup failed: {exc}", file=sys.stderr)
+            return 2
+    if args.register_speaker:
+        if not args.sample:
+            print(
+                "voice startup failed: --register-speaker needs --sample WAV",
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            from pathlib import Path
+
+            from asis.voice import factory as vf
+            from asis.voice.speaker.registration import register_speaker
+            from asis.voice.speaker.store import SpeakerStore
+
+            samples = [_load_wav_sample(s) for s in args.sample]
+            store = SpeakerStore(
+                Path(settings.paths.data) / "voice" / "speakers.json"
+            )
+            provider = vf.create_speaker_embedding_provider()
+            profile = register_speaker(
+                store, provider, args.register_speaker, samples
+            )
+            print(
+                f"Registered '{profile.speaker_id}' "
+                f"({len(profile.embeddings)} samples)."
+            )
+            return 0
+        except ASISError as exc:
+            print(f"voice startup failed: {exc}", file=sys.stderr)
+            if args.debug:
+                raise
+            return 2
+        except Exception as exc:
+            print(f"voice startup failed: {exc}", file=sys.stderr)
+            if args.debug:
+                raise
+            return 2
+
     try:
         engines = _build_providers(args)
     except ASISError as exc:
@@ -204,6 +398,26 @@ def run_voice(argv: list[str] | None = None) -> int:
         workspace=args.workspace,
     )
 
+    # Bounded utterance capture reusing the same input + VAD (no re-init).
+    utterance_cfg = UtteranceConfig(
+        sample_rate=settings.voice.sample_rate,
+        channels=settings.voice.channels,
+        block_size=settings.voice.block_size,
+        max_utterance_seconds=float(
+            args.max_utterance_s or settings.voice.max_utterance_s
+        ),
+        silence_seconds=float(args.silence_s or settings.voice.silence_s),
+    )
+
+    def _capturer(seed: AudioData) -> AudioData:
+        return capture_utterance(
+            engines["audio_input"],
+            vad=engines["vad"],
+            seed=seed,
+            config=utterance_cfg,
+            interrupts=interrupts,
+        )
+
     pipeline = VoicePipeline(
         audio_input=engines["audio_input"],
         speech_recognizer=engines["speech_recognizer"],
@@ -214,67 +428,58 @@ def run_voice(argv: list[str] | None = None) -> int:
         interrupts=interrupts,
         vad=engines["vad"],
         wake_word_detector=engines["wake_word"],
+        utterance_capturer=_capturer if not args.no_wake_word else None,
     )
 
     logger.info(
-        "voice startup: stt=%s tts=%s speaker=%s wake=%s",
+        "voice startup: stt=%s tts=%s speaker=%s wake=%s in=%s out=%s",
         type(engines["speech_recognizer"]).__name__,
         type(engines["tts"]).__name__,
         type(engines["speaker_identifier"]).__name__,
         type(engines["wake_word"]).__name__ if engines["wake_word"] else "disabled",
+        type(engines["audio_input"]).__name__,
+        type(engines["audio_output"]).__name__,
     )
 
+    runner = VoiceRunner(
+        pipeline,
+        app=app,
+        config=VoiceRunnerConfig(
+            require_wake_word=not args.no_wake_word,
+            max_turns=int(args.max_turns or 0),
+            shutdown_phrase=settings.identity.shutdown_phrase,
+        ),
+        on_response=lambda response, _result: print(response),
+        on_error=lambda exc: print(f"voice error: {exc}", file=sys.stderr),
+    )
+
+    ctx = RuntimeContext()
     try:
-        pipeline.audio_input.start()
+        runner.start(ctx)
     except Exception as exc:
         print(f"voice startup failed: {exc}", file=sys.stderr)
+        if args.debug:
+            raise
         return 2
 
     print(identity.greeting)
-    print("Voice mode running (mock audio). Say the shutdown phrase to exit.")
-    shutdown = settings.identity.shutdown_phrase.lower()
-    require_wake = not args.no_wake_word
-    turns = 0
-
-    def process_fn(text: str, _speaker) -> str:
-        return app.chat(text)
-
+    if isinstance(engines["audio_input"], MockAudioInput):
+        label = "mock audio"
+    else:
+        label = "live audio"
+    print(f"Voice mode running ({label}). Say the shutdown phrase to exit.")
     try:
-        while True:
-            if args.max_turns and turns >= args.max_turns:
-                break
-            try:
-                result = pipeline.run_once(
-                    process_fn=process_fn,
-                    require_wake_word=require_wake,
-                )
-            except ASISError as exc:
-                if args.debug:
-                    raise
-                print(f"voice error: {exc}", file=sys.stderr)
-                continue
-            text = (result.get("text") or "").strip()
-            if not text and result.get("status") in {"no-speech", "no-wake-word"}:
-                # Mock input exhausts to empty segments; stop instead of spinning.
-                if isinstance(engines["audio_input"], MockAudioInput):
-                    break
-                continue
-            if text.lower() == shutdown:
-                print("Shutting down.")
-                with contextlib.suppress(ASISError):
-                    pipeline.speak("Shutting down.")
-                break
-            if result.get("response"):
-                print(result["response"])
-            turns += 1
+        summary = runner.run()
     except KeyboardInterrupt:
         print("\nShutting down.")
+        summary = {"reason": "keyboard-interrupt"}
     finally:
-        try:
-            pipeline.stop()
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("voice stop warning: %s", exc)
-        logger.info("voice shutdown complete")
+        with contextlib.suppress(Exception):
+            runner.stop(ctx)
+        reason = summary.get("reason") if isinstance(summary, dict) else "?"
+        logger.info("voice shutdown complete (%s)", reason)
+    if args.debug and isinstance(summary, dict):
+        logger.info("voice summary: %s", summary)
     return 0
 
 
