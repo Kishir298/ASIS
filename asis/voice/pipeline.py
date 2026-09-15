@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from asis.errors import VoiceError
+from asis.errors import CancellationError, VoiceError
 from asis.events.bus import EventBus
 from asis.events.events import EventType
 from asis.logging.logger import get_logger
@@ -47,6 +47,7 @@ class VoicePipeline:
         vad: VadDetector | None = None,
         wake_word_detector: WakeWordDetector | None = None,
         normalizer=None,
+        utterance_capturer: Callable[[AudioData], AudioData] | None = None,
     ) -> None:
         self.audio_input = audio_input
         self.speech_recognizer = speech_recognizer
@@ -58,6 +59,7 @@ class VoicePipeline:
         self.vad = vad
         self.wake_word_detector = wake_word_detector
         self.normalizer = normalizer
+        self.utterance_capturer = utterance_capturer
         self._logger = get_logger("voice.pipeline")
 
     # -- internals -----------------------------------------------------
@@ -99,9 +101,31 @@ class VoicePipeline:
         if self.vad is None:
             return True
         try:
-            return bool(self.vad.is_speech(audio))
+            speech = bool(self.vad.is_speech(audio))
         except Exception as exc:
             raise self._fail("VAD failed", exc) from exc
+        self._publish(EventType.VOICE_VAD, speech=speech)
+        return speech
+
+    def capture_command(self, audio: AudioData) -> AudioData:
+        """Capture the full command utterance after wake-word activation.
+
+        Defaults to the wake segment itself; when ``utterance_capturer``
+        is set (real VAD-gated capture), use it bounded and fail-open to
+        the seed segment on error.
+        """
+        if self.utterance_capturer is None:
+            return audio
+        self._check()
+        try:
+            captured = self.utterance_capturer(audio)
+        except Exception as exc:
+            self._logger.warning("utterance capture failed, using seed: %s", exc)
+            return audio
+        self._check()
+        if captured is None:
+            return audio
+        return captured
 
     def detect_wake_word(self, audio: AudioData) -> bool:
         """Audio wake-word check; publishes event when detected."""
@@ -216,54 +240,86 @@ class VoicePipeline:
         require_wake_word: bool = False,
         num_samples: int = 1024,
     ) -> dict:
-        """Run input->VAD->STT->speaker->A.S.I.S.->TTS->output once.
+        """Run input->VAD->wake(audio)->capture->STT->speaker->A.S.I.S.->TTS.
 
-        Returns a dict with ``text``, ``speaker``, ``response`` and
-        ``status`` (``spoken`` | ``no-speech`` | ``no-wake-word``).
-        ``process_fn`` maps (text, speaker) -> response text; defaults
-        to echoing the transcript. Never bypasses tool permissions —
-        callers must route ``process_fn`` through A.S.I.S. intelligence.
+        Audio-level wake gating avoids transcribing ambient speech: when
+        ``require_wake_word`` is set, ``detect_wake_word(audio)`` runs
+        before STT and a miss returns ``no-wake-word`` without inference.
+        A text-level ``detect_wake_text`` confirmation still applies after
+        STT for phrase accuracy (mock/keyphrase fallback).
+
+        Returns ``{text, speaker, response, status}`` with status
+        ``spoken`` | ``no-speech`` | ``no-wake-word``.
         """
-        audio = self.listen(num_samples)
+        try:
+            audio = self.listen(num_samples)
 
-        if not self.check_voice_activity(audio):
-            return {"status": "no-speech", "text": "", "speaker": None, "response": ""}
+            if not self.check_voice_activity(audio):
+                return {
+                    "status": "no-speech",
+                    "text": "",
+                    "speaker": None,
+                    "response": "",
+                }
 
-        result = self.transcribe(audio)
-        text = self.normalize_text(result.text)
+            if require_wake_word and not self.detect_wake_word(audio):
+                # Audio gate miss: skip expensive STT entirely.
+                return {
+                    "status": "no-wake-word",
+                    "text": "",
+                    "speaker": None,
+                    "response": "",
+                }
 
-        if require_wake_word and not self.detect_wake_text(text):
-            return {
-                "status": "no-wake-word",
-                "text": text,
-                "speaker": None,
-                "response": "",
-            }
+            if require_wake_word:
+                audio = self.capture_command(audio)
 
-        speaker = self.identify_speaker(audio)
+            result = self.transcribe(audio)
+            text = self.normalize_text(result.text)
 
-        if process_fn is None:
-            response = text
-        else:
-            self._check()
-            response = process_fn(text, speaker)
-            self._check()
+            if require_wake_word and not self.detect_wake_text(text):
+                return {
+                    "status": "no-wake-word",
+                    "text": text,
+                    "speaker": None,
+                    "response": "",
+                }
 
-        if not response or not response.strip():
+            speaker = self.identify_speaker(audio)
+
+            if process_fn is None:
+                response = text
+            else:
+                self._check()
+                self._publish(EventType.VOICE_ASSISTANT_STARTED, text=text[:200])
+                response = ""
+                try:
+                    response = process_fn(text, speaker)
+                finally:
+                    self._publish(
+                        EventType.VOICE_ASSISTANT_FINISHED,
+                        response=(response or "")[:200],
+                    )
+                self._check()
+
+            if not response or not response.strip():
+                return {
+                    "status": "spoken",
+                    "text": text,
+                    "speaker": speaker,
+                    "response": "",
+                }
+
+            self.speak(response)
             return {
                 "status": "spoken",
                 "text": text,
                 "speaker": speaker,
-                "response": "",
+                "response": response,
             }
-
-        self.speak(response)
-        return {
-            "status": "spoken",
-            "text": text,
-            "speaker": speaker,
-            "response": response,
-        }
+        except CancellationError:
+            self._publish(EventType.VOICE_INTERRUPTED)
+            raise
 
     def stop(self) -> None:
         """Stop active voice operations and release audio resources."""
