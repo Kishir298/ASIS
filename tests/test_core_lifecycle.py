@@ -82,6 +82,90 @@ def test_stop_during_disabled_is_safe():
     assert manager.state == CoreConnectionState.DISABLED
 
 
+def test_stop_during_reconnect_backoff_is_bounded():
+    import threading
+    import time
+
+    adapter = _FailAdapter()
+    manager = CoreConnectionManager(
+        adapter, enabled=True, credential_provider=lambda: "cred",
+        reconnect_enabled=True, reconnect_delay=30, max_retries=5,
+    )
+    ctx = RuntimeContext()
+    worker = threading.Thread(target=manager.start, args=(ctx,), daemon=True)
+    started = time.monotonic()
+    worker.start()
+    time.sleep(0.2)  # let the manager enter the bounded backoff wait
+    manager.stop(ctx)
+    worker.join(timeout=10)
+    elapsed = time.monotonic() - started
+    assert not worker.is_alive()  # stop-aware: never sleeps out the 30s backoff
+    assert elapsed < 10
+    assert manager.state in (
+        CoreConnectionState.STOPPING,
+        CoreConnectionState.DISCONNECTED,
+        CoreConnectionState.DISABLED,
+    )
+
+
+def test_stop_during_request_is_bounded():
+    import threading
+    import time
+
+    from asis.integrations.core.adapter import RealCoreAdapter
+
+    release = threading.Event()
+
+    class BlockingDevice:
+        """Fake device with one blocking in-flight request (no network)."""
+
+        def __init__(self, **kw):
+            self.shut_down = False
+
+        def login(self, credential):
+            pass
+
+        def connect(self):
+            pass
+
+        def register(self):
+            pass
+
+        def is_connected(self):
+            return not self.shut_down
+
+        def shutdown(self):
+            self.shut_down = True
+            release.set()
+
+        def request(self, destination, message_type, payload, timeout=30.0):
+            release.wait(timeout=min(float(timeout), 5.0))
+            return {"message_type": "DATA_RESPONSE", "payload": {"echo": True}}
+
+    adapter = RealCoreAdapter(
+        client_factory=lambda **kw: BlockingDevice(**kw),
+        request_timeout=30.0,
+    )
+    assert adapter.connect("cred").ok is True
+    results: list = []
+    worker = threading.Thread(
+        target=lambda: results.append(
+            adapter.send_request("core", "DATA_REQUEST", {})
+        ),
+        daemon=True,
+    )
+    worker.start()
+    time.sleep(0.2)  # let the request go in-flight
+    started = time.monotonic()
+    adapter.disconnect()
+    worker.join(timeout=10)
+    elapsed = time.monotonic() - started
+    assert not worker.is_alive()  # no indefinite block on shutdown
+    assert elapsed < 10
+    assert results and results[0].ok is True
+    assert adapter.is_connected() is False
+
+
 def test_runtime_integration_start_stop():
     manager = CoreConnectionManager(
         MockCoreAdapter(), enabled=True, credential_provider=lambda: "cred",

@@ -89,6 +89,15 @@ def test_empty_values_count_as_unset():
     assert core.port == 5000
 
 
+def test_invalid_host_and_paths_raise():
+    with pytest.raises(ConfigurationError):
+        load_settings(env={"ASIS_CORE_HOST": "bad\x00host"})
+    with pytest.raises(ConfigurationError):
+        load_settings(env={"ASIS_CORE_CA_FILE": "ca\x00.pem"})
+    with pytest.raises(ConfigurationError):
+        load_settings(env={"ASIS_CORE_DEVICE_FILE": "dev\x00.json"})
+
+
 def test_env_example_documents_core_keys():
     example = Path(__file__).resolve().parents[1] / ".env.example"
     assert example.exists()
