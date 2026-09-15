@@ -68,25 +68,77 @@ class ASISRuntime:
             self.logger.exception("A.S.I.S. runtime startup failed.")
             raise
 
-    def stop(self) -> None:
-        """Stop the A.S.I.S. runtime."""
+    def stop(self, timeout: float | None = None) -> None:
+        """Stop the A.S.I.S. runtime, enforcing the shutdown timeout.
+
+        Cooperative cancellation is requested first; component shutdown
+        then runs bounded by ``timeout`` (defaults to
+        ``settings.runtime.shutdown_timeout``). On expiry the runtime
+        logs the responsible components, transitions to FAILED and
+        raises ``TimeoutError`` instead of hanging forever.
+        """
         if self.state in {RuntimeState.CREATED, RuntimeState.STOPPED}:
             return
+
+        import threading
+        import time
+
+        from asis.configuration.settings import settings
+
+        limit = settings.runtime.shutdown_timeout if timeout is None else timeout
+        if limit is None or limit <= 0:
+            limit = settings.runtime.shutdown_timeout
 
         self.logger.info("Stopping A.S.I.S. runtime.")
         self.state = RuntimeState.STOPPING
 
-        try:
-            self.interrupts.cancel_all()
-            self.lifecycle.stop_all(self.context)
-            self.context.clear()
-            self.state = RuntimeState.STOPPED
-            self.logger.info("A.S.I.S. runtime stopped.")
+        self.interrupts.cancel_all()
 
+        errors: list[BaseException] = []
+
+        def _stop_components() -> None:
+            try:
+                self.lifecycle.stop_all(self.context)
+            except Exception as exc:  # captured for the caller thread
+                errors.append(exc)
+
+        worker = threading.Thread(
+            target=_stop_components, name="asis-shutdown", daemon=True
+        )
+        started = time.monotonic()
+        worker.start()
+        worker.join(timeout=limit)
+        elapsed = time.monotonic() - started
+
+        if worker.is_alive():
+            names = self.lifecycle.list_components()
+            self.logger.error(
+                "Shutdown timeout after %.2fs (limit %.2fs); "
+                "components may be stuck: %s",
+                elapsed,
+                float(limit),
+                ", ".join(names) if names else "none",
+            )
+            self.state = RuntimeState.FAILED
+            raise TimeoutError(
+                f"Shutdown timed out after {limit:g}s; "
+                f"stuck components: {', '.join(names) if names else 'unknown'}"
+            )
+
+        if errors:
+            self.state = RuntimeState.FAILED
+            self.logger.exception("A.S.I.S. runtime shutdown failed.")
+            raise errors[0]
+
+        try:
+            self.context.clear()
         except Exception:
             self.state = RuntimeState.FAILED
             self.logger.exception("A.S.I.S. runtime shutdown failed.")
             raise
+
+        self.state = RuntimeState.STOPPED
+        self.logger.info("A.S.I.S. runtime stopped.")
 
     def restart(self) -> None:
         """Restart the A.S.I.S. runtime."""
