@@ -10,6 +10,12 @@ explicit tool requests through registry → router → executor.
 |---|---|---|---|
 | `echo` | Repeat text back (empty input fails) | SAFE | Implemented |
 | `current_time` | Current UTC date/time (`iso`, `timestamp`) | SAFE | Implemented |
+| `read_file` / `search_files` / `list_directory` | Workspace inspection (bounded) | SAFE–LOW | Implemented (coding mode) |
+| `git_status` / `git_diff` | Read-only repo state (`--stat`/`--cached` only) | SAFE | Implemented (coding mode) |
+| `write_file` | Exact workspace write | HIGH | Implemented, confirm-gated (coding mode) |
+| `run_tests` / `run_command` | Allowlisted `pytest`/`python`/`git`, `shell=False` | HIGH | Implemented, confirm-gated (coding mode) |
+| `git_add` | Stage workspace paths | HIGH | Implemented, confirm-gated (coding mode) |
+| `git_commit` | Commit (never pushes) | CRITICAL | Implemented, confirm-gated (coding mode) |
 
 No dangerous tools ship today. `ToolResult(success, data, error,
 tool_name)` is frozen; non-`ToolResult` returns are wrapped.
@@ -40,8 +46,9 @@ required at `HIGH+` via `request_confirmation()`, which auto-approves
 when `settings.security.require_confirmation_for_dangerous` is false
 and otherwise uses the console handler (literal `yes`; EOF/Ctrl+C
 denies). Enforcement path: `Tool.authorizer` → executor denies with
-`TOOL_DENIED` before anything runs. The confirmation mechanism is
-real but currently unexercised — no shipped tool exceeds SAFE.
+`TOOL_DENIED` before anything runs. Coding writes, command execution
+and git mutations all sit at `HIGH`/`CRITICAL`, so confirmation is
+exercised in coding mode (see `docs/coding.md`).
 
 Helpers: `resolve_sandbox_path()` jails relative paths
 (`SandboxViolation` on escape); `get_secret()`/`require_secret()`

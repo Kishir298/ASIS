@@ -15,6 +15,7 @@ integration boundaries; see `docs/integration.md`).
 | Conversation / context | Implemented + wired (`AssistantApp` owns session) |
 | Local memory (SQLite) | Implemented + wired (query-scoped recall, fail-open) |
 | Tools (`echo`, `current_time`) | Implemented + application-wired (single cycle, permission-mandatory) |
+| A.S.C.S. coding mode | Implemented + wired (shared provider/model, workspace-bound tools) |
 | Permissions / confirmation | Implemented (no dangerous tools ship) |
 | Voice architecture + mocks | Implemented |
 | Local STT / TTS / speaker / wake / VAD | Implemented (optional deps) |
@@ -30,6 +31,7 @@ integration boundaries; see `docs/integration.md`).
 | `docs/architecture.md` | runtime, lifecycle, identity, errors, logging |
 | `docs/configuration.md` | settings, precedence, validation, paths |
 | `docs/ai-memory.md` | providers, inference, conversation, memory |
+| `docs/coding.md` | A.S.C.S. modes, workspace, coding tools, permissions |
 | `docs/tools-permissions.md` | tools, permissions, sandbox, secrets |
 | `docs/voice.md` | pipeline, engines, mock-vs-real matrix |
 | `docs/cli-testing.md` | CLI flags, tests, dependencies, workflow |

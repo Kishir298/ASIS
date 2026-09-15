@@ -42,6 +42,13 @@ response stored back in the session. Memory is recalled via
 retrieval fails). There is still **no agentic loop**: at most one
 tool action per turn; normal conversation never requires a tool.
 
+**Modes:** `AssistantApp` carries `app.mode` (`GENERAL`/`CODING`,
+`asis/app/modes.py`); CODING is A.S.C.S. — same provider/model
+instance, plus mode instructions (`asis/app/profiles.py`), a bounded
+`REPOSITORY CONTEXT` block (`asis/coding/context.py`) and the
+workspace-bound coding tool registry (`asis/coding/tools.py`).
+Switching modes never recreates the provider. See `docs/coding.md`.
+
 ## Voice pipeline
 
 ```text

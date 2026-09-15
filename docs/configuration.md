@@ -61,6 +61,7 @@ and never touch the global.
 | Voice | audio (`sample_rate`, `channels`, `block_size` >0; `input/output_engine`), STT (`engine/model/device/compute_type`, optional `language`), TTS (`engine`, optional `voice`, `sample_rate`), speaker (`engine/model/device/metric`, `confidence/threshold` 0–1), wake (`engine`, `threshold` 0–1, `model` optional; `wake_word` required unless engine is mock/none/off), VAD (`engine`, `threshold` 0–1) |
 | Network | `timeout` (>0), `retries` (≥0) |
 | Tools | `timeout` (>0, per-run bound) |
+| Coding | `default_mode` (`general`/`coding`), `workspace` (dir at use), `command_timeout`/`max_file_size`/`max_output_size` (>0) |
 | Security | `require_confirmation_for_dangerous` (strict bool) |
 | Paths | `data/config/cache/logs/memory/runtime` (platformdirs, overridable) |
 
@@ -80,8 +81,8 @@ platform defaults when unset.
 
 ## Reference
 
-`.env.example` documents all 52 variables with type, range, and default
-(46 set explicitly; the 6 `ASIS_*_DIRECTORY` path overrides appear
+`.env.example` documents all 57 variables with type, range, and default
+(51 set explicitly; the 6 `ASIS_*_DIRECTORY` path overrides appear
 commented-out since platform defaults apply). It is cross-checked
 against `settings.py` — if they ever disagree, the code wins and the
 file must be fixed.
