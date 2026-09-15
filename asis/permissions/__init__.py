@@ -21,6 +21,7 @@ from .validation import (
 __all__ = [
     "ConfirmationHandler",
     "PermissionLevel",
+    "PermissionManager",
     "SandboxViolation",
     "auto_approve",
     "auto_deny",
@@ -34,3 +35,12 @@ __all__ = [
     "requires_confirmation",
     "resolve_sandbox_path",
 ]
+
+
+def __getattr__(name: str):
+    """Lazily expose PermissionManager (avoids a tools/permissions cycle)."""
+    if name == "PermissionManager":
+        from .manager import PermissionManager
+
+        return PermissionManager
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
