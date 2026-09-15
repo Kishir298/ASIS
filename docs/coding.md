@@ -69,6 +69,19 @@ Command execution: allowlisted argv, workspace CWD, `timeout` =
 `ToolResult`s; no raw tracebacks to the model. Never auto-push, never
 force-push, never rewrite history.
 
+## C.O.R.E. in coding mode
+
+A.S.C.S. shares the ONE `CoreConnectionManager`/`RealCoreAdapter` with
+GENERAL mode — no second client, no second connection. When an
+`AssistantApp` carries a core manager, all seven CORE tools
+(`core_status`, `core_discover_devices`, `core_device_info`,
+`core_data_request`, `core_service_request`, `core_agent_request`,
+`core_send_to_device`) are registered on the coding router alongside
+the workspace tools, under the same executor/confirmation policy.
+CORE access cannot bypass workspace boundaries: coding tools still
+validate every path against the workspace root, and CORE tools never
+touch the local filesystem.
+
 ## Configuration
 
 | Variable | Default | Validation |

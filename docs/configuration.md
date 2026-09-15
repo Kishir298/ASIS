@@ -62,6 +62,7 @@ and never touch the global.
 | Network | `timeout` (>0), `retries` (≥0) |
 | Tools | `timeout` (>0, per-run bound) |
 | Coding | `default_mode` (`general`/`coding`), `workspace` (dir at use), `command_timeout`/`max_file_size`/`max_output_size` (>0) |
+| C.O.R.E. | `enabled` (bool, default off), `host` (non-empty), `port` (1–65535), `device_file`/`ca_file` (optional paths), `insecure` (bool), `connect_timeout`/`request_timeout` (1–600), `reconnect_enabled` (bool), `reconnect_delay` (0–300) |
 | Security | `require_confirmation_for_dangerous` (strict bool) |
 | Paths | `data/config/cache/logs/memory/runtime` (platformdirs, overridable) |
 

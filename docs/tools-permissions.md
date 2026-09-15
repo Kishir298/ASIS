@@ -16,6 +16,8 @@ explicit tool requests through registry → router → executor.
 | `run_tests` / `run_command` | Allowlisted `pytest`/`python`/`git`, `shell=False` | HIGH | Implemented, confirm-gated (coding mode) |
 | `git_add` | Stage workspace paths | HIGH | Implemented, confirm-gated (coding mode) |
 | `git_commit` | Commit (never pushes) | CRITICAL | Implemented, confirm-gated (coding mode) |
+| `core_status` | Local CORE connection snapshot | SAFE | Implemented (needs CORE manager) |
+| `core_discover_devices` / `core_device_info` / `core_data_request` / `core_service_request` / `core_agent_request` / `core_send_to_device` | C.O.R.E. infrastructure operations | HIGH | Implemented, confirm-gated (needs CORE session) |
 
 No dangerous tools ship today. `ToolResult(success, data, error,
 tool_name)` is frozen; non-`ToolResult` returns are wrapped.
@@ -46,9 +48,16 @@ required at `HIGH+` via `request_confirmation()`, which auto-approves
 when `settings.security.require_confirmation_for_dangerous` is false
 and otherwise uses the console handler (literal `yes`; EOF/Ctrl+C
 denies). Enforcement path: `Tool.authorizer` → executor denies with
-`TOOL_DENIED` before anything runs. Coding writes, command execution
-and git mutations all sit at `HIGH`/`CRITICAL`, so confirmation is
-exercised in coding mode (see `docs/coding.md`).
+`TOOL_DENIED` before anything runs. Coding writes, command execution,
+git mutations and all networked CORE tools sit at `HIGH`/`CRITICAL`,
+so confirmation is exercised in coding mode (see `docs/coding.md`).
+
+`PermissionManager` (`asis/permissions/manager.py`) is the named
+object facade over these primitives (`allows` / `require` /
+`needs_confirmation` / `level`); its `.authorizer` plugs directly into
+`ToolExecutor`, so manager-gated and callable-gated execution behave
+identically. The model can never bypass it: every CORE tool result is
+redacted and size-bounded before reaching model context.
 
 Helpers: `resolve_sandbox_path()` jails relative paths
 (`SandboxViolation` on escape); `get_secret()`/`require_secret()`

@@ -1,25 +1,34 @@
-# Future Integrations (C.O.R.E. / R.E.S.C.S.)
+# Integrations (C.O.R.E. real / R.E.S.C.S. future)
 
-Both are **future boundaries** — A.S.I.S. runs fully without them.
-Nothing in `asis/` imports C.O.R.E. or R.E.S.C.S. code.
+C.O.R.E. is a **real, optional** uplink — A.S.I.S. runs fully without
+it. R.E.S.C.S. remains a future boundary. Nothing in `asis/` imports
+C.O.R.E.-HOST or R.E.S.C.S. server code.
 
-## C.O.R.E. (future)
-
-Intended relationship:
+## C.O.R.E. (implemented)
 
 ```text
-A.S.I.S.
+A.S.I.S. (AssistantApp, GENERAL + A.S.C.S. modes, voice)
+   ↓  ToolRouter / PermissionManager / ToolExecutor
+CORE tools (core_status/discover/device_info/data/service/agent/send)
    ↓
-CoreClient / CoreInterface   asis/integrations/core/client.py (ABC today)
+CoreClient ABC  asis/integrations/core/client.py
    ↓
-C.O.R.E.                     (separate project; adapter not yet provided)
+RealCoreAdapter asis/integrations/core/adapter.py (lifecycle: CoreConnectionManager)
+   ↓
+CoreDeviceClient (CORE-CLIENT, TCP+TLS, ephemeral session)
+   ↓
+CORE-HOST
 ```
 
-`CoreClient` defines the contract (`send_message`, `request_service`,
-`publish_event`, `get_resource`, `register_component`, `get_health`).
-`MockCoreAdapter` is the runtime stand-in (in-memory messages, events,
-resources; `request_service` always reports no handler). Do not invent
-protocol details beyond this contract.
+`CoreClient` defines the contract (legacy `send_message` /
+`request_service` / `publish_event` / `get_resource` /
+`register_component` / `get_health` plus lifecycle `connect` /
+`disconnect` / `is_connected` / `device_status` / `send_request` /
+`request`). `RealCoreAdapter` implements it over the real device
+client; `MockCoreAdapter` remains the offline stand-in. Configuration:
+`ASIS_CORE_*` (see `docs/configuration.md` and `.env.example`);
+standalone by default; bounded reconnect; bounded shutdown.
+Physical Windows ↔ Mac LAN validation: NOT PERFORMED.
 
 ## R.E.S.C.S. (future)
 

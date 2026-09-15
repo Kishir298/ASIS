@@ -71,6 +71,9 @@ Unknown engine names raise `VoiceError` pointing at the corresponding
   `AssistantApp.set_mode()` without touching provider/model; anything
   else flows to `app.chat()`. Same provider/model/session/memory/tools
   as text; A.S.C.S. coding tools/context apply when CODING is active.
+  Spoken `core:…` commands execute CORE tools through the same
+  Router/permission path as typed `core:…` commands; CORE failure
+  becomes a spoken-safe notice, never a traceback.
 
 ## CLI (`asis voice`)
 
