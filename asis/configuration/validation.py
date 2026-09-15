@@ -185,6 +185,17 @@ def validate_settings(settings: Settings) -> Settings:
             f"{settings.runtime.log_level!r}."
         )
 
+    # Coding (A.S.C.S. capability)
+    _require_non_empty("coding", "default_mode", settings.coding.default_mode)
+    if settings.coding.default_mode.strip().lower() not in ("general", "coding"):
+        raise ConfigurationError(
+            "Invalid configuration coding.default_mode: expected 'general' "
+            f"or 'coding', received {settings.coding.default_mode!r}."
+        )
+    _require_positive_int("coding", "command_timeout", settings.coding.command_timeout)
+    _require_positive_int("coding", "max_file_size", settings.coding.max_file_size)
+    _require_positive_int("coding", "max_output_size", settings.coding.max_output_size)
+
     # Paths
     for field_name in ("data", "config", "cache", "logs", "memory", "runtime"):
         value = getattr(settings.paths, field_name)

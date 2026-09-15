@@ -74,3 +74,12 @@ REQUIRE_CONFIRMATION_FOR_DANGEROUS = True
 
 # Runtime
 SHUTDOWN_TIMEOUT = 10
+
+# Assistant modes (A.S.C.S. is the coding mode of A.S.I.S.)
+DEFAULT_MODE = "general"
+
+# Coding workspace (A.S.C.S.)
+CODING_WORKSPACE = ""
+CODING_COMMAND_TIMEOUT = 120
+CODING_MAX_FILE_SIZE = 200_000
+CODING_MAX_OUTPUT_SIZE = 60_000

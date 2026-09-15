@@ -126,6 +126,15 @@ class RuntimeSettings:
 
 
 @dataclass(frozen=True)
+class CodingSettings:
+    default_mode: str
+    workspace: str
+    command_timeout: int
+    max_file_size: int
+    max_output_size: int
+
+
+@dataclass(frozen=True)
 class IdentitySettings:
     name: str
     title: str
@@ -156,6 +165,7 @@ class Settings:
     memory: MemorySettings
     voice: VoiceSettings
     runtime: RuntimeSettings
+    coding: CodingSettings
     paths: PathSettings
 
 
@@ -269,6 +279,19 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
                 shutdown_timeout=get_i("ASIS_SHUTDOWN_TIMEOUT", d.SHUTDOWN_TIMEOUT),
                 debug=get_b("ASIS_DEBUG", d.DEBUG),
                 log_level=get_s("ASIS_LOG_LEVEL", d.LOG_LEVEL),
+            ),
+            coding=CodingSettings(
+                default_mode=get_s("ASIS_DEFAULT_MODE", d.DEFAULT_MODE),
+                workspace=get_s("ASIS_CODING_WORKSPACE", d.CODING_WORKSPACE),
+                command_timeout=get_i(
+                    "ASIS_CODING_COMMAND_TIMEOUT", d.CODING_COMMAND_TIMEOUT
+                ),
+                max_file_size=get_i(
+                    "ASIS_CODING_MAX_FILE_SIZE", d.CODING_MAX_FILE_SIZE
+                ),
+                max_output_size=get_i(
+                    "ASIS_CODING_MAX_OUTPUT_SIZE", d.CODING_MAX_OUTPUT_SIZE
+                ),
             ),
             paths=PathSettings(
                 data=get_data_directory(environment.get_path("ASIS_DATA_DIRECTORY")),
