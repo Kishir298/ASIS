@@ -70,6 +70,29 @@ def get_int(name: str, default: int) -> int:
         return default
 
 
+def get_bounded_int(name: str, default: int, low: int, high: int) -> int:
+    """Return an int env var clamped to [low, high], else the default."""
+    value = _get(name)
+
+    if value is None:
+        return default
+
+    try:
+        number = int(value)
+    except ValueError:
+        return default
+
+    if number < low or number > high:
+        return default
+
+    return number
+
+
+def get_port(name: str, default: int) -> int:
+    """Return a validated TCP port (1-65535), else the default."""
+    return get_bounded_int(name, default, 1, 65535)
+
+
 def get_float(name: str, default: float) -> float:
     value = _get(name)
 
@@ -156,21 +179,23 @@ REQUIRE_CONFIRMATION_FOR_DANGEROUS = get_bool(
 SHUTDOWN_TIMEOUT = get_int("ASIS_SHUTDOWN_TIMEOUT", defaults.SHUTDOWN_TIMEOUT)
 
 # C.O.R.E. integration (optional external infrastructure; never secrets here)
+# Ports/timeouts/delays are validated: out-of-range values fall back to
+# safe defaults so a typo can never produce an unbounded or illegal setup.
 CORE_ENABLED = get_bool("ASIS_CORE_ENABLED", defaults.CORE_ENABLED)
 CORE_HOST = get_string("ASIS_CORE_HOST", defaults.CORE_HOST)
-CORE_PORT = get_int("ASIS_CORE_PORT", defaults.CORE_PORT)
+CORE_PORT = get_port("ASIS_CORE_PORT", defaults.CORE_PORT)
 CORE_DEVICE_FILE = get_string("ASIS_CORE_DEVICE_FILE", defaults.CORE_DEVICE_FILE)
 CORE_CA_FILE = get_string("ASIS_CORE_CA_FILE", defaults.CORE_CA_FILE)
 CORE_INSECURE = get_bool("ASIS_CORE_INSECURE", defaults.CORE_INSECURE)
-CORE_CONNECT_TIMEOUT = get_int(
-    "ASIS_CORE_CONNECT_TIMEOUT", defaults.CORE_CONNECT_TIMEOUT
+CORE_CONNECT_TIMEOUT = get_bounded_int(
+    "ASIS_CORE_CONNECT_TIMEOUT", defaults.CORE_CONNECT_TIMEOUT, 1, 600
 )
-CORE_REQUEST_TIMEOUT = get_int(
-    "ASIS_CORE_REQUEST_TIMEOUT", defaults.CORE_REQUEST_TIMEOUT
+CORE_REQUEST_TIMEOUT = get_bounded_int(
+    "ASIS_CORE_REQUEST_TIMEOUT", defaults.CORE_REQUEST_TIMEOUT, 1, 600
 )
 CORE_RECONNECT_ENABLED = get_bool(
     "ASIS_CORE_RECONNECT_ENABLED", defaults.CORE_RECONNECT_ENABLED
 )
-CORE_RECONNECT_DELAY = get_int(
-    "ASIS_CORE_RECONNECT_DELAY", defaults.CORE_RECONNECT_DELAY
+CORE_RECONNECT_DELAY = get_bounded_int(
+    "ASIS_CORE_RECONNECT_DELAY", defaults.CORE_RECONNECT_DELAY, 0, 300
 )

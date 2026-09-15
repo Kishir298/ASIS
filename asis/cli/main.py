@@ -21,7 +21,7 @@ from asis.configuration import settings
 from asis.events import EventBus
 from asis.identity import Identity, build_identity
 from asis.memory import MemoryDatabase, MemoryManager, MemoryStorage
-from asis.tools.provided import CurrentTimeTool, EchoTool
+from asis.tools.provided import CurrentTimeTool, EchoTool, build_core_tools
 
 
 def build_memory(db_path: str | Path | None = None) -> MemoryManager:
@@ -86,12 +86,55 @@ def build_parser() -> argparse.ArgumentParser:
         help="list the built-in tools and exit",
     )
     parser.add_argument(
+        "--core-status",
+        action="store_true",
+        help="print the C.O.R.E. connection status and exit",
+    )
+    parser.add_argument(
         "--message",
         default=None,
         metavar="TEXT",
         help="process a single message and exit",
     )
     return parser
+
+
+def core_status_line() -> str:
+    """Describe the configured C.O.R.E. uplink without connecting.
+
+    Never prompts for the provisioning credential and never opens a
+    socket: with no credential available the manager reports DISABLED
+    (CORE off) or DISCONNECTED (CORE on, no session) — both secret-free.
+    """
+    from asis.integrations.core.adapter import RealCoreAdapter
+    from asis.integrations.core.connection import (
+        build_connection_manager_from_settings,
+    )
+    from asis.system.context import RuntimeContext
+
+    core = settings.core
+    adapter = RealCoreAdapter(
+        host=core.host,
+        port=core.port,
+        device_file=core.device_file,
+        ca_file=core.ca_file,
+        insecure=core.insecure,
+        connect_timeout=core.connect_timeout,
+        request_timeout=core.request_timeout,
+    )
+    manager = build_connection_manager_from_settings(
+        settings, adapter, credential_provider=None
+    )
+    context = RuntimeContext()
+    manager.start(context)
+    try:
+        status = manager.status()
+    finally:
+        manager.stop(context)
+    state = getattr(status.state, "value", str(status.state)).lower()
+    if state == "disabled":
+        return "CORE: disabled (standalone)."
+    return f"CORE: {state} (host={core.host}:{core.port})."
 
 
 def handle_message(
@@ -124,8 +167,12 @@ def entry(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.list_tools:
-        for tool in (EchoTool(), CurrentTimeTool()):
+        for tool in (EchoTool(), CurrentTimeTool(), *build_core_tools(None)):
             print(f"{tool.name}: {tool.description}")
+        return 0
+
+    if args.core_status:
+        print(core_status_line())
         return 0
 
     identity = build_identity()

@@ -8,8 +8,10 @@ permission system via the ToolExecutor.
 
 from .core_tools import (
     CoreAgentRequestTool,
+    CoreDataRequestTool,
     CoreDeviceInfoTool,
     CoreDiscoverDevicesTool,
+    CoreSendToDeviceTool,
     CoreServiceRequestTool,
     CoreStatusTool,
     build_core_tools,
@@ -22,8 +24,10 @@ __all__ = [
     "EchoTool",
     "CurrentTimeTool",
     "CoreAgentRequestTool",
+    "CoreDataRequestTool",
     "CoreDeviceInfoTool",
     "CoreDiscoverDevicesTool",
+    "CoreSendToDeviceTool",
     "CoreServiceRequestTool",
     "CoreStatusTool",
     "build_core_tools",

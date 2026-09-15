@@ -28,8 +28,10 @@ def test_core_tools_register_on_shared_registry():
         "core_discover_devices",
         "core_device_info",
         "core_status",
+        "core_data_request",
         "core_service_request",
         "core_agent_request",
+        "core_send_to_device",
     ]
     assert "core_discover_devices" in registry.list_names()
 
@@ -39,8 +41,10 @@ def test_network_tools_require_confirmation_level():
     for name in (
         "core_discover_devices",
         "core_device_info",
+        "core_data_request",
         "core_service_request",
         "core_agent_request",
+        "core_send_to_device",
     ):
         assert tools[name].permission >= PermissionLevel.HIGH, name
     assert tools["core_status"].permission == PermissionLevel.SAFE
@@ -53,8 +57,10 @@ def test_offline_tools_fail_cleanly():
     for name, kwargs in (
         ("core_discover_devices", {}),
         ("core_device_info", {"device_id": "mac-01"}),
+        ("core_data_request", {"request_type": "record_list"}),
         ("core_service_request", {"service": "health", "operation": "status"}),
         ("core_agent_request", {"operation": "status"}),
+        ("core_send_to_device", {"device_id": "mac-02", "message_type": "APP_PING"}),
     ):
         result = router.execute(name, **kwargs)
         assert result.success is False, name
@@ -133,9 +139,34 @@ def test_no_credentials_in_tool_results():
     for name, kwargs in (
         ("core_discover_devices", {}),
         ("core_device_info", {"device_id": "mac-01"}),
+        ("core_data_request", {"request_type": "record_list"}),
+        ("core_send_to_device", {"device_id": "mac-02", "message_type": "APP_PING"}),
         ("core_status", {}),
     ):
         result = router.execute(name, **kwargs)
         blob = json.dumps({"ok": result.success, "data": result.data, "err": result.error})
         for secret in ("session_token", "credential", "connection_id"):
             assert secret not in blob, (name, secret)
+
+
+def test_data_request_validates_args():
+    registry = ToolRegistry()
+    register_core_tools(registry, _online_mock())
+    router = ToolRouter(registry, ToolExecutor(authorizer=lambda tool: True))
+    assert router.execute("core_data_request").success is False
+    assert router.execute("core_data_request", request_type="record_list").success is True
+    bad = router.execute("core_data_request", request_type="x", params="nope")
+    assert bad.success is False
+    assert "params" in (bad.error or "")
+
+
+def test_send_to_device_validates_args():
+    registry = ToolRegistry()
+    register_core_tools(registry, _online_mock())
+    router = ToolRouter(registry, ToolExecutor(authorizer=lambda tool: True))
+    assert router.execute("core_send_to_device").success is False
+    assert router.execute("core_send_to_device", device_id="mac-02").success is False
+    ok = router.execute(
+        "core_send_to_device", device_id="mac-02", message_type="APP_PING"
+    )
+    assert ok.success is True

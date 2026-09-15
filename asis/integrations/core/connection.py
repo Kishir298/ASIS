@@ -62,7 +62,7 @@ class CoreConnectionManager(RuntimeComponent):
         context.register("core", self._adapter)
         context.register("core_connection", self)
         if not self._enabled:
-            self._state = CoreConnectionState.DISCONNECTED
+            self._state = CoreConnectionState.DISABLED
             self._detail = "disabled"
             self._logger.info("CORE disabled; running standalone.")
             return
@@ -75,7 +75,11 @@ class CoreConnectionManager(RuntimeComponent):
             self._adapter.disconnect()
         except Exception:
             pass
-        self._state = CoreConnectionState.DISCONNECTED
+        self._state = (
+            CoreConnectionState.DISABLED
+            if not self._enabled
+            else CoreConnectionState.DISCONNECTED
+        )
         self._logger.info("CORE stopped; ephemeral session cleared.")
 
     # -- application path --
@@ -100,7 +104,14 @@ class CoreConnectionManager(RuntimeComponent):
 
     def status(self) -> CoreStatus:
         connected = self.is_available()
-        state = CoreConnectionState.CONNECTED if connected else self._state
+        if connected:
+            state = CoreConnectionState.CONNECTED
+        elif not self._enabled:
+            state = CoreConnectionState.DISABLED
+        else:
+            state = self._state
+            if state == CoreConnectionState.CONNECTED:
+                state = CoreConnectionState.DISCONNECTED
         lease = "UNKNOWN"
         device = None
         try:
@@ -119,8 +130,6 @@ class CoreConnectionManager(RuntimeComponent):
                 lease = device.status
         except Exception:
             pass
-        if not connected and state == CoreConnectionState.CONNECTED:
-            state = CoreConnectionState.DISCONNECTED
         return CoreStatus(
             state=state,
             connected=connected,

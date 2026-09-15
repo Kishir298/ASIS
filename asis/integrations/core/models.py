@@ -15,6 +15,7 @@ from typing import Any
 class CoreConnectionState(str, Enum):
     """Lifecycle states for the optional C.O.R.E. connection."""
 
+    DISABLED = "DISABLED"
     DISCONNECTED = "DISCONNECTED"
     CONNECTING = "CONNECTING"
     AUTHENTICATING = "AUTHENTICATING"

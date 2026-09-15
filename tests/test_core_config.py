@@ -94,6 +94,30 @@ def test_core_env_overrides(monkeypatch):
     assert core.reconnect_delay == 2
 
 
+def test_invalid_port_falls_back_to_default(monkeypatch):
+    for bad in ("abc", "0", "-1", "99999", ""):
+        settings = _reload_config(monkeypatch, ASIS_CORE_PORT=bad)
+        assert settings.load_settings().core.port == 5000, bad
+
+
+def test_invalid_timeouts_fall_back_to_defaults(monkeypatch):
+    settings = _reload_config(
+        monkeypatch,
+        ASIS_CORE_CONNECT_TIMEOUT="0",
+        ASIS_CORE_REQUEST_TIMEOUT="never",
+        ASIS_CORE_RECONNECT_DELAY="9999",
+    )
+    core = settings.load_settings().core
+    assert core.connect_timeout == 10
+    assert core.request_timeout == 30
+    assert core.reconnect_delay == 5
+
+
+def test_invalid_host_falls_back_to_default(monkeypatch):
+    settings = _reload_config(monkeypatch, ASIS_CORE_HOST="   ")
+    assert settings.load_settings().core.host == "127.0.0.1"
+
+
 def test_env_example_documents_core_keys():
     example = Path(__file__).resolve().parents[1] / ".env.example"
     assert example.exists()

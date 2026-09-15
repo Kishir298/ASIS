@@ -259,14 +259,118 @@ class CoreAgentRequestTool(CoreToolBase):
         return _from_response(resp, self.name)
 
 
+class CoreDataRequestTool(CoreToolBase):
+    """Query host data (records/files) via DATA_REQUEST."""
+
+    metadata = ToolMetadata(
+        name="core_data_request",
+        description="Query C.O.R.E.-HOST data (record_get/list/search, file_metadata).",
+        category="core",
+        permission=PermissionLevel.HIGH,
+        tags=("core", "data", "network"),
+    )
+
+    def execute(self, **kwargs: Any) -> ToolResult:
+        request_type = kwargs.get("request_type", "")
+        params = kwargs.get("params", {})
+        destination = kwargs.get("destination", "core")
+        if not isinstance(request_type, str) or not request_type.strip():
+            return ToolResult.failure(
+                error="'request_type' must be a non-empty string.",
+                tool_name=self.name,
+            )
+        if params is None:
+            params = {}
+        if not isinstance(params, dict):
+            return ToolResult.failure(
+                error="'params' must be a mapping.", tool_name=self.name
+            )
+        if not isinstance(destination, str) or not destination.strip():
+            return ToolResult.failure(
+                error="'destination' must be a non-empty string.",
+                tool_name=self.name,
+            )
+        adapter = self._adapter()
+        if adapter is None:
+            return _unavailable(self.name)
+        try:
+            if hasattr(adapter, "data_request"):
+                resp = adapter.data_request(
+                    request_type.strip(), dict(params), destination.strip()
+                )
+            else:
+                resp = adapter.send_request(
+                    destination.strip(),
+                    "DATA_REQUEST",
+                    {"request_type": request_type.strip(), **dict(params)},
+                )
+        except Exception as exc:
+            return ToolResult.failure(error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name)
+        return _from_response(resp, self.name)
+
+
+class CoreSendToDeviceTool(CoreToolBase):
+    """Send a device-to-device application message via the host router."""
+
+    metadata = ToolMetadata(
+        name="core_send_to_device",
+        description=(
+            "Send an application message to another C.O.R.E. device. "
+            "Host routing is one-way: expect a timeout-shaped result, "
+            "not a reply envelope."
+        ),
+        category="core",
+        permission=PermissionLevel.HIGH,
+        tags=("core", "device", "network"),
+    )
+
+    def execute(self, **kwargs: Any) -> ToolResult:
+        device_id = kwargs.get("device_id", "")
+        message_type = kwargs.get("message_type", "")
+        payload = kwargs.get("payload", {})
+        if not isinstance(device_id, str) or not device_id.strip():
+            return ToolResult.failure(
+                error="'device_id' must be a non-empty string.",
+                tool_name=self.name,
+            )
+        if not isinstance(message_type, str) or not message_type.strip():
+            return ToolResult.failure(
+                error="'message_type' must be a non-empty string.",
+                tool_name=self.name,
+            )
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            return ToolResult.failure(
+                error="'payload' must be a mapping.", tool_name=self.name
+            )
+        adapter = self._adapter()
+        if adapter is None:
+            return _unavailable(self.name)
+        try:
+            if hasattr(adapter, "send_to_device"):
+                resp = adapter.send_to_device(
+                    device_id.strip(), message_type.strip(), dict(payload)
+                )
+            else:
+                resp = adapter.send_request(
+                    device_id.strip(), message_type.strip(), dict(payload)
+                )
+        except Exception as exc:
+            return ToolResult.failure(error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name)
+        return _from_response(resp, self.name)
+
+
 def build_core_tools(core: Any | None = None) -> list[Tool]:
     """Build the CORE tool set bound to one adapter/manager (or offline)."""
     return [
         CoreDiscoverDevicesTool(core),
         CoreDeviceInfoTool(core),
         CoreStatusTool(core),
+        CoreDataRequestTool(core),
         CoreServiceRequestTool(core),
         CoreAgentRequestTool(core),
+        CoreSendToDeviceTool(core),
     ]
 
 

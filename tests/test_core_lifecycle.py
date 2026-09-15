@@ -27,11 +27,11 @@ def test_disabled_manager_is_standalone_noop():
     manager = CoreConnectionManager(MockCoreAdapter(), enabled=False)
     ctx = RuntimeContext()
     manager.start(ctx)
-    assert manager.state == CoreConnectionState.DISCONNECTED
+    assert manager.state == CoreConnectionState.DISABLED
     assert manager.is_available() is False
     assert manager.request("core", "DEVICE_DISCOVER", {}).ok is False
     manager.stop(ctx)
-    assert manager.state == CoreConnectionState.DISCONNECTED
+    assert manager.state == CoreConnectionState.DISABLED
 
 
 def test_missing_credential_stays_standalone():
@@ -79,7 +79,7 @@ def test_stop_during_disabled_is_safe():
     manager = CoreConnectionManager(MockCoreAdapter(), enabled=False)
     ctx = RuntimeContext()
     manager.stop(ctx)
-    assert manager.state == CoreConnectionState.DISCONNECTED
+    assert manager.state == CoreConnectionState.DISABLED
 
 
 def test_runtime_integration_start_stop():
@@ -125,4 +125,4 @@ def test_status_snapshot_offline():
     manager = CoreConnectionManager(MockCoreAdapter(), enabled=False)
     status = manager.status()
     assert status.connected is False
-    assert status.state == CoreConnectionState.DISCONNECTED
+    assert status.state == CoreConnectionState.DISABLED

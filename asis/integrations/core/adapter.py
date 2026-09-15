@@ -251,6 +251,59 @@ class RealCoreAdapter(CoreClient):
                 self._drop_session()
             return CoreResponse(ok=False, error=text)
 
+    def data_request(
+        self,
+        request_type: str,
+        params: dict[str, Any] | None = None,
+        destination: str = "core",
+        timeout: float | None = None,
+    ) -> CoreResponse:
+        """Query host data via the device client's DATA_REQUEST API."""
+        device = self._device
+        if device is None or not self.is_connected():
+            return CoreResponse(ok=False, error="CORE_UNAVAILABLE: not connected.")
+        try:
+            if hasattr(device, "data_request"):
+                raw = device.data_request(
+                    request_type, dict(params or {}), destination,
+                    timeout=self._request_timeout if timeout is None else timeout,
+                )
+                message = validate_envelope(raw)
+                return CoreResponse(ok=True, data=normalize_result(message.get("payload")))
+        except Exception as exc:
+            return CoreResponse(ok=False, error=self._classify(exc))
+        return self.send_request(
+            destination, "DATA_REQUEST",
+            {"request_type": request_type, **dict(params or {})},
+            timeout=self._request_timeout if timeout is None else timeout,
+        )
+
+    def send_to_device(
+        self,
+        device_id: str,
+        message_type: str,
+        payload: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> CoreResponse:
+        """Send a device-to-device message via the host router."""
+        device = self._device
+        if device is None or not self.is_connected():
+            return CoreResponse(ok=False, error="CORE_UNAVAILABLE: not connected.")
+        try:
+            if hasattr(device, "send_to_device"):
+                raw = device.send_to_device(
+                    device_id, message_type, dict(payload or {}),
+                    timeout=self._request_timeout if timeout is None else timeout,
+                )
+                message = validate_envelope(raw)
+                return CoreResponse(ok=True, data=normalize_result(message.get("payload")))
+        except Exception as exc:
+            return CoreResponse(ok=False, error=self._classify(exc))
+        return self.send_request(
+            device_id, message_type, dict(payload or {}),
+            timeout=self._request_timeout if timeout is None else timeout,
+        )
+
     # -- legacy surface mapped onto supported host operations only --
     def send_message(self, recipient: str, payload: dict[str, Any]) -> CoreResponse:
         return self.send_request(recipient, "APP_MESSAGE", dict(payload or {}))

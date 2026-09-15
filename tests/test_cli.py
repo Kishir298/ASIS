@@ -32,6 +32,18 @@ def test_list_tools(capsys):
     assert code == 0
     assert "echo" in out
     assert "current_time" in out
+    assert "core_discover_devices" in out
+    assert "core_data_request" in out
+    assert "core_send_to_device" in out
+
+
+def test_core_status_flag(capsys):
+    code = entry(["--core-status"])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "CORE:" in out
+    assert "token" not in out.lower()
 
 
 def test_message_flag_with_mock_provider(tmp_path, capsys):
