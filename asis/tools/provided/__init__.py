@@ -6,7 +6,26 @@ tools must be declared with a higher PermissionLevel and approved by the
 permission system via the ToolExecutor.
 """
 
+from .core_tools import (
+    CoreAgentRequestTool,
+    CoreDeviceInfoTool,
+    CoreDiscoverDevicesTool,
+    CoreServiceRequestTool,
+    CoreStatusTool,
+    build_core_tools,
+    register_core_tools,
+)
 from .echo import EchoTool
 from .time import CurrentTimeTool
 
-__all__ = ["EchoTool", "CurrentTimeTool"]
+__all__ = [
+    "EchoTool",
+    "CurrentTimeTool",
+    "CoreAgentRequestTool",
+    "CoreDeviceInfoTool",
+    "CoreDiscoverDevicesTool",
+    "CoreServiceRequestTool",
+    "CoreStatusTool",
+    "build_core_tools",
+    "register_core_tools",
+]

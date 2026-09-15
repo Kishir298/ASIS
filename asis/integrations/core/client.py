@@ -6,6 +6,8 @@ controlling subsystems directly. This interface is the contract; the
 concrete adapter is provided by the C.O.R.E. project during integration.
 
 For now A.S.I.S. runs with `MockCoreAdapter` (see `integrations.core.mock`).
+The real adapter (`integrations.core.adapter.RealCoreAdapter`) wraps the
+external CORE-CLIENT over TCP+TLS — never CORE-HOST internals.
 """
 
 from __future__ import annotations
@@ -80,3 +82,39 @@ class CoreClient(ABC):
     def get_health(self) -> dict[str, Any]:
         """Return health information about C.O.R.E."""
         raise NotImplementedError
+
+    # -- lifecycle + application request surface (R.I.S.A.R.M.S. integration) --
+    def connect(self, credential: str | None = None) -> CoreResponse:
+        """Establish the authenticated session (default: unavailable)."""
+        raise NotImplementedError
+
+    def disconnect(self) -> None:
+        """Close the session and destroy ephemeral state (default: no-op)."""
+
+    def is_connected(self) -> bool:
+        """Return whether an authenticated session is live."""
+        return False
+
+    def device_status(self) -> CoreResponse:
+        """Return the CORE-authoritative device identity snapshot."""
+        raise NotImplementedError
+
+    def send_request(
+        self,
+        destination: str,
+        message_type: str,
+        payload: dict[str, Any] | None = None,
+        timeout: float = 30.0,
+    ) -> CoreResponse:
+        """Send one bounded application request; structured result/error."""
+        raise NotImplementedError
+
+    def request(
+        self,
+        destination: str,
+        message_type: str,
+        payload: dict[str, Any] | None = None,
+        timeout: float = 30.0,
+    ) -> CoreResponse:
+        """Alias of send_request for call-site readability."""
+        return self.send_request(destination, message_type, payload, timeout)

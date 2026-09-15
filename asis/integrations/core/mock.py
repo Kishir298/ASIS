@@ -14,6 +14,8 @@ from typing import Any
 from asis.logging.logger import get_logger
 
 from .client import CoreClient, CoreResponse, ServiceRequest
+from .models import CoreConnectionState, CoreDeviceInfo, CoreStatus
+from .protocol import normalize_result, redact
 
 
 class MockCoreAdapter(CoreClient):
@@ -25,6 +27,8 @@ class MockCoreAdapter(CoreClient):
         self._events: list[dict[str, Any]] = []
         self._resources: dict[str, Any] = {}
         self._components: dict[str, dict[str, Any]] = {}
+        self._connected = False
+        self._requests: list[dict[str, Any]] = []
 
     @property
     def name(self) -> str:
@@ -34,7 +38,7 @@ class MockCoreAdapter(CoreClient):
         record = {
             "message_id": str(uuid.uuid4()),
             "recipient": recipient,
-            "payload": payload,
+            "payload": redact(payload),
         }
 
         self._messages.append(record)
@@ -64,7 +68,7 @@ class MockCoreAdapter(CoreClient):
             {
                 "event_id": str(uuid.uuid4()),
                 "event_type": event_type,
-                "data": data or {},
+                "data": redact(data or {}),
             }
         )
 
@@ -77,7 +81,7 @@ class MockCoreAdapter(CoreClient):
                 error=f"Resource not found: {name}",
             )
 
-        return CoreResponse(ok=True, data=resource)
+        return CoreResponse(ok=True, data=normalize_result(resource))
 
     def set_resource(self, name: str, value: Any) -> None:
         """Mock helper: register a local resource."""
@@ -86,7 +90,7 @@ class MockCoreAdapter(CoreClient):
     def register_component(
         self, component_id: str, metadata: dict[str, Any] | None = None
     ) -> CoreResponse:
-        self._components[component_id] = metadata or {}
+        self._components[component_id] = redact(metadata or {})
 
         return CoreResponse(ok=True, data={"component_id": component_id})
 
@@ -105,3 +109,63 @@ class MockCoreAdapter(CoreClient):
         self._events.clear()
         self._resources.clear()
         self._components.clear()
+        self._requests.clear()
+        self._connected = False
+
+    # -- lifecycle + application requests (mock session) --
+    def connect(self, credential: str | None = None) -> CoreResponse:
+        self._connected = True
+        return CoreResponse(ok=True, data={"adapter": self.name})
+
+    def disconnect(self) -> None:
+        self._connected = False
+
+    def is_connected(self) -> bool:
+        return self._connected
+
+    def device_status(self) -> CoreResponse:
+        return CoreResponse(
+            ok=True,
+            data={
+                "device_id": "mock-device",
+                "join_name": "mock-mock-device",
+                "device_name": "MockDevice",
+                "platform": "mock",
+                "capabilities": [],
+                "status": "online" if self._connected else "offline",
+            },
+        )
+
+    def send_request(
+        self,
+        destination: str,
+        message_type: str,
+        payload: dict[str, Any] | None = None,
+        timeout: float = 30.0,
+    ) -> CoreResponse:
+        record = {
+            "message_id": str(uuid.uuid4()),
+            "destination": destination,
+            "message_type": message_type,
+            "payload": redact(payload or {}),
+        }
+        self._requests.append(record)
+        if not self._connected:
+            return CoreResponse(ok=False, error="CORE_UNAVAILABLE: mock is offline.")
+        return CoreResponse(ok=True, data=normalize_result(record))
+
+    @property
+    def connection_state(self) -> CoreConnectionState:
+        return (
+            CoreConnectionState.CONNECTED
+            if self._connected
+            else CoreConnectionState.DISCONNECTED
+        )
+
+    def status(self) -> CoreStatus:
+        return CoreStatus(
+            state=self.connection_state,
+            connected=self._connected,
+            device=CoreDeviceInfo(device_id="mock-device", status="online"),
+            lease_state="ONLINE" if self._connected else "DISCONNECTED",
+        )
