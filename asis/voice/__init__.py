@@ -23,6 +23,7 @@ from .factory import (
 )
 from .models import AudioData, SpeakerResult, TranscriptionResult
 from .pipeline import VoicePipeline
+from .runner import VoiceRunner
 from .providers import (
     AudioInputProvider,
     AudioOutputProvider,
@@ -47,6 +48,7 @@ __all__ = [
     "TextToSpeechProvider",
     "TranscriptionResult",
     "VoicePipeline",
+    "VoiceRunner",
     "create_audio_input",
     "create_audio_output",
     "create_speaker_identifier",
