@@ -16,6 +16,7 @@ from pathlib import Path
 from asis.ai import AIManager
 from asis.ai.providers import MockAIProvider, OllamaProvider
 from asis.app.assistant import AssistantApp
+from asis.app.modes import AssistantMode, parse_mode
 from asis.configuration import settings
 from asis.events import EventBus
 from asis.identity import Identity, build_identity
@@ -60,9 +61,13 @@ def build_assistant(
     identity: Identity,
     ai: AIManager,
     memory: MemoryManager,
+    mode: AssistantMode | str | None = None,
+    workspace: str | Path | None = None,
 ) -> AssistantApp:
     """Build the stateful assistant owning one conversation session."""
-    return AssistantApp(identity=identity, ai=ai, memory=memory)
+    return AssistantApp(
+        identity=identity, ai=ai, memory=memory, mode=mode, workspace=workspace
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -108,7 +113,39 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TEXT",
         help="process a single message and exit",
     )
+    parser.add_argument(
+        "--mode",
+        default=settings.coding.default_mode,
+        choices=["general", "coding"],
+        help="assistant mode to use (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--workspace",
+        default=None,
+        metavar="PATH",
+        help="coding workspace root (default: configured workspace or CWD)",
+    )
     return parser
+
+
+def handle_mode_command(app: AssistantApp, message: str) -> str | None:
+    """Handle /mode and /ascs REPL commands; None when not a mode command."""
+    text = message.strip()
+    lowered = text.lower()
+    if lowered == "/ascs":
+        app.set_mode(AssistantMode.CODING)
+        return f"A.S.C.S. coding mode enabled.\nWorkspace: {app.workspace.root}"
+    if lowered == "/mode":
+        return f"Current mode: {app.mode.value}"
+    if lowered.startswith("/mode "):
+        try:
+            app.set_mode(parse_mode(text.split(None, 1)[1]))
+        except ValueError as exc:
+            return str(exc)
+        if app.mode is AssistantMode.CODING:
+            return f"A.S.C.S. coding mode enabled.\nWorkspace: {app.workspace.root}"
+        return "A.S.I.S. general mode enabled."
+    return None
 
 
 def handle_message(
@@ -156,7 +193,9 @@ def entry(argv: Sequence[str] | None = None) -> int:
     event_bus = EventBus()
     ai = AIManager(provider=provider, event_bus=event_bus)
     memory = build_memory(args.memory_db)
-    app = build_assistant(identity, ai, memory)
+    app = build_assistant(
+        identity, ai, memory, mode=args.mode, workspace=args.workspace
+    )
 
     if args.message is not None:
         print(handle_message(identity, ai, memory, args.message, assistant=app))
@@ -171,6 +210,10 @@ def entry(argv: Sequence[str] | None = None) -> int:
         if message.lower() == shutdown:
             print("Shutting down.")
             break
+        mode_reply = handle_mode_command(app, message)
+        if mode_reply is not None:
+            print(mode_reply)
+            continue
         print(handle_message(identity, ai, memory, message, assistant=app))
     return 0
 

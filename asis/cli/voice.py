@@ -60,6 +60,18 @@ def build_voice_parser() -> argparse.ArgumentParser:
     parser.add_argument("--model", default=settings.ai.model)
     parser.add_argument("--memory-db", default=None, metavar="PATH")
     parser.add_argument(
+        "--mode",
+        default=settings.coding.default_mode,
+        choices=["general", "coding"],
+        help="assistant mode to use (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--workspace",
+        default=None,
+        metavar="PATH",
+        help="coding workspace root (default: configured workspace or CWD)",
+    )
+    parser.add_argument(
         "--max-turns", type=int, default=0, help="stop after N turns (0=infinite)"
     )
     parser.add_argument("--debug", action="store_true")
@@ -183,7 +195,14 @@ def run_voice(argv: list[str] | None = None) -> int:
     interrupts.register("voice")
     ai = AIManager(provider=provider, event_bus=event_bus)
     memory = build_memory(args.memory_db)
-    app = AssistantApp(identity=identity, ai=ai, memory=memory, interrupts=interrupts)
+    app = AssistantApp(
+        identity=identity,
+        ai=ai,
+        memory=memory,
+        interrupts=interrupts,
+        mode=args.mode,
+        workspace=args.workspace,
+    )
 
     pipeline = VoicePipeline(
         audio_input=engines["audio_input"],

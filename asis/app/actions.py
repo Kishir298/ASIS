@@ -23,6 +23,16 @@ _TIME_PATTERN = re.compile(
     r"\b(what\s+(is\s+the\s+)?(time|date|day)|current\s+time|time\s+now)\b",
     re.IGNORECASE,
 )
+# Conservative coding heuristics (explicit mode switching stays primary).
+_READ_PATTERN = re.compile(
+    r"\bread\s+(?:the\s+)?file\s+([A-Za-z0-9_.\-/~]+)", re.IGNORECASE
+)
+_DIFF_PATTERN = re.compile(
+    r"\b(show|what).{0,20}\b(diff|changed|changes)\b", re.IGNORECASE
+)
+_TEST_PATTERN = re.compile(
+    r"\b(run|execute)\b.{0,20}\b(tests?|pytest|test suite)\b", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -80,11 +90,16 @@ def _parse_structured(text: str) -> ToolRequest | None:
     return None
 
 
-def parse_tool_request(model_text: str, user_text: str = "") -> ToolRequest | None:
+def parse_tool_request(
+    model_text: str,
+    user_text: str = "",
+    coding: bool = False,
+) -> ToolRequest | None:
     """Decide whether a tool should run for this turn.
 
     Priority: structured JSON in model output, then conservative
-    heuristics. Returns None for normal conversation.
+    heuristics (coding heuristics only when ``coding`` is True).
+    Returns None for normal conversation.
     """
     structured = _parse_structured(model_text or "")
     if structured is not None:
@@ -98,6 +113,17 @@ def parse_tool_request(model_text: str, user_text: str = "") -> ToolRequest | No
         return ToolRequest(
             tool_name="echo", arguments={"text": echo_match.group(1).strip()}
         )
+    if coding:
+        read_match = _READ_PATTERN.search(combined)
+        if read_match and read_match.group(1).strip():
+            return ToolRequest(
+                tool_name="read_file",
+                arguments={"path": read_match.group(1).strip()},
+            )
+        if _DIFF_PATTERN.search(combined):
+            return ToolRequest(tool_name="git_diff", arguments={})
+        if _TEST_PATTERN.search(combined):
+            return ToolRequest(tool_name="run_tests", arguments={})
     return None
 
 
