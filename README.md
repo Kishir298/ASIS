@@ -1,8 +1,9 @@
 # A.S.I.S. — A Smart Intelligence System
 
 Intelligence/assistant layer of the R.I.S.A.R.M.S. ecosystem. Runs
-independently — no C.O.R.E. or R.E.S.C.S. required (both are future
-integration boundaries; see `docs/integration.md`).
+independently — no C.O.R.E. or R.E.S.C.S. required (C.O.R.E. is a real
+but optional uplink; R.E.S.C.S. remains a future boundary; see
+`docs/integration.md`).
 
 ## Status
 
