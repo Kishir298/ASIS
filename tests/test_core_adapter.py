@@ -229,3 +229,55 @@ def test_legacy_surface_never_claims_fake_support():
     adapter.connect("cred")
     resp = adapter.get_resource("notes")
     assert isinstance(resp, CoreResponse)
+
+
+class _BadEnvelopeDevice(FakeDevice):
+    def __init__(self, payload, **kw):
+        super().__init__(**kw)
+        self._payload = payload
+
+    def request(self, destination, message_type, payload=None, timeout=None):
+        assert self.is_connected
+        return self._payload
+
+
+def _bad_adapter(payload):
+    def factory(**fkw):
+        device = _BadEnvelopeDevice(payload, **fkw)
+        device.login("cred")
+        device.connect()
+        device.register()
+        return device
+
+    adapter = RealCoreAdapter(client_factory=factory, device_id="asis-01")
+    assert adapter.connect("cred").ok is True
+    return adapter
+
+
+def test_malformed_response_is_structured_error():
+    adapter = _bad_adapter({"bogus": True})
+    resp = adapter.send_request("core", "DEVICE_DISCOVER", {})
+    assert resp.ok is False
+    assert "CORE_PROTOCOL_ERROR" in (resp.error or "")
+    adapter.disconnect()
+
+
+def test_oversized_response_is_bounded():
+    from asis.integrations.core.protocol import MAX_RESULT_CHARS
+
+    adapter = _bad_adapter(
+        {
+            "message_id": "m",
+            "source": "core",
+            "destination": "mac-01",
+            "message_type": "DEVICE_DISCOVER_RESPONSE",
+            "timestamp": "now",
+            "request_id": "r",
+            "payload": {"blob": "x" * (MAX_RESULT_CHARS + 500)},
+            "identity_id": "core",
+        }
+    )
+    resp = adapter.send_request("core", "DEVICE_DISCOVER", {})
+    assert resp.ok is True
+    assert resp.data.get("truncated") is True
+    adapter.disconnect()

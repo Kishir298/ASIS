@@ -409,7 +409,8 @@ def test_platformdirs_used_not_repo(monkeypatch):
     monkeypatch.setattr(paths_module, "user_data_dir", fake_user_data_dir)
     config = load_settings()
     assert calls and calls[0] == "A.S.I.S."
-    assert str(config.paths.data).startswith("/platform/data")
+    # Separator-agnostic: Windows Path() renders "/" as "\".
+    assert str(config.paths.data).replace("\\", "/").startswith("/platform/data")
     assert ".git" not in str(config.paths.data)
     repo = Path.cwd().resolve()
     for field in ("data", "config", "cache", "logs", "memory"):

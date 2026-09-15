@@ -146,3 +146,62 @@ def test_no_core_host_modules_imported():
     assert not any(
         name == "core" or name.startswith("core.") for name in sys.modules
     )
+
+
+@requires_client_repo
+def test_invalid_ca_path_fails_cleanly(tmp_path):
+    client_mod = _load("e2e_core_device_client_ca", _CLIENT_MOD)
+    fake_mod = _load("e2e_fake_core_host_ca", _FAKE_MOD)
+    host = fake_mod.FakeCoreHost(token="secret-mac-01", device_id="mac-01")
+    from asis.integrations.core.adapter import RealCoreAdapter
+
+    def factory(**kw):
+        return client_mod.CoreDeviceClient(
+            host="127.0.0.1",
+            port=host.port,
+            device_id="mac-01",
+            device_name="MacBook",
+            device_file=tmp_path / "device.json",
+            use_tls=True,  # TLS against plaintext fake + missing CA
+            ca_file=tmp_path / "missing.pem",
+            timeout=5.0,
+        )
+
+    adapter = RealCoreAdapter(client_factory=factory, device_id="mac-01")
+    try:
+        resp = adapter.connect("secret-mac-01")
+        assert resp.ok is False
+        assert "CORE_" in (resp.error or "")
+        assert adapter.is_connected() is False
+    finally:
+        adapter.disconnect()
+        host.stop()
+
+
+@requires_client_repo
+def test_unresolvable_host_fails_bounded(tmp_path):
+    import time
+
+    client_mod = _load("e2e_core_device_client_dns", _CLIENT_MOD)
+    from asis.integrations.core.adapter import RealCoreAdapter
+
+    def factory(**kw):
+        return client_mod.CoreDeviceClient(
+            host="nonexistent.invalid",
+            port=5000,
+            device_id="mac-01",
+            device_name="MacBook",
+            device_file=tmp_path / "device.json",
+            use_tls=False,
+            timeout=8.0,
+        )
+
+    adapter = RealCoreAdapter(
+        client_factory=factory, device_id="mac-01", connect_timeout=8.0
+    )
+    started = time.monotonic()
+    resp = adapter.connect("secret-mac-01")
+    elapsed = time.monotonic() - started
+    assert resp.ok is False
+    assert elapsed < 60  # bounded: no indefinite DNS/connect hang
+    adapter.disconnect()

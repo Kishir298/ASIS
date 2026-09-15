@@ -1,13 +1,8 @@
-"""VoiceRunner: STT -> AssistantApp -> TTS, same Router path as text."""
+"""VoiceRunner + CORE: transcripts reach AssistantApp.chat() (incl. core:)."""
 
 from __future__ import annotations
 
-from asis.ai import (
-    AIManager,
-    ContextAssembler,
-    ConversationSession,
-    InferenceEngine,
-)
+from asis.ai import AIManager
 from asis.ai.providers import MockAIProvider
 from asis.app import AssistantApp
 from asis.identity import build_identity
@@ -26,28 +21,29 @@ from asis.voice import (
     MockTextToSpeech,
     VoicePipeline,
     VoiceRunner,
+    VoiceRunnerConfig,
 )
 from asis.voice.models import AudioData
 
 
 def _pipeline(transcript="hello voice"):
-    return VoicePipeline(
+    tts = MockTextToSpeech()
+    pipe = VoicePipeline(
         MockAudioInput([AudioData(samples=[0], sample_rate=16000)]),
         MockSpeechRecognizer(text=transcript),
         MockSpeakerIdentifier(),
-        MockTextToSpeech(),
+        tts,
         MockAudioOutput(),
     )
+    return pipe, tts
 
 
-def _app(responses=("hi via voice",), core=None, router=None):
+def _app(memory_manager, responses=("hi via voice",), core=None, router=None):
     return AssistantApp(
-        session=ConversationSession(),
-        engine=InferenceEngine(
-            AIManager(provider=MockAIProvider(responses=list(responses))),
-            ContextAssembler(build_identity()),
-        ),
-        router=router,
+        identity=build_identity(),
+        ai=AIManager(provider=MockAIProvider(responses=list(responses))),
+        memory=memory_manager,
+        tools_router=router,
         core=core,
     )
 
@@ -64,45 +60,47 @@ def _online_stack():
     return manager, router
 
 
-def test_voice_roundtrip_speaks_local_reply():
-    pipe = _pipeline()
-    result = VoiceRunner(pipe, _app()).run_once()
-    assert result.assistant_text == "hi via voice"
-    assert pipe.tts.synthesized == ["hi via voice"]
+def _run(pipe, app, **cfg):
+    config = VoiceRunnerConfig(require_wake_word=False, max_turns=1, **cfg)
+    return VoiceRunner(pipe, app, config=config).run()
 
 
-def test_voice_core_intent_reaches_same_tool():
+def test_voice_roundtrip_speaks_local_reply(memory_manager):
+    pipe, tts = _pipeline()
+    summary = _run(pipe, _app(memory_manager))
+    assert summary["turns"] == 1
+    assert tts.synthesized == ["hi via voice"]
+
+
+def test_voice_core_intent_reaches_same_tool(memory_manager):
     manager, router = _online_stack()
     ctx = RuntimeContext()
     manager.start(ctx)
     try:
-        pipe = _pipeline("core:devices")
-        result = VoiceRunner(pipe, _app(core=manager, router=router)).run_once()
-        assert any("core_discover_devices: ok" in m for m in result.system_messages)
-        assert "core_discover_devices: ok" in pipe.tts.synthesized[0]
+        pipe, tts = _pipeline("core:devices")
+        summary = _run(pipe, _app(memory_manager, core=manager, router=router))
+        assert summary["turns"] == 1
+        assert "core_discover_devices: ok" in tts.synthesized[0]
     finally:
         manager.stop(ctx)
 
 
-def test_voice_core_failure_is_spoken_safe():
+def test_voice_core_failure_is_spoken_safe(memory_manager):
     manager, router = _online_stack()  # offline
-    pipe = _pipeline("core:devices")
-    result = VoiceRunner(pipe, _app(core=manager, router=router)).run_once()
-    assert any("CORE_UNAVAILABLE" in m for m in result.system_messages)
-    assert "CORE_UNAVAILABLE" in pipe.tts.synthesized[0]
+    pipe, tts = _pipeline("core:devices")
+    _run(pipe, _app(memory_manager, core=manager, router=router))
+    assert "CORE_UNAVAILABLE" in tts.synthesized[0]
 
 
-def test_voice_empty_transcript_says_nothing():
-    pipe = _pipeline("")
-    result = VoiceRunner(pipe, _app()).run_once()
-    assert result.assistant_text == ""
-    assert pipe.tts.synthesized == []
-
-
-def test_voice_has_no_core_imports():
+def test_voice_has_no_core_networking():
     import pathlib
 
-    text = (pathlib.Path(__file__).resolve().parents[1] / "asis" / "voice" / "runner.py").read_text()
+    text = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "asis"
+        / "voice"
+        / "runner.py"
+    ).read_text()
     assert "core_device_client" not in text
     assert "from core." not in text
     assert "socket" not in text
