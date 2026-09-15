@@ -22,10 +22,41 @@ class ToolExecutor:
         self,
         authorizer: Authorizer | None = None,
         event_bus: EventBus | None = None,
+        timeout: float | None = None,
     ) -> None:
         self._logger = get_logger("tools.executor")
         self.authorizer = authorizer or build_authorizer()
         self.event_bus = event_bus
+        # Maximum seconds per tool run (None/<=0 disables the bound).
+        # Defaults to the configured tools.timeout via build_executor().
+        self.timeout = timeout
+
+    def _run_bounded(self, tool: Tool, kwargs: dict[str, Any]) -> Any:
+        """Run a tool, enforcing the configured timeout when set."""
+        limit = self.timeout
+        if limit is None or limit <= 0:
+            return tool.execute(**kwargs)
+        import threading
+
+        outcome: dict[str, Any] = {}
+
+        def _target() -> None:
+            try:
+                outcome["result"] = tool.execute(**kwargs)
+            except Exception as exc:  # captured, re-raised by caller path
+                outcome["error"] = exc
+
+        worker = threading.Thread(target=_target, daemon=True)
+        worker.start()
+        worker.join(timeout=limit)
+        if worker.is_alive():
+            return ToolResult.failure(
+                error=f"Tool timed out after {limit:g} seconds.",
+                tool_name=tool.name,
+            )
+        if "error" in outcome:
+            raise outcome["error"]
+        return outcome.get("result")
 
     def _publish(
         self,
@@ -66,7 +97,7 @@ class ToolExecutor:
         self._publish(EventType.TOOL_EXECUTION_STARTED, tool_name=tool.name)
 
         try:
-            result = tool.execute(**kwargs)
+            result = self._run_bounded(tool, kwargs)
 
             if not isinstance(result, ToolResult):
                 result = ToolResult.ok(

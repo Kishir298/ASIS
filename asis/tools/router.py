@@ -13,6 +13,15 @@ from .registry import ToolRegistry
 from .result import ToolResult
 
 
+def build_executor(executor: ToolExecutor | None = None) -> ToolExecutor:
+    """Return an executor bound to the configured tools.timeout."""
+    if executor is not None:
+        return executor
+    from asis.configuration import settings
+
+    return ToolExecutor(timeout=settings.tools.timeout)
+
+
 class ToolRouter:
     """Routes tool requests to registered tools."""
 
@@ -23,7 +32,7 @@ class ToolRouter:
     ) -> None:
         self._logger = get_logger("tools.router")
         self.registry = registry
-        self.executor = executor or ToolExecutor()
+        self.executor = build_executor(executor)
 
     def execute(
         self,

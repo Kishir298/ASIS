@@ -13,10 +13,10 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
-from asis import APP_NAME, __version__
-from asis.ai import AIManager, AIMessage, MessageRole
+from asis.ai import AIManager
 from asis.ai.providers import MockAIProvider, OllamaProvider
-from asis.app import store_auto_memories
+from asis.app.assistant import AssistantApp
+from asis.app.modes import AssistantMode, parse_mode
 from asis.configuration import settings
 from asis.events import EventBus
 from asis.identity import Identity, build_identity
@@ -26,6 +26,13 @@ from asis.tools.provided import CurrentTimeTool, EchoTool, build_core_tools
 
 def build_memory(db_path: str | Path | None = None) -> MemoryManager:
     """Build the local memory manager backed by a SQL file database."""
+    from asis.errors import ConfigurationError
+
+    if settings.memory.provider.strip().lower() != "local":
+        raise ConfigurationError(
+            "Invalid configuration memory.provider: only 'local' is "
+            f"supported, received {settings.memory.provider!r}."
+        )
     path = (
         Path(db_path)
         if db_path
@@ -44,8 +51,23 @@ def _provider(provider_name: str, model: str):
             model=model,
             host=settings.ai.endpoint,
             timeout=settings.ai.request_timeout,
+            temperature=settings.ai.temperature,
+            retries=settings.network.retries,
         )
     raise ValueError(f"Unsupported AI provider: {provider_name}")
+
+
+def build_assistant(
+    identity: Identity,
+    ai: AIManager,
+    memory: MemoryManager,
+    mode: AssistantMode | str | None = None,
+    workspace: str | Path | None = None,
+) -> AssistantApp:
+    """Build the stateful assistant owning one conversation session."""
+    return AssistantApp(
+        identity=identity, ai=ai, memory=memory, mode=mode, workspace=workspace
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -96,6 +118,18 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="TEXT",
         help="process a single message and exit",
     )
+    parser.add_argument(
+        "--mode",
+        default=settings.coding.default_mode,
+        choices=["general", "coding"],
+        help="assistant mode to use (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--workspace",
+        default=None,
+        metavar="PATH",
+        help="coding workspace root (default: configured workspace or CWD)",
+    )
     return parser
 
 
@@ -137,29 +171,55 @@ def core_status_line() -> str:
     return f"CORE: {state} (host={core.host}:{core.port})."
 
 
+def handle_mode_command(app: AssistantApp, message: str) -> str | None:
+    """Handle /mode and /ascs REPL commands; None when not a mode command."""
+    text = message.strip()
+    lowered = text.lower()
+    if lowered == "/ascs":
+        app.set_mode(AssistantMode.CODING)
+        return f"A.S.C.S. coding mode enabled.\nWorkspace: {app.workspace.root}"
+    if lowered == "/mode":
+        return f"Current mode: {app.mode.value}"
+    if lowered.startswith("/mode "):
+        try:
+            app.set_mode(parse_mode(text.split(None, 1)[1]))
+        except ValueError as exc:
+            return str(exc)
+        if app.mode is AssistantMode.CODING:
+            return f"A.S.C.S. coding mode enabled.\nWorkspace: {app.workspace.root}"
+        return "A.S.I.S. general mode enabled."
+    return None
+
+
 def handle_message(
     identity: Identity,
     ai: AIManager,
     memory: MemoryManager,
     message: str,
+    assistant: AssistantApp | None = None,
 ) -> str:
-    """Process one user message, persisting any explicit memories."""
-    store_auto_memories(message, memory)
-    response = ai.chat(
-        [
-            AIMessage(role=MessageRole.SYSTEM, content=identity.system_prompt()),
-            AIMessage(role=MessageRole.USER, content=message),
-        ]
-    )
-    return response.content
+    """Process one user message through the stateful assistant pipeline.
+
+    When ``assistant`` is provided the call joins its owned conversation
+    session; otherwise a single-turn assistant is used (backwards
+    compatible for direct callers and tests).
+    """
+    app = assistant or AssistantApp(identity=identity, ai=ai, memory=memory)
+    return app.chat(message)
 
 
 def entry(argv: Sequence[str] | None = None) -> int:
     """Console entry point for A.S.I.S."""
+    raw = list(argv) if argv is not None else sys.argv[1:]
+    if raw and raw[0] == "voice":
+        from asis.cli.voice import run_voice
+
+        return run_voice(raw[1:])
+
     args = build_parser().parse_args(argv)
 
     if args.version:
-        print(f"{APP_NAME} {__version__}")
+        print(f"{settings.app_name} {settings.app_version}")
         return 0
 
     if args.identify:
@@ -180,9 +240,12 @@ def entry(argv: Sequence[str] | None = None) -> int:
     event_bus = EventBus()
     ai = AIManager(provider=provider, event_bus=event_bus)
     memory = build_memory(args.memory_db)
+    app = build_assistant(
+        identity, ai, memory, mode=args.mode, workspace=args.workspace
+    )
 
     if args.message is not None:
-        print(handle_message(identity, ai, memory, args.message))
+        print(handle_message(identity, ai, memory, args.message, assistant=app))
         return 0
 
     print(identity.greeting)
@@ -194,7 +257,11 @@ def entry(argv: Sequence[str] | None = None) -> int:
         if message.lower() == shutdown:
             print("Shutting down.")
             break
-        print(handle_message(identity, ai, memory, message))
+        mode_reply = handle_mode_command(app, message)
+        if mode_reply is not None:
+            print(mode_reply)
+            continue
+        print(handle_message(identity, ai, memory, message, assistant=app))
     return 0
 
 

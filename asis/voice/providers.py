@@ -63,3 +63,54 @@ class TextToSpeechProvider(ABC):
     @abstractmethod
     def synthesize(self, text: str) -> AudioData:
         raise NotImplementedError
+
+
+class WakeWordDetector(ABC):
+    """Detects a configured wake phrase in audio.
+
+    Concrete engines (e.g. openWakeWord) implement audio inference.
+    Text-surface matching lives in ``KeyphraseWakeWordDetector`` and in
+    mocks; this interface stays audio-first so the pipeline does not
+    depend on a specific engine.
+    """
+
+    @property
+    @abstractmethod
+    def phrases(self) -> tuple[str, ...]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def detect(self, audio: AudioData) -> bool:
+        """Return True when the wake phrase is present in ``audio``."""
+        raise NotImplementedError
+
+    def detect_text(self, text: str) -> bool:
+        """Optional text-surface fallback; default checks phrase prefix."""
+        normalized = text.strip().casefold()
+        return any(normalized.startswith(p) for p in self.phrases)
+
+
+class SpeakerEmbeddingProvider(ABC):
+    """Extracts a speaker embedding vector from audio.
+
+    Returns a plain ``list[float]`` so embeddings stay serializable
+    without a numpy/torch dependency in the interface.
+    """
+
+    @abstractmethod
+    def embed(self, audio: AudioData) -> list[float]:
+        """Extract an embedding vector from ``audio``."""
+        raise NotImplementedError
+
+
+class VadDetector(ABC):
+    """Detects voice activity in audio.
+
+    Lightweight gate before wake-word/STT so silence does not trigger
+    expensive inference. Implementations must not require hardware.
+    """
+
+    @abstractmethod
+    def is_speech(self, audio: AudioData) -> bool:
+        """Return True when ``audio`` likely contains speech."""
+        raise NotImplementedError

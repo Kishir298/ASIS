@@ -1,105 +1,111 @@
 """
-A.S.I.S. application orchestrator.
+Stateful A.S.I.S. application runtime with GENERAL/CODING modes.
 
-Single shared application path for text, voice, and (future) coding
-consumers: conversation → local inference → explicit CORE tool intents →
-response. Intelligence stays local (Ollama); CORE tools ride the existing
-ToolRouter/permission system and fail cleanly when offline.
+Owns one conversation session for its lifetime and wires together the
+already-built subsystems:
 
-Explicit tool intents use a deterministic ``core:`` command prefix (same
-idea as the legacy ``handle_command`` verbs) — no model parsing, no
-second inference step:
+    user input -> ConversationSession -> memory retrieval ->
+    ContextAssembler -> InferenceEngine -> AIManager -> action decision ->
+    ToolRouter/Permission/Executor -> final response -> ConversationSession
 
-```text
-core:devices                  -> core_discover_devices
-core:device <id>              -> core_device_info
-core:status                   -> core_status
-core:service <svc> <op>       -> core_service_request
-core:agent <op>               -> core_agent_request
-core:data <request-type>      -> core_data_request
-core:send <device> <type> ... -> core_send_to_device
-```
+Mode changes behavior, not the model runtime: GENERAL is the normal
+assistant, CODING is A.S.C.S. (same provider/model instance, mode
+instructions + repository context + coding tools). Shared by the text
+CLI and the voice loop. Memory failures are fail-open (log +
+continue); inference failures preserve conversation state.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from pathlib import Path
 
+from asis.ai.context import ContextAssembler
 from asis.ai.conversation import ConversationSession
 from asis.ai.inference import InferenceEngine
+from asis.ai.manager import AIManager
+from asis.configuration.settings import settings
+from asis.events.bus import EventBus
+from asis.identity.identity import Identity
 from asis.logging.logger import get_logger
+from asis.system.interrupt import InterruptCoordinator
+from asis.tools.executor import ToolExecutor
+from asis.tools.provided import CurrentTimeTool, EchoTool
+from asis.tools.registry import ToolRegistry
+from asis.tools.result import ToolResult
+from asis.tools.router import ToolRouter, build_executor
 
+from .actions import ToolRequest, format_tool_result_for_context, parse_tool_request
 from .memories import store_auto_memories
-from .result import ProcessResult
+from .modes import AssistantMode, parse_mode
+from .profiles import get_profile
 
 
-@dataclass(frozen=True)
-class CoreIntent:
-    """A parsed explicit CORE tool request."""
+def build_default_tool_router(
+    executor: ToolExecutor | None = None,
+) -> ToolRouter:
+    """Build the default safe router with the audited built-in tools."""
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+    registry.register(CurrentTimeTool())
+    return ToolRouter(registry=registry, executor=build_executor(executor))
 
-    tool_name: str
-    kwargs: dict
 
+def build_coding_tool_router(
+    workspace,
+    executor: ToolExecutor | None = None,
+) -> ToolRouter:
+    """Build the coding router (general tools + workspace-bound coding tools)."""
+    from asis.coding.tools import build_coding_registry
 
-def parse_core_intent(text: str) -> CoreIntent | None:
-    """Parse a ``core:`` command prefix into a tool call, if present."""
-    stripped = (text or "").strip()
-    if not stripped.lower().startswith("core:"):
-        return None
-    parts = stripped[5:].strip().split()
-    if not parts:
-        return None
-    verb = parts[0].lower()
-    args = parts[1:]
-    if verb in ("devices", "discover"):
-        return CoreIntent("core_discover_devices", {})
-    if verb == "device" and args:
-        return CoreIntent("core_device_info", {"device_id": args[0]})
-    if verb == "status":
-        return CoreIntent("core_status", {})
-    if verb == "service" and len(args) >= 2:
-        return CoreIntent(
-            "core_service_request",
-            {"service": args[0], "operation": args[1], "params": {}},
-        )
-    if verb == "agent" and args:
-        return CoreIntent("core_agent_request", {"operation": args[0], "params": {}})
-    if verb == "data" and args:
-        return CoreIntent(
-            "core_data_request", {"request_type": args[0], "params": {}}
-        )
-    if verb == "send" and len(args) >= 2:
-        return CoreIntent(
-            "core_send_to_device",
-            {
-                "device_id": args[0],
-                "message_type": args[1],
-                "payload": {"text": " ".join(args[2:])} if len(args) > 2 else {},
-            },
-        )
-    return None
+    registry = ToolRegistry()
+    registry.register(EchoTool())
+    registry.register(CurrentTimeTool())
+    for tool in build_coding_registry(workspace).list_tools():
+        registry.register(tool)
+    return ToolRouter(registry=registry, executor=build_executor(executor))
 
 
 class AssistantApp:
-    """Owns one conversation: memory, local inference, CORE tool intents."""
+    """Stateful chat application owning conversation, memory, mode and tools."""
 
     def __init__(
         self,
-        *,
-        session: ConversationSession,
-        engine: InferenceEngine,
-        router=None,
-        memory=None,
+        identity: Identity,
+        ai: AIManager,
+        memory,
+        tools_router: ToolRouter | None = None,
+        interrupts: InterruptCoordinator | None = None,
+        event_bus: EventBus | None = None,
+        max_memory_items: int = 5,
+        mode: AssistantMode | str | None = None,
+        workspace=None,
         core=None,
-        shutdown_phrase: str = "asis shutdown",
     ) -> None:
-        self._logger = get_logger("app.assistant")
-        self.session = session
-        self.engine = engine
-        self.router = router
+        self.identity = identity
+        self.ai = ai
         self.memory = memory
+        self.event_bus = event_bus
+        self.interrupts = interrupts
+        self.logger = get_logger("app.assistant")
+        self.session = ConversationSession()
+        self._pending_memory_query = ""
+        self._max_memory_items = max(1, max_memory_items)
+        self._mode = self._coerce_mode(mode)
+        self._workspace = workspace
+        self._coding_resolver = None
+        self._coding_router: ToolRouter | None = None
         self.core = core
-        self.shutdown_phrase = (shutdown_phrase or "").strip().lower()
+        self.assembler = ContextAssembler(
+            identity=identity,
+            memory_context_provider=self._assembler_context,
+            max_context_messages=settings.ai.max_context_messages,
+            context_char_limit=settings.ai.context_char_limit,
+        )
+        self.engine = InferenceEngine(
+            manager=ai, assembler=self.assembler, interrupts=interrupts
+        )
+        self._general_router = tools_router or build_default_tool_router()
+        self._ensure_core_tools(self._general_router)
 
     @property
     def core_available(self) -> bool:
@@ -111,53 +117,6 @@ class AssistantApp:
         except Exception:
             return False
 
-    def handle_text(self, message: str) -> ProcessResult:
-        """Process one user message into a ProcessResult (never raises)."""
-        text = (message or "").strip()
-        if not text:
-            return ProcessResult(assistant_text="")
-        if self.shutdown_phrase and text.lower() == self.shutdown_phrase:
-            return ProcessResult(stopped=True, assistant_text="Shutting down.")
-
-        if self.memory is not None:
-            try:
-                store_auto_memories(text, self.memory)
-            except Exception:
-                self._logger.exception("Memory store failed; continuing.")
-
-        self.session.add_user(text)
-
-        try:
-            reply = self.engine.generate(self.session.messages).content
-        except Exception as exc:
-            self._logger.exception("Local inference failed.")
-            return ProcessResult(
-                assistant_text="",
-                system_messages=[f"Local inference failed: {exc}"],
-            )
-        self.session.add_assistant(reply)
-
-        system_messages: list[str] = []
-        intent = parse_core_intent(text)
-        if intent is not None:
-            system_messages.append(self._run_core_tool(intent))
-
-        return ProcessResult(assistant_text=reply, system_messages=system_messages)
-
-    # -- internals --
-    def _run_core_tool(self, intent: CoreIntent) -> str:
-        if self.router is None:
-            return "CORE tool unavailable: no tool router configured."
-        if not self.core_available:
-            return "CORE_UNAVAILABLE: C.O.R.E. is not connected."
-        try:
-            result = self.router.execute(intent.tool_name, **intent.kwargs)
-        except Exception as exc:
-            return f"CORE tool failed: {exc}"
-        if result.success:
-            return f"{intent.tool_name}: ok."
-        return f"{intent.tool_name} failed: {result.error or 'unknown error'}"
-
     def core_status_text(self) -> str:
         """Short human-readable CORE status line (no secrets)."""
         if self.core is None:
@@ -168,3 +127,183 @@ class AssistantApp:
             return f"CORE: unknown ({exc})"
         state = getattr(status.state, "value", str(status.state))
         return f"CORE: {state.lower()} (connected={status.connected})."
+
+    def _ensure_core_tools(self, router: ToolRouter) -> None:
+        """Register CORE tools on a router once (duplicate-safe)."""
+        if self.core is None or router is None:
+            return
+        try:
+            from asis.tools.provided import register_core_tools
+        except Exception:
+            return
+        try:
+            register_core_tools(router.registry, self.core)
+        except Exception:
+            # Already registered (or registry rejected) — never fatal.
+            pass
+
+    @staticmethod
+    def _coerce_mode(mode: AssistantMode | str | None) -> AssistantMode:
+        if mode is None:
+            return parse_mode(settings.coding.default_mode)
+        if isinstance(mode, AssistantMode):
+            return mode
+        return parse_mode(mode)
+
+    @property
+    def mode(self) -> AssistantMode:
+        """Return the active assistant mode."""
+        return self._mode
+
+    def set_mode(self, mode: AssistantMode | str) -> AssistantMode:
+        """Switch mode without touching the provider/model instance."""
+        self._mode = self._coerce_mode(mode)
+        self.logger.info("Assistant mode: %s", self._mode.value)
+        return self._mode
+
+    @property
+    def workspace(self):
+        """Return the coding workspace, resolving lazily on first use."""
+        if self._workspace is None:
+            from asis.coding.workspace import resolve_workspace
+
+            self._workspace = resolve_workspace()
+        elif isinstance(self._workspace, (str, Path)):
+            from asis.coding.workspace import resolve_workspace
+
+            self._workspace = resolve_workspace(self._workspace)
+        return self._workspace
+
+    def _memory_context(self) -> str:
+        query = self._pending_memory_query
+        if not query or not query.strip():
+            return ""
+        try:
+            search = getattr(self.memory, "search_context", None)
+            if callable(search):
+                return search(query, limit=self._max_memory_items) or ""
+            return ""
+        except Exception as exc:
+            self.logger.warning("Memory retrieval failed, continuing: %s", exc)
+            return ""
+
+    def _assembler_context(self) -> str:
+        sections = []
+        memory_text = self._memory_context()
+        if memory_text:
+            sections.append(memory_text)
+        if self._mode is AssistantMode.CODING:
+            profile = get_profile(self._mode)
+            sections.append(profile.instructions)
+            try:
+                if self._coding_resolver is None:
+                    from asis.coding.context import CodingContextResolver
+
+                    self._coding_resolver = CodingContextResolver(self.workspace)
+                sections.append(self._coding_resolver.build())
+            except Exception as exc:
+                self.logger.warning("Coding context unavailable, continuing: %s", exc)
+        text = "\n\n".join(s for s in sections if s.strip())
+        return text
+
+    @property
+    def tools_router(self) -> ToolRouter:
+        """Return the router for the active mode (shared executor policy)."""
+        if self._mode is AssistantMode.CODING:
+            if self._coding_router is None:
+                executor = getattr(self._general_router, "executor", None)
+                self._coding_router = build_coding_tool_router(
+                    self.workspace, executor=executor
+                )
+                self._ensure_core_tools(self._coding_router)
+            return self._coding_router
+        return self._general_router
+
+    @tools_router.setter
+    def tools_router(self, router: ToolRouter | None) -> None:
+        if router is not None:
+            self._general_router = router
+            self._ensure_core_tools(router)
+
+    def _execute_tool(self, request: ToolRequest) -> ToolResult:
+        try:
+            return self.tools_router.execute(request.tool_name, **request.arguments)
+        except Exception as exc:
+            self.logger.exception("Tool dispatch failed: %s", request.tool_name)
+            return ToolResult.failure(error=str(exc), tool_name=request.tool_name)
+
+    def chat(self, message: str) -> str:
+        """Process one user message through the full wired pipeline."""
+        text = (message or "").strip()
+        if not text:
+            return ""
+        store_auto_memories(text, self.memory)
+        self.session.add_user(text)
+        explicit = self._run_core_command(text)
+        if explicit is not None:
+            return explicit
+        self._pending_memory_query = text
+        try:
+            response = self.engine.generate(self.session.messages)
+        finally:
+            self._pending_memory_query = ""
+
+        coding = self._mode is AssistantMode.CODING
+        request = parse_tool_request(response.content, user_text=text, coding=coding)
+        if request is None:
+            self.session.add_assistant(response.content)
+            return response.content
+
+        result = self._execute_tool(request)
+        # Record the intermediate model action + explicit tool result so the
+        # history stays auditable; tool output is never user-authored.
+        self.session.add_assistant(response.content)
+        self.session.add_assistant(format_tool_result_for_context(result))
+
+        self._pending_memory_query = ""
+        try:
+            final = self.engine.generate(self.session.messages)
+        finally:
+            self._pending_memory_query = ""
+        self.session.add_assistant(final.content)
+        return final.content
+
+    def _run_core_command(self, text: str) -> str | None:
+        """Execute an explicit ``core:`` user command; None when absent.
+
+        Explicit commands bypass model inference deterministically and run
+        through the same ToolRouter/permission path as model intents.
+        """
+        from .core_commands import parse_core_intent
+
+        intent = parse_core_intent(text)
+        if intent is None:
+            return None
+        if not self.core_available:
+            note = "CORE_UNAVAILABLE: C.O.R.E. is not connected."
+            self.session.add_assistant(note)
+            return note
+        try:
+            result = self.tools_router.execute(intent.tool_name, **intent.kwargs)
+        except Exception as exc:
+            note = f"CORE tool failed: {exc}"
+            self.session.add_assistant(note)
+            return note
+        if result.success:
+            from asis.integrations.core.protocol import normalize_result
+
+            summary = normalize_result(result.data)
+            note = f"{intent.tool_name}: ok: {summary}"
+        else:
+            note = f"{intent.tool_name} failed: {result.error or 'unknown error'}"
+        self.session.add_assistant(note)
+        return note
+
+    def history_roles(self) -> list[str]:
+        """Return session roles (test helper)."""
+        return [m.role.value for m in self.session.messages]
+
+    @property
+    def conversation(self) -> ConversationSession:
+        """Expose the owned conversation session."""
+        return self.session

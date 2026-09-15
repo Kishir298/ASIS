@@ -4,14 +4,18 @@ Centralized A.S.I.S. configuration.
 Combines built-in defaults, environment overrides and cross-platform
 paths. Other A.S.I.S. modules should resolve configuration through
 `settings` rather than reading the environment directly.
+
+Precedence (highest wins): explicit ``load_settings(env=...)`` overrides
+> process environment > ``.env`` files > built-in defaults.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import environment
+from . import defaults, environment
 from .paths import (
     get_cache_directory,
     get_config_directory,
@@ -73,12 +77,30 @@ class SpeechToTextSettings:
 class TTSSettings:
     engine: str
     voice: str
+    sample_rate: int = 16_000
 
 
 @dataclass(frozen=True)
 class SpeakerSettings:
     engine: str
+    model: str
+    device: str
     confidence: float
+    threshold: float = 0.6
+    metric: str = "cosine"
+
+
+@dataclass(frozen=True)
+class WakeSettings:
+    engine: str = "mock"
+    threshold: float = 0.5
+    model: str = ""
+
+
+@dataclass(frozen=True)
+class VadSettings:
+    engine: str = "mock"
+    threshold: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -87,9 +109,15 @@ class VoiceSettings:
     channels: int
     block_size: int
     wake_word: str
+    max_utterance_s: float = 15.0
+    silence_s: float = 0.8
+    input_engine: str = "mock"
+    output_engine: str = "mock"
     stt: SpeechToTextSettings = field(default_factory=SpeechToTextSettings)
     tts: TTSSettings = field(default_factory=TTSSettings)
     speaker: SpeakerSettings = field(default_factory=SpeakerSettings)
+    wake: WakeSettings = field(default_factory=WakeSettings)
+    vad: VadSettings = field(default_factory=VadSettings)
 
 
 @dataclass(frozen=True)
@@ -113,6 +141,15 @@ class CoreSettings:
     request_timeout: int
     reconnect_enabled: bool
     reconnect_delay: int
+
+
+@dataclass(frozen=True)
+class CodingSettings:
+    default_mode: str
+    workspace: str
+    command_timeout: int
+    max_file_size: int
+    max_output_size: int
 
 
 @dataclass(frozen=True)
@@ -147,92 +184,174 @@ class Settings:
     voice: VoiceSettings
     runtime: RuntimeSettings
     core: CoreSettings
+    coding: CodingSettings
     paths: PathSettings
 
 
-def load_settings() -> Settings:
-    """Build and return the current A.S.I.S. configuration."""
-    return Settings(
-        app_name=environment.IDENTITY_NAME,
-        app_version=environment.APP_VERSION,
-        identity=IdentitySettings(
-            name=environment.IDENTITY_NAME,
-            title=environment.IDENTITY_TITLE,
-            shutdown_phrase=environment.SHUTDOWN_PHRASE,
-        ),
-        ai=AISettings(
-            provider=environment.AI_PROVIDER,
-            model=environment.AI_MODEL,
-            endpoint=environment.AI_ENDPOINT,
-            request_timeout=environment.AI_REQUEST_TIMEOUT,
-            temperature=environment.AI_TEMPERATURE,
-            max_context_messages=environment.AI_MAX_CONTEXT_MESSAGES,
-            context_char_limit=environment.AI_CONTEXT_CHAR_LIMIT,
-        ),
-        conversation=ConversationSettings(
-            max_history=environment.CONVERSATION_MAX_HISTORY,
-        ),
-        network=NetworkSettings(
-            timeout=environment.NETWORK_TIMEOUT,
-            retries=environment.NETWORK_RETRIES,
-        ),
-        tools=ToolSettings(timeout=environment.TOOL_TIMEOUT),
-        security=SecuritySettings(
-            require_confirmation_for_dangerous=(
-                environment.REQUIRE_CONFIRMATION_FOR_DANGEROUS
-            )
-        ),
-        memory=MemorySettings(
-            provider=environment.MEMORY_PROVIDER,
-            database_name=environment.MEMORY_DATABASE_NAME,
-        ),
-        voice=VoiceSettings(
-            sample_rate=environment.VOICE_SAMPLE_RATE,
-            channels=environment.VOICE_CHANNELS,
-            block_size=environment.VOICE_BLOCK_SIZE,
-            wake_word=environment.VOICE_WAKE_WORD,
-            stt=SpeechToTextSettings(
-                engine=environment.VOICE_STT_ENGINE,
-                model=environment.VOICE_STT_MODEL,
-                device=environment.VOICE_STT_DEVICE,
-                compute_type=environment.VOICE_STT_COMPUTE_TYPE,
-                language=environment.VOICE_STT_LANGUAGE,
+def load_settings(env: Mapping[str, str] | None = None) -> Settings:
+    """Build and return an independent, validated A.S.I.S. configuration.
+
+    Reads the live process environment on every call (plus optional
+    explicit ``env`` overrides, highest precedence), so tests can set
+    variables and reload without touching the global ``settings``.
+    Raises ``ConfigurationError`` on any present-but-invalid value.
+    """
+    from .validation import validate_settings
+
+    with environment.override_env(env or {}):
+        get_s = environment.get_string
+        get_b = environment.get_bool
+        get_i = environment.get_int
+        get_f = environment.get_float
+        d = defaults
+        built = Settings(
+            app_name=get_s("ASIS_IDENTITY_NAME", d.APP_NAME),
+            app_version=get_s("ASIS_APP_VERSION", d.APP_VERSION),
+            identity=IdentitySettings(
+                name=get_s("ASIS_IDENTITY_NAME", d.APP_NAME),
+                title=get_s("ASIS_IDENTITY_TITLE", d.IDENTITY_TITLE),
+                shutdown_phrase=get_s("ASIS_SHUTDOWN_PHRASE", d.SHUTDOWN_PHRASE),
             ),
-            tts=TTSSettings(
-                engine=environment.VOICE_TTS_ENGINE,
-                voice=environment.VOICE_TTS_VOICE,
+            ai=AISettings(
+                provider=get_s("ASIS_AI_PROVIDER", d.AI_PROVIDER),
+                model=get_s("ASIS_AI_MODEL", d.AI_MODEL),
+                endpoint=get_s("ASIS_AI_ENDPOINT", d.AI_ENDPOINT),
+                request_timeout=get_i("ASIS_AI_REQUEST_TIMEOUT", d.AI_REQUEST_TIMEOUT),
+                temperature=get_f("ASIS_AI_TEMPERATURE", d.AI_TEMPERATURE),
+                max_context_messages=get_i(
+                    "ASIS_AI_MAX_CONTEXT_MESSAGES", d.AI_MAX_CONTEXT_MESSAGES
+                ),
+                context_char_limit=get_i(
+                    "ASIS_AI_CONTEXT_CHAR_LIMIT", d.AI_CONTEXT_CHAR_LIMIT
+                ),
             ),
-            speaker=SpeakerSettings(
-                engine=environment.VOICE_SPEAKER_ENGINE,
-                confidence=environment.VOICE_SPEAKER_CONFIDENCE,
+            conversation=ConversationSettings(
+                max_history=get_i(
+                    "ASIS_CONVERSATION_MAX_HISTORY", d.CONVERSATION_MAX_HISTORY
+                ),
             ),
-        ),
-        runtime=RuntimeSettings(
-            shutdown_timeout=environment.SHUTDOWN_TIMEOUT,
-            debug=environment.DEBUG,
-            log_level=environment.LOG_LEVEL,
-        ),
-        core=CoreSettings(
-            enabled=environment.CORE_ENABLED,
-            host=environment.CORE_HOST,
-            port=environment.CORE_PORT,
-            device_file=environment.CORE_DEVICE_FILE,
-            ca_file=environment.CORE_CA_FILE,
-            insecure=environment.CORE_INSECURE,
-            connect_timeout=environment.CORE_CONNECT_TIMEOUT,
-            request_timeout=environment.CORE_REQUEST_TIMEOUT,
-            reconnect_enabled=environment.CORE_RECONNECT_ENABLED,
-            reconnect_delay=environment.CORE_RECONNECT_DELAY,
-        ),
-        paths=PathSettings(
-            data=get_data_directory(),
-            config=get_config_directory(),
-            cache=get_cache_directory(),
-            logs=get_log_directory(),
-            memory=get_memory_directory(),
-            runtime=get_runtime_directory(),
-        ),
-    )
+            core=CoreSettings(
+                enabled=get_b("ASIS_CORE_ENABLED", d.CORE_ENABLED),
+                host=get_s("ASIS_CORE_HOST", d.CORE_HOST),
+                port=environment.get_port("ASIS_CORE_PORT", d.CORE_PORT),
+                device_file=get_s("ASIS_CORE_DEVICE_FILE", d.CORE_DEVICE_FILE),
+                ca_file=get_s("ASIS_CORE_CA_FILE", d.CORE_CA_FILE),
+                insecure=get_b("ASIS_CORE_INSECURE", d.CORE_INSECURE),
+                connect_timeout=environment.get_bounded_int(
+                    "ASIS_CORE_CONNECT_TIMEOUT", d.CORE_CONNECT_TIMEOUT, 1, 600
+                ),
+                request_timeout=environment.get_bounded_int(
+                    "ASIS_CORE_REQUEST_TIMEOUT", d.CORE_REQUEST_TIMEOUT, 1, 600
+                ),
+                reconnect_enabled=get_b(
+                    "ASIS_CORE_RECONNECT_ENABLED", d.CORE_RECONNECT_ENABLED
+                ),
+                reconnect_delay=environment.get_bounded_int(
+                    "ASIS_CORE_RECONNECT_DELAY", d.CORE_RECONNECT_DELAY, 0, 300
+                ),
+            ),
+            network=NetworkSettings(
+                timeout=get_i("ASIS_NETWORK_TIMEOUT", d.NETWORK_TIMEOUT),
+                retries=get_i("ASIS_NETWORK_RETRIES", d.NETWORK_RETRIES),
+            ),
+            tools=ToolSettings(timeout=get_i("ASIS_TOOL_TIMEOUT", d.TOOL_TIMEOUT)),
+            security=SecuritySettings(
+                require_confirmation_for_dangerous=get_b(
+                    "ASIS_CONFIRM_DANGEROUS_TOOLS",
+                    d.REQUIRE_CONFIRMATION_FOR_DANGEROUS,
+                )
+            ),
+            memory=MemorySettings(
+                provider=get_s("ASIS_MEMORY_PROVIDER", d.MEMORY_PROVIDER),
+                database_name=get_s(
+                    "ASIS_MEMORY_DATABASE_NAME", d.MEMORY_DATABASE_NAME
+                ),
+            ),
+            voice=VoiceSettings(
+                sample_rate=get_i("ASIS_VOICE_SAMPLE_RATE", d.VOICE_SAMPLE_RATE),
+                channels=get_i("ASIS_VOICE_CHANNELS", d.VOICE_CHANNELS),
+                block_size=get_i("ASIS_VOICE_BLOCK_SIZE", d.VOICE_BLOCK_SIZE),
+                wake_word=get_s("ASIS_VOICE_WAKE_WORD", d.VOICE_WAKE_WORD),
+                max_utterance_s=get_f(
+                    "ASIS_VOICE_MAX_UTTERANCE_S", d.VOICE_MAX_UTTERANCE_S
+                ),
+                silence_s=get_f("ASIS_VOICE_SILENCE_S", d.VOICE_SILENCE_S),
+                input_engine=get_s("ASIS_VOICE_INPUT_ENGINE", d.VOICE_INPUT_ENGINE),
+                output_engine=get_s("ASIS_VOICE_OUTPUT_ENGINE", d.VOICE_OUTPUT_ENGINE),
+                stt=SpeechToTextSettings(
+                    engine=get_s("ASIS_VOICE_STT_ENGINE", d.VOICE_STT_ENGINE),
+                    model=get_s("ASIS_VOICE_STT_MODEL", d.VOICE_STT_MODEL),
+                    device=get_s("ASIS_VOICE_STT_DEVICE", d.VOICE_STT_DEVICE),
+                    compute_type=get_s(
+                        "ASIS_VOICE_STT_COMPUTE_TYPE", d.VOICE_STT_COMPUTE_TYPE
+                    ),
+                    language=get_s("ASIS_VOICE_STT_LANGUAGE", d.VOICE_STT_LANGUAGE),
+                ),
+                tts=TTSSettings(
+                    engine=get_s("ASIS_VOICE_TTS_ENGINE", d.VOICE_TTS_ENGINE),
+                    voice=get_s("ASIS_VOICE_TTS_VOICE", d.VOICE_TTS_VOICE),
+                    sample_rate=get_i(
+                        "ASIS_VOICE_TTS_SAMPLE_RATE", d.VOICE_TTS_SAMPLE_RATE
+                    ),
+                ),
+                speaker=SpeakerSettings(
+                    engine=get_s("ASIS_VOICE_SPEAKER_ENGINE", d.VOICE_SPEAKER_ENGINE),
+                    model=get_s("ASIS_VOICE_SPEAKER_MODEL", d.VOICE_SPEAKER_MODEL),
+                    device=get_s("ASIS_VOICE_SPEAKER_DEVICE", d.VOICE_SPEAKER_DEVICE),
+                    confidence=get_f(
+                        "ASIS_VOICE_SPEAKER_CONFIDENCE", d.VOICE_SPEAKER_CONFIDENCE
+                    ),
+                    threshold=get_f(
+                        "ASIS_VOICE_SPEAKER_THRESHOLD", d.VOICE_SPEAKER_THRESHOLD
+                    ),
+                    metric=get_s("ASIS_VOICE_SPEAKER_METRIC", d.VOICE_SPEAKER_METRIC),
+                ),
+                wake=WakeSettings(
+                    engine=get_s("ASIS_VOICE_WAKE_ENGINE", d.VOICE_WAKE_ENGINE),
+                    threshold=get_f(
+                        "ASIS_VOICE_WAKE_THRESHOLD", d.VOICE_WAKE_THRESHOLD
+                    ),
+                    model=get_s("ASIS_VOICE_WAKE_MODEL", d.VOICE_WAKE_MODEL),
+                ),
+                vad=VadSettings(
+                    engine=get_s("ASIS_VOICE_VAD_ENGINE", d.VOICE_VAD_ENGINE),
+                    threshold=get_f("ASIS_VOICE_VAD_THRESHOLD", d.VOICE_VAD_THRESHOLD),
+                ),
+            ),
+            runtime=RuntimeSettings(
+                shutdown_timeout=get_i("ASIS_SHUTDOWN_TIMEOUT", d.SHUTDOWN_TIMEOUT),
+                debug=get_b("ASIS_DEBUG", d.DEBUG),
+                log_level=get_s("ASIS_LOG_LEVEL", d.LOG_LEVEL),
+            ),
+            coding=CodingSettings(
+                default_mode=get_s("ASIS_DEFAULT_MODE", d.DEFAULT_MODE),
+                workspace=get_s("ASIS_CODING_WORKSPACE", d.CODING_WORKSPACE),
+                command_timeout=get_i(
+                    "ASIS_CODING_COMMAND_TIMEOUT", d.CODING_COMMAND_TIMEOUT
+                ),
+                max_file_size=get_i(
+                    "ASIS_CODING_MAX_FILE_SIZE", d.CODING_MAX_FILE_SIZE
+                ),
+                max_output_size=get_i(
+                    "ASIS_CODING_MAX_OUTPUT_SIZE", d.CODING_MAX_OUTPUT_SIZE
+                ),
+            ),
+            paths=PathSettings(
+                data=get_data_directory(environment.get_path("ASIS_DATA_DIRECTORY")),
+                config=get_config_directory(
+                    environment.get_path("ASIS_CONFIG_DIRECTORY")
+                ),
+                cache=get_cache_directory(environment.get_path("ASIS_CACHE_DIRECTORY")),
+                logs=get_log_directory(environment.get_path("ASIS_LOG_DIRECTORY")),
+                memory=get_memory_directory(
+                    environment.get_path("ASIS_MEMORY_DIRECTORY")
+                ),
+                runtime=get_runtime_directory(
+                    environment.get_path("ASIS_RUNTIME_DIRECTORY")
+                ),
+            ),
+        )
+    return validate_settings(built)
 
 
 # Global read-only configuration instance.
