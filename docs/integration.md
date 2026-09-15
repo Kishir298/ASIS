@@ -20,6 +20,10 @@ CoreDeviceClient (CORE-CLIENT, TCP+TLS, ephemeral session)
 CORE-HOST
 ```
 
+CORE tools are also exposed to the LLM as native function definitions
+with parameter schemas; native CORE calls travel the identical
+ToolRouter/permission/adapter path as explicit `core:` commands.
+
 `CoreClient` defines the contract (legacy `send_message` /
 `request_service` / `publish_event` / `get_resource` /
 `register_component` / `get_health` plus lifecycle `connect` /

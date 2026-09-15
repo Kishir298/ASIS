@@ -82,6 +82,13 @@ CORE access cannot bypass workspace boundaries: coding tools still
 validate every path against the workspace root, and CORE tools never
 touch the local filesystem.
 
+## Native function calling
+
+A.S.C.S. uses the same native tool infrastructure as GENERAL mode:
+coding tools carry parameter schemas, the model may call them
+natively, and every call is validated and permission-gated through the
+shared router — one tool architecture, mode-specific tool sets.
+
 ## Configuration
 
 | Variable | Default | Validation |

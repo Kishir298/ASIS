@@ -7,8 +7,8 @@ Abstract contract `AIProvider`: `name`, `model`, `chat(messages)`,
 
 | Provider | Status | Details |
 |---|---|---|
-| `mock` | Implemented (tests/dev) | `MockAIProvider`: scripted responses, `fail`/`delay` knobs, offline |
-| `ollama` | Implemented (optional dep) | Local server: model/host/timeout/**temperature**/**retries** from settings; `temperature` sent as chat `options` only when set; `available()` probes `/api/tags` |
+| `mock` | Implemented (tests/dev) | `MockAIProvider`: scripted responses, `fail`/`delay` knobs, offline; optional scripted `tool_sequences` enable native-call tests |
+| `ollama` | Implemented (optional dep) | Local server: model/host/timeout/**temperature**/**retries** from settings; `temperature` sent as chat `options` only when set; `available()` probes `/api/tags`; native function calling via `/api/chat` `tools` (`supports_native_tools=True`, model-dependent) |
 
 No Hugging Face or cloud providers exist — anything else is future.
 
@@ -30,6 +30,31 @@ single `manager.chat()` → interrupt-check. No retries at this layer
 (retries live in `OllamaProvider.chat`), no tool invocation, no
 agentic loop. Streaming variant yields per-chunk with per-chunk
 cancellation. All failures surface as `InferenceError`.
+
+## Native function calling (`asis/ai/tool_schemas.py`, `asis/app/native_tools.py`)
+
+The model may request tools through the provider-native protocol
+instead of text heuristics. Tool definitions are derived
+deterministically from the active-mode `ToolRegistry`
+(`ToolDefinition`: name, description, JSON-Schema parameters; sorted,
+secret-vocabulary rejected). `OllamaProvider.chat_with_tools()` renders
+them into `/api/chat` `tools` and parses `message.tool_calls` into
+`NativeToolCall` records (malformed entries dropped, never raised);
+`AIProvider.supports_native_tools` advertises the capability (default
+`False`, so incapable providers use the heuristic fallback).
+
+`AssistantApp.chat()` order per turn: explicit `core:` command →
+native loop (definitions → validate each call against its schema →
+`ToolRouter` → `PermissionManager` → `ToolExecutor`, at most
+`ASIS_TOOL_MAX_CALLS_PER_TURN` validated calls, then a final plain
+generation) → heuristic fallback (`parse_tool_request`, unchanged
+single cycle). Both paths converge on the same `ToolRequest` and the
+same permission boundary; the model only requests, A.S.I.S. authorizes.
+`ASIS_AI_NATIVE_TOOLS` (`auto`/`true`/`false`, default `auto`) controls
+the attempt; small local models that ignore `tools` simply fall back.
+Limitations: multi-step depth is bounded by configuration, and native
+support varies by Ollama model — fallback coverage is intentional, not
+a gap.
 
 ## Conversation vs memory
 

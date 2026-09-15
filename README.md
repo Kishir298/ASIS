@@ -14,7 +14,7 @@ integration boundaries; see `docs/integration.md`).
 | Ollama provider | Implemented (optional dep) |
 | Conversation / context | Implemented + wired (`AssistantApp` owns session) |
 | Local memory (SQLite) | Implemented + wired (query-scoped recall, fail-open) |
-| Tools (`echo`, `current_time`) | Implemented + application-wired (single cycle, permission-mandatory) |
+| Tools (`echo`, `current_time`) | Implemented + application-wired (native function calling primary, heuristic fallback, permission-mandatory) |
 | A.S.C.S. coding mode | Implemented + wired (shared provider/model, workspace-bound tools) |
 | Permissions / confirmation | Implemented (no dangerous tools ship) |
 | Voice architecture + mocks | Implemented |
@@ -99,8 +99,12 @@ outside the repository (overridable with `ASIS_*_DIRECTORY`).
 Each REPL/voice run owns one `ConversationSession` (`AssistantApp`):
 turns persist user + assistant messages within configured history /
 context limits, relevant memories are retrieved query-scoped into the
-system prompt (stored memory is data, never instructions), and at most
-one safe tool action runs per turn through the permission layer.
+system prompt (stored memory is data, never instructions). Tool use is
+native-first: the local model receives tool definitions derived from
+the active registry and may return structured calls (validated against
+parameter schemas, at most `ASIS_TOOL_MAX_CALLS_PER_TURN` per turn),
+falling back to the heuristic/explicit intent path when native calling
+is unavailable — both converge on the same Router/permission path.
 Failed inference preserves state; memory failure logs and continues.
 Explicit `core:` user commands (`core:devices`, `core:device <id>`,
 `core:status`, `core:service <svc> <op>`, `core:agent <op>`,

@@ -23,15 +23,24 @@ No dangerous tools ship today. `ToolResult(success, data, error,
 tool_name)` is frozen; non-`ToolResult` returns are wrapped.
 
 **Wiring status:** the tool subsystem is application-wired via
-`AssistantApp` + `asis/app/actions.py` (single inference/action cycle):
-a structured JSON action in model output — or a conservative heuristic
-(time questions → `current_time`) — becomes a validated `ToolRequest`
-dispatched through `ToolRouter` → mandatory permission check →
-`ToolExecutor`. Results return explicitly to the conversation and feed
-one final inference pass. Unknown tools, invalid arguments, denials,
-timeouts and exceptions all become controlled failures, never crashes.
-Direct `tool.execute()` (which bypasses permissions/timeout) is never
-used by application code, and no shell/subprocess path exists.
+`AssistantApp` + `asis/app/actions.py` + `asis/app/native_tools.py`.
+Preferred path is native function calling: the model receives tool
+definitions derived from the active registry and returns structured
+calls, each normalized to a validated `ToolRequest` (unknown tools,
+malformed arguments, missing/wrong-typed/unknown parameters rejected)
+and dispatched through `ToolRouter` → mandatory permission check →
+`ToolExecutor`, bounded to `ASIS_TOOL_MAX_CALLS_PER_TURN` calls per
+turn with a final plain generation. Fallback is the heuristic/explicit
+path (structured JSON action in model output, or conservative
+heuristics such as time questions → `current_time`) through the same
+single-cycle `ToolRequest` dispatch. Results return explicitly to the
+conversation and feed inference. Unknown tools, invalid arguments,
+denials, timeouts and exceptions all become controlled failures, never
+crashes. Model-generated `"confirmed"`/`"yes"` arguments are not
+authorization and are rejected as unknown parameters before the
+permission layer is reached. Direct `tool.execute()` (which bypasses
+permissions/timeout) is never used by application code, and no
+shell/subprocess path exists.
 
 Mechanics (`asis/tools/`): `ToolRegistry` (thread-safe, rejects
 duplicates with `ToolValidationError`), `ToolRouter` (unknown names
