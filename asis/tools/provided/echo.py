@@ -15,6 +15,11 @@ class EchoTool(Tool):
         name="echo",
         description="Repeat the given text back.",
         category="utility",
+        parameters={
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+        },
     )
 
     def execute(self, **kwargs):

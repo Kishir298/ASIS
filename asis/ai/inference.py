@@ -10,6 +10,7 @@ the next chunk boundary.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 from asis.errors import CancellationError
 from asis.logging.logger import get_logger
@@ -51,6 +52,20 @@ class InferenceEngine:
 
         messages = self.assembler.build_messages(history)
         response = self.manager.chat(messages)
+
+        self._await_cancellation()
+        return response
+
+    def generate_with_tools(
+        self,
+        history: Sequence[AIMessage],
+        tools: Sequence[Any],
+    ) -> AIResponse:
+        """Generate a response with native tool definitions attached."""
+        self._await_cancellation()
+
+        messages = self.assembler.build_messages(history)
+        response = self.manager.chat_with_tools(messages, tools)
 
         self._await_cancellation()
         return response

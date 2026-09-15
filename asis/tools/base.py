@@ -22,6 +22,11 @@ class ToolMetadata:
     category: str
     permission: PermissionLevel = PermissionLevel.SAFE
     tags: tuple[str, ...] = field(default_factory=tuple)
+    # JSON-Schema-style parameter object for native LLM function calling.
+    # Empty mapping means "no arguments". Keys must describe only the
+    # declared parameters of execute(); never credentials, paths to
+    # private state, or security-sensitive metadata.
+    parameters: dict[str, Any] = field(default_factory=dict)
 
 
 class Tool(ABC):

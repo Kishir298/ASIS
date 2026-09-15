@@ -80,6 +80,11 @@ class ReadFileTool(Tool):
         description="Read a workspace-relative file and return its contents.",
         category="coding",
         permission=PermissionLevel.SAFE,
+        parameters={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
     )
 
     def __init__(self, workspace: CodingWorkspace) -> None:
@@ -131,6 +136,14 @@ class WriteFileTool(Tool):
         description="Write exact contents to a workspace-relative file.",
         category="coding",
         permission=PermissionLevel.HIGH,
+        parameters={
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "content": {"type": "string"},
+            },
+            "required": ["path", "content"],
+        },
     )
 
     def __init__(self, workspace: CodingWorkspace) -> None:
@@ -172,6 +185,10 @@ class ListDirectoryTool(Tool):
         description="List entries of a workspace-relative directory.",
         category="coding",
         permission=PermissionLevel.SAFE,
+        parameters={
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+        },
     )
 
     def __init__(self, workspace: CodingWorkspace) -> None:
@@ -217,6 +234,11 @@ class SearchFilesTool(Tool):
         description="Search workspace files for a text pattern.",
         category="coding",
         permission=PermissionLevel.LOW,
+        parameters={
+            "type": "object",
+            "properties": {"pattern": {"type": "string"}},
+            "required": ["pattern"],
+        },
     )
 
     def __init__(self, workspace: CodingWorkspace) -> None:
@@ -322,6 +344,10 @@ class RunTestsTool(Tool):
         description="Run the project pytest suite and return structured results.",
         category="coding",
         permission=PermissionLevel.HIGH,
+        parameters={
+            "type": "object",
+            "properties": {"args": {"type": "array"}},
+        },
     )
 
     def __init__(self, workspace: CodingWorkspace) -> None:
@@ -352,6 +378,11 @@ class RunCommandTool(Tool):
         description="Run an allowlisted project command (no shell).",
         category="coding",
         permission=PermissionLevel.HIGH,
+        parameters={
+            "type": "object",
+            "properties": {"argv": {"type": "array"}},
+            "required": ["argv"],
+        },
     )
 
     def __init__(self, workspace: CodingWorkspace) -> None:
@@ -418,6 +449,10 @@ class GitDiffTool(Tool):
         description="Return the workspace git diff (read-only).",
         category="coding",
         permission=PermissionLevel.SAFE,
+        parameters={
+            "type": "object",
+            "properties": {"args": {"type": "array"}},
+        },
     )
 
     def __init__(self, workspace: CodingWorkspace) -> None:
@@ -460,6 +495,11 @@ class GitAddTool(Tool):
         description="Stage workspace files with git add (confirm-gated).",
         category="coding",
         permission=PermissionLevel.HIGH,
+        parameters={
+            "type": "object",
+            "properties": {"paths": {"type": "array"}},
+            "required": ["paths"],
+        },
     )
 
     def __init__(self, workspace: CodingWorkspace) -> None:
@@ -500,6 +540,11 @@ class GitCommitTool(Tool):
         description="Create a git commit (confirm-gated, never pushes).",
         category="coding",
         permission=PermissionLevel.CRITICAL,
+        parameters={
+            "type": "object",
+            "properties": {"message": {"type": "string"}},
+            "required": ["message"],
+        },
     )
 
     def __init__(self, workspace: CodingWorkspace) -> None:

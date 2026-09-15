@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Sequence
+from typing import Any
 
 from ..models import AIMessage, AIResponse
 
@@ -45,3 +46,33 @@ class AIProvider(ABC):
     def available(self) -> bool:
         """Return whether the provider is currently available."""
         raise NotImplementedError
+
+    @property
+    def supports_native_tools(self) -> bool:
+        """Return whether the provider can request native tool calls.
+
+        Providers without native function-calling support leave the
+        default (False); the application then uses the heuristic
+        tool-intent fallback.
+        """
+        return False
+
+    def chat_with_tools(
+        self,
+        messages: Sequence[AIMessage],
+        tools: Sequence[Any],
+    ) -> AIResponse:
+        """Generate a response with native tool definitions available.
+
+        ``tools`` are provider-neutral ``ToolDefinition`` records; each
+        provider renders them into its own wire format. Returns an
+        AIResponse whose ``tool_calls`` carries the model's structured
+        invocations (empty when it answered directly). The default
+        implementation reports lack of support; capable providers
+        override it.
+        """
+        from asis.errors import InferenceError
+
+        raise InferenceError(
+            f"Provider {self.name!r} does not support native tool calling."
+        )

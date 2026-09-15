@@ -27,6 +27,10 @@ AI_REQUEST_TIMEOUT = 120
 AI_TEMPERATURE = 0.7
 AI_MAX_CONTEXT_MESSAGES = 20
 AI_CONTEXT_CHAR_LIMIT = 12_000
+# Native LLM function calling: "auto" (try native, fall back to
+# heuristics), "true" (native required when the provider supports it),
+# "false" (heuristics only).
+AI_NATIVE_TOOLS = "auto"
 
 # Conversation
 CONVERSATION_MAX_HISTORY = 20
@@ -70,6 +74,8 @@ NETWORK_RETRIES = 3
 
 # Tool execution
 TOOL_TIMEOUT = 30
+# Maximum validated native tool calls per assistant turn (1-10).
+TOOL_MAX_CALLS_PER_TURN = 3
 
 # Security / permissions
 REQUIRE_CONFIRMATION_FOR_DANGEROUS = True

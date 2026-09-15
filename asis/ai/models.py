@@ -35,6 +35,23 @@ class AIMessage:
 
 
 @dataclass(frozen=True)
+class NativeToolCall:
+    """One provider-native tool invocation request (untrusted model output)."""
+
+    name: str
+    arguments: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.name, str) or not self.name.strip():
+            raise TypeError(f"Invalid tool call name: {self.name!r}.")
+        if not isinstance(self.arguments, dict):
+            raise TypeError(
+                "Tool call arguments must be a dict, "
+                f"got {type(self.arguments).__name__}."
+            )
+
+
+@dataclass(frozen=True)
 class AIResponse:
     """Standard response returned by an AI provider."""
 
@@ -42,3 +59,6 @@ class AIResponse:
     model: str
     provider: str
     metadata: dict[str, Any] = field(default_factory=dict)
+    # Native tool calls requested by the model (empty when the model
+    # answered directly or the provider lacks native tool support).
+    tool_calls: tuple[NativeToolCall, ...] = ()

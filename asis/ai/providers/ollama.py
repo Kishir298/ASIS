@@ -6,12 +6,13 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Sequence
+from typing import Any
 
 import requests
 
 from asis.errors import InferenceError
 
-from ..models import AIMessage, AIResponse
+from ..models import AIMessage, AIResponse, NativeToolCall
 from .base import AIProvider
 
 
@@ -59,6 +60,7 @@ class OllamaProvider(AIProvider):
         messages: Sequence[AIMessage],
         *,
         stream: bool,
+        tools: Sequence[dict] | None = None,
     ) -> dict:
         payload: dict = {
             "model": self._model,
@@ -73,6 +75,8 @@ class OllamaProvider(AIProvider):
         }
         if self.temperature is not None:
             payload["options"] = {"temperature": self.temperature}
+        if tools:
+            payload["tools"] = list(tools)
         return payload
 
     def _communication_error(self, exc: Exception) -> InferenceError:
@@ -113,6 +117,85 @@ class OllamaProvider(AIProvider):
                 "prompt_eval_count": data.get("prompt_eval_count"),
                 "eval_count": data.get("eval_count"),
             },
+        )
+
+    @property
+    def supports_native_tools(self) -> bool:
+        """Ollama's /api/chat accepts a tools array (model-dependent)."""
+        return True
+
+    @staticmethod
+    def parse_tool_calls(message: dict) -> tuple[NativeToolCall, ...]:
+        """Extract valid native calls; drop malformed entries safely."""
+        raw_calls = message.get("tool_calls") or []
+        if not isinstance(raw_calls, list):
+            return ()
+        parsed: list[NativeToolCall] = []
+        for entry in raw_calls:
+            if not isinstance(entry, dict):
+                continue
+            function = entry.get("function")
+            if not isinstance(function, dict):
+                continue
+            name = function.get("name")
+            arguments = function.get("arguments", {})
+            if arguments is None:
+                arguments = {}
+            if not isinstance(name, str) or not name.strip():
+                continue
+            if not isinstance(arguments, dict):
+                continue
+            try:
+                parsed.append(
+                    NativeToolCall(name=name.strip(), arguments=dict(arguments))
+                )
+            except TypeError:
+                continue
+        return tuple(parsed)
+
+    def chat_with_tools(
+        self,
+        messages: Sequence[AIMessage],
+        tools: Sequence[Any],
+    ) -> AIResponse:
+        """Send a non-streaming chat request with tool definitions."""
+        from asis.ai.tool_schemas import ollama_tools
+
+        wire = ollama_tools(list(tools))
+        attempts = 1 + self.retries
+        for attempt in range(attempts):
+            try:
+                response = requests.post(
+                    f"{self.host}/api/chat",
+                    json=self._payload(messages, stream=False, tools=wire),
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                break
+            except requests.RequestException as exc:
+                if attempt + 1 >= attempts:
+                    raise self._communication_error(exc) from exc
+
+        data = response.json()
+        message = data.get("message") or {}
+        content = message.get("content")
+        if content is None:
+            content = ""
+        if not isinstance(content, str):
+            raise InferenceError("Ollama returned an invalid response.")
+
+        return AIResponse(
+            content=content,
+            model=self._model,
+            provider=self.name,
+            metadata={
+                "done": data.get("done"),
+                "total_duration": data.get("total_duration"),
+                "prompt_eval_count": data.get("prompt_eval_count"),
+                "eval_count": data.get("eval_count"),
+                "native_tools": True,
+            },
+            tool_calls=self.parse_tool_calls(message),
         )
 
     def stream_chat(

@@ -96,6 +96,11 @@ class CoreDeviceInfoTool(CoreToolBase):
         category="core",
         permission=PermissionLevel.HIGH,
         tags=("core", "device", "network"),
+        parameters={
+            "type": "object",
+            "properties": {"device_id": {"type": "string"}},
+            "required": ["device_id"],
+        },
     )
 
     def execute(self, **kwargs: Any) -> ToolResult:
@@ -165,6 +170,15 @@ class CoreServiceRequestTool(CoreToolBase):
         category="core",
         permission=PermissionLevel.HIGH,
         tags=("core", "service", "network"),
+        parameters={
+            "type": "object",
+            "properties": {
+                "service": {"type": "string"},
+                "operation": {"type": "string"},
+                "params": {"type": "object"},
+            },
+            "required": ["service", "operation"],
+        },
     )
 
     def execute(self, **kwargs: Any) -> ToolResult:
@@ -219,6 +233,14 @@ class CoreAgentRequestTool(CoreToolBase):
         category="core",
         permission=PermissionLevel.HIGH,
         tags=("core", "agent", "network"),
+        parameters={
+            "type": "object",
+            "properties": {
+                "operation": {"type": "string"},
+                "params": {"type": "object"},
+            },
+            "required": ["operation"],
+        },
     )
 
     def execute(self, **kwargs: Any) -> ToolResult:
@@ -268,6 +290,15 @@ class CoreDataRequestTool(CoreToolBase):
         category="core",
         permission=PermissionLevel.HIGH,
         tags=("core", "data", "network"),
+        parameters={
+            "type": "object",
+            "properties": {
+                "request_type": {"type": "string"},
+                "params": {"type": "object"},
+                "destination": {"type": "string"},
+            },
+            "required": ["request_type"],
+        },
     )
 
     def execute(self, **kwargs: Any) -> ToolResult:
@@ -322,6 +353,15 @@ class CoreSendToDeviceTool(CoreToolBase):
         category="core",
         permission=PermissionLevel.HIGH,
         tags=("core", "device", "network"),
+        parameters={
+            "type": "object",
+            "properties": {
+                "device_id": {"type": "string"},
+                "message_type": {"type": "string"},
+                "payload": {"type": "object"},
+            },
+            "required": ["device_id", "message_type"],
+        },
     )
 
     def execute(self, **kwargs: Any) -> ToolResult:

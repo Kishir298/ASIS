@@ -35,6 +35,7 @@ class AISettings:
     temperature: float
     max_context_messages: int
     context_char_limit: int
+    native_tools: str
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,7 @@ class NetworkSettings:
 @dataclass(frozen=True)
 class ToolSettings:
     timeout: int
+    max_calls_per_turn: int
 
 
 @dataclass(frozen=True)
@@ -224,6 +226,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
                 context_char_limit=get_i(
                     "ASIS_AI_CONTEXT_CHAR_LIMIT", d.AI_CONTEXT_CHAR_LIMIT
                 ),
+                native_tools=get_s("ASIS_AI_NATIVE_TOOLS", d.AI_NATIVE_TOOLS),
             ),
             conversation=ConversationSettings(
                 max_history=get_i(
@@ -254,7 +257,12 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
                 timeout=get_i("ASIS_NETWORK_TIMEOUT", d.NETWORK_TIMEOUT),
                 retries=get_i("ASIS_NETWORK_RETRIES", d.NETWORK_RETRIES),
             ),
-            tools=ToolSettings(timeout=get_i("ASIS_TOOL_TIMEOUT", d.TOOL_TIMEOUT)),
+            tools=ToolSettings(
+                timeout=get_i("ASIS_TOOL_TIMEOUT", d.TOOL_TIMEOUT),
+                max_calls_per_turn=environment.get_bounded_int(
+                    "ASIS_TOOL_MAX_CALLS_PER_TURN", d.TOOL_MAX_CALLS_PER_TURN, 1, 10
+                ),
+            ),
             security=SecuritySettings(
                 require_confirmation_for_dangerous=get_b(
                     "ASIS_CONFIRM_DANGEROUS_TOOLS",

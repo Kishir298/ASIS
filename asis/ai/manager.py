@@ -5,6 +5,7 @@ High-level AI manager for A.S.I.S.
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from typing import Any
 
 from asis.configuration.settings import settings
 from asis.errors import InferenceError
@@ -90,6 +91,33 @@ class AIManager:
 
         try:
             response = self.provider.chat(messages)
+
+        except Exception as exc:
+            self._publish(EventType.AI_INFERENCE_FAILED, error=str(exc))
+            raise
+
+        self._publish(EventType.AI_INFERENCE_FINISHED)
+        return response
+
+    def chat_with_tools(
+        self,
+        messages: Sequence[AIMessage],
+        tools: Sequence[Any],
+    ) -> AIResponse:
+        """Generate a response with native tool definitions available."""
+        if not messages:
+            raise ValueError("At least one message is required.")
+
+        self.logger.info(
+            "Sending tool-enabled request to %s/%s (%d tools)",
+            self.provider.name,
+            self.provider.model,
+            len(list(tools)),
+        )
+        self._publish(EventType.AI_INFERENCE_STARTED)
+
+        try:
+            response = self.provider.chat_with_tools(messages, tools)
 
         except Exception as exc:
             self._publish(EventType.AI_INFERENCE_FAILED, error=str(exc))

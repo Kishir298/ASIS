@@ -37,6 +37,11 @@ from asis.tools.router import ToolRouter, build_executor
 from .actions import ToolRequest, format_tool_result_for_context, parse_tool_request
 from .memories import store_auto_memories
 from .modes import AssistantMode, parse_mode
+from .native_tools import (
+    max_tool_calls,
+    native_tools_enabled,
+    normalize_native_calls,
+)
 from .profiles import get_profile
 
 
@@ -232,6 +237,94 @@ class AssistantApp:
             self.logger.exception("Tool dispatch failed: %s", request.tool_name)
             return ToolResult.failure(error=str(exc), tool_name=request.tool_name)
 
+    def _run_native_tool_loop(self, user_text: str) -> str | None:
+        """Bounded native function-calling turn; None → heuristic fallback.
+
+        The model receives tool definitions derived from the active-mode
+        registry and may request structured calls. Every call is
+        normalized to a ToolRequest and executed through the SAME
+        ToolRouter/permission path as heuristic intents. At most
+        ``max_calls_per_turn`` validated calls run; the turn always ends
+        with a plain final generation. Any native failure (unsupported
+        provider, transport error, no usable calls) returns None so the
+        caller falls back to the heuristic path.
+        """
+        if not native_tools_enabled():
+            return None
+        provider = getattr(self.ai, "provider", None)
+        if provider is None or not getattr(
+            provider, "supports_native_tools", False
+        ):
+            return None
+        from asis.ai.tool_schemas import tool_definitions_for
+
+        try:
+            definitions = tool_definitions_for(self.tools_router.registry)
+        except Exception:
+            self.logger.warning(
+                "Tool schema generation failed; using heuristic fallback."
+            )
+            return None
+        if not definitions:
+            return None
+        limit = max_tool_calls()
+        try:
+            response = self.engine.generate_with_tools(
+                self.session.messages, definitions
+            )
+        except Exception:
+            self.logger.warning("Native tool request failed; using fallback.")
+            return None
+        self._pending_memory_query = ""
+        if not response.tool_calls:
+            # Model answered directly; record and return (fallback not
+            # needed, but heuristics must not double-fire on this text).
+            if (response.content or "").strip():
+                self.session.add_assistant(response.content)
+                return response.content
+            return None
+        calls_made = 0
+        while response.tool_calls and calls_made < limit:
+            requests, errors = normalize_native_calls(
+                response.tool_calls, self.tools_router.registry
+            )
+            if (response.content or "").strip():
+                self.session.add_assistant(response.content)
+            for error in errors:
+                self.session.add_assistant(
+                    f"[tool {error.call_name or 'unknown'} error] {error.message}"
+                )
+            if not requests:
+                break
+            for request in requests:
+                if calls_made >= limit:
+                    break
+                result = self._execute_tool(request)
+                self.session.add_assistant(format_tool_result_for_context(result))
+                calls_made += 1
+            if calls_made >= limit:
+                break
+            try:
+                response = self.engine.generate_with_tools(
+                    self.session.messages, definitions
+                )
+            except Exception:
+                self.logger.warning("Native continuation failed; finalizing.")
+                break
+            if not response.tool_calls and (response.content or "").strip():
+                # The continuation already answers with the tool results
+                # in context: it is the final response.
+                self.session.add_assistant(response.content)
+                return response.content
+        # Fell out of the loop (call bound reached, calls rejected, or
+        # continuation failed/empty): finalize with a plain generation.
+        try:
+            final = self.engine.generate(self.session.messages)
+        finally:
+            self._pending_memory_query = ""
+        self.session.add_assistant(final.content)
+        return final.content
+
     def chat(self, message: str) -> str:
         """Process one user message through the full wired pipeline."""
         text = (message or "").strip()
@@ -244,6 +337,9 @@ class AssistantApp:
             return explicit
         self._pending_memory_query = text
         try:
+            native_reply = self._run_native_tool_loop(text)
+            if native_reply is not None:
+                return native_reply
             response = self.engine.generate(self.session.messages)
         finally:
             self._pending_memory_query = ""

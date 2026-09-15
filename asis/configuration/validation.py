@@ -104,10 +104,17 @@ def validate_settings(settings: Settings) -> Settings:
             f"Invalid configuration ai.temperature: expected a number "
             f"between 0 and {_TEMPERATURE_MAX}, received {temp!r}."
         )
-    _require_positive_int(
-        "ai", "max_context_messages", settings.ai.max_context_messages
-    )
+    _require_positive_int("ai", "max_context_messages", settings.ai.max_context_messages)
     _require_positive_int("ai", "context_char_limit", settings.ai.context_char_limit)
+    native_tools = settings.ai.native_tools
+    if (
+        not isinstance(native_tools, str)
+        or native_tools.strip().lower() not in ("auto", "true", "false")
+    ):
+        raise ConfigurationError(
+            "Invalid configuration ai.native_tools: expected one of "
+            f"'auto', 'true', 'false', received {native_tools!r}."
+        )
 
     # Conversation
     _require_positive_int(
@@ -120,6 +127,12 @@ def validate_settings(settings: Settings) -> Settings:
 
     # Tools
     _require_positive_int("tools", "timeout", settings.tools.timeout)
+    calls = settings.tools.max_calls_per_turn
+    if isinstance(calls, bool) or not isinstance(calls, int) or not 1 <= calls <= 10:
+        raise ConfigurationError(
+            "Invalid configuration tools.max_calls_per_turn: expected an "
+            f"integer between 1 and 10, received {calls!r}."
+        )
 
     # Security
     if not isinstance(settings.security.require_confirmation_for_dangerous, bool):
