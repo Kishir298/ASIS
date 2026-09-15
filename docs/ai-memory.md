@@ -15,9 +15,8 @@ No Hugging Face or cloud providers exist — anything else is future.
 `create_provider()` (`asis/ai/manager.py`) selects by
 `settings.ai.provider`; unknown names raise `InferenceError`.
 `AIManager` wraps chat/streaming with `AI_INFERENCE_STARTED/FINISHED/
-FAILED` events. One known gap: the chat-CLI helper builds
-`OllamaProvider` without temperature/retries (the manager path passes
-all settings) — behavior is identical at defaults.
+FAILED` events. The CLI provider helper passes model/host/timeout/
+temperature/retries from settings, matching the manager path.
 
 ## Inference (`asis/ai/inference.py`)
 
@@ -45,13 +44,13 @@ Conversation Context  ≠  Permanent Memory
   to `context_char_limit` + fixed rules; history tail-sliced to
   `max_context_messages`. History itself is never char-truncated.
 
-**Wiring status:** these classes are implemented and tested but the
-shipped CLI chat path (`asis/cli/main.py:handle_message()`) does not
-use them yet — each CLI input builds a fresh `[system, user]` pair, so
-multi-turn history and memory recall are not part of live responses.
-Stored memories are therefore write-only from the CLI (see below).
-Wiring `ConversationSession` + `ContextAssembler` into the CLI is the
-natural next step and requires no new subsystems.
+**Wiring status:** `ConversationSession` + `ContextAssembler` +
+`InferenceEngine` are wired into the normal CLI and voice paths via
+`AssistantApp` (`asis/app/assistant.py`), which owns one session per
+REPL/voice run. Each turn persists user + assistant messages (bounded
+by `max_history` / `max_context_messages`); failed inference preserves
+state without inserting a phantom assistant turn; the `inference`
+interrupt scope stays cancellable.
 
 ## Memory (`asis/memory/`)
 
@@ -61,7 +60,7 @@ natural next step and requires no new subsystems.
 | SQLite file storage (`memories` table, category/importance index) | Implemented |
 | LIKE search (`importance DESC, created_at DESC`) | Implemented (no embeddings/vector search) |
 | Auto-extraction (`my name is…`, `I like…`, `I'm building…`) | Implemented (`asis/app/memories.py`, invoked by chat CLI) |
-| Recall into prompts | **Not wired** — manager supports it; CLI never feeds memories to the model |
+| Recall into prompts | Implemented + wired — `search_context()` keyword retrieval injected via `ContextAssembler`; empty → normal inference; failure → log + continue |
 | Cloud sync | Future — R.E.S.C.S. responsibility, not A.S.I.S. |
 
 Database lives at `settings.paths.memory / settings.memory.database_name`

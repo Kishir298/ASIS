@@ -12,15 +12,14 @@ integration boundaries; see `docs/integration.md`).
 | Configuration + validation | Implemented |
 | AI provider abstraction | Implemented |
 | Ollama provider | Implemented (optional dep) |
-| Conversation / context | Implemented |
-| Local memory (SQLite) | Implemented |
-| Tools (`echo`, `current_time`) | Implemented |
+| Conversation / context | Implemented + wired (`AssistantApp` owns session) |
+| Local memory (SQLite) | Implemented + wired (query-scoped recall, fail-open) |
+| Tools (`echo`, `current_time`) | Implemented + application-wired (single cycle, permission-mandatory) |
 | Permissions / confirmation | Implemented (no dangerous tools ship) |
 | Voice architecture + mocks | Implemented |
 | Local STT / TTS / speaker / wake / VAD | Implemented (optional deps) |
-| CLI (`asis`, `asis voice`) | Implemented |
-| Conversation history / memory recall in CLI | Not wired (subsystems implemented, see docs/ai-memory.md) |
-| Tool execution from application code | Not wired (subsystem implemented, `--list-tools` only) |
+| CLI (`asis`, `asis voice`) | Implemented (stateful multi-turn) |
+| Shutdown timeout | Implemented (bounded stop, FAILED + log on expiry) |
 | C.O.R.E. integration | Future (mock adapter) |
 | R.E.S.C.S. integration | Future (placeholder adapter) |
 
@@ -94,12 +93,12 @@ outside the repository (overridable with `ASIS_*_DIRECTORY`).
 
 ## Chat behavior
 
-Each CLI input is processed statelessly: a fresh `[system, user]`
-pair is sent to the provider, with auto-extracted memories persisted
-to the local SQLite store. `ConversationSession`, `ContextAssembler`
-and `InferenceEngine` (history, memory-aware prompts, cancellable
-inference) are implemented and tested but not yet wired into the CLI —
-see `docs/ai-memory.md` for the exact boundary.
+Each REPL/voice run owns one `ConversationSession` (`AssistantApp`):
+turns persist user + assistant messages within configured history /
+context limits, relevant memories are retrieved query-scoped into the
+system prompt (stored memory is data, never instructions), and at most
+one safe tool action runs per turn through the permission layer.
+Failed inference preserves state; memory failure logs and continues.
 
 ## Test
 

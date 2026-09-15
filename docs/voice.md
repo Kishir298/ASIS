@@ -57,3 +57,7 @@ Unknown engine names raise `VoiceError` pointing at the corresponding
   flags (configuration only).
 - Standard tests are mock-only: no microphone, speakers, GPU, models,
   or network required.
+
+Voice uses the same `AssistantApp` intelligence as the text CLI
+(stateful session + memory recall + single tool cycle via
+`process_fn`), not a second AI implementation.

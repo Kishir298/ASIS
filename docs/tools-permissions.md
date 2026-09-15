@@ -14,12 +14,16 @@ explicit tool requests through registry → router → executor.
 No dangerous tools ship today. `ToolResult(success, data, error,
 tool_name)` is frozen; non-`ToolResult` returns are wrapped.
 
-**Wiring status:** the tool subsystem (registry, router, executor,
-authorization, timeouts) is implemented and fully tested, but no
-production code path executes a tool today — the CLI only lists them
-(`--list-tools`). The model can never call tools by itself, and the
-execution path exists ready for application code to route requests
-through it.
+**Wiring status:** the tool subsystem is application-wired via
+`AssistantApp` + `asis/app/actions.py` (single inference/action cycle):
+a structured JSON action in model output — or a conservative heuristic
+(time questions → `current_time`) — becomes a validated `ToolRequest`
+dispatched through `ToolRouter` → mandatory permission check →
+`ToolExecutor`. Results return explicitly to the conversation and feed
+one final inference pass. Unknown tools, invalid arguments, denials,
+timeouts and exceptions all become controlled failures, never crashes.
+Direct `tool.execute()` (which bypasses permissions/timeout) is never
+used by application code, and no shell/subprocess path exists.
 
 Mechanics (`asis/tools/`): `ToolRegistry` (thread-safe, rejects
 duplicates with `ToolValidationError`), `ToolRouter` (unknown names

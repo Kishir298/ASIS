@@ -32,21 +32,15 @@ Conversation Engine            asis/ai/conversation.py (bounded session)
     Tool Execution             bounded by tools.timeout
 ```
 
-**Runtime wiring status (important):** the shipped CLI chat path is
-**stateless** — each input builds a fresh `[system, user]` message pair
-(`asis/cli/main.py:handle_message()`); `ConversationSession`,
-`ContextAssembler` and `InferenceEngine` are fully implemented and
-tested (`asis/ai/`) but are not yet wired into the CLI REPL or voice
-loop. Likewise, memories are **written** from user text
-(`store_auto_memories`) but are not yet recalled into prompts, and the
-tool system (registry/router/executor + permissions) is complete but
-no production code path executes a tool — only `--list-tools` touches
-the provided tools.
-
-There is **no agentic loop**: inference is a single
-context → model → response pass per turn (`asis/ai/inference.py`).
-The model never invokes tools by itself; tools run only when
-application code calls the router.
+**Runtime wiring status:** the CLI and voice paths share one stateful
+`AssistantApp` (`asis/app/assistant.py`) owning a single
+`ConversationSession` per session: input → session → query-scoped memory
+retrieval → `ContextAssembler` → `InferenceEngine` → `AIManager` →
+optional single tool action (router → permission → executor) → final
+response stored back in the session. Memory is recalled via
+`MemoryManager.search_context()` (fail-open: log + continue when
+retrieval fails). There is still **no agentic loop**: at most one
+tool action per turn; normal conversation never requires a tool.
 
 ## Voice pipeline
 
@@ -61,7 +55,7 @@ Speech Recognition             speech/ (mock default, faster-whisper real)
     ↓
 Speaker Identification         speaker/ (mock default, embedding real)
     ↓
-A.S.I.S. Processing            process_fn supplied by caller (CLI wires AI chat)
+A.S.I.S. Processing            shared AssistantApp (session + memory + tools)
     ↓
 Response
     ↓
@@ -81,13 +75,13 @@ stops them in reverse; per-component stop failures are logged, not
 re-raised, and startup failure stops already-started components.
 `ASISRuntime` (`asis/system/runtime.py`) tracks
 `CREATED → STARTING → RUNNING → STOPPING → STOPPED/FAILED` and cancels
-all interrupt scopes on stop. Shutdown is triggered by the configured
+all interrupt scopes on stop. `stop()` enforces
+`settings.runtime.shutdown_timeout` with a bounded join: on expiry it
+logs the stuck components, transitions to FAILED and raises
+`TimeoutError` instead of hanging. Shutdown is triggered by the configured
 phrase (default `asis shutdown`) in the CLI/voice REPLs, by
 `--max-turns`, or by `Ctrl+C`; the voice loop always runs
 `pipeline.stop()` in `finally`.
-
-Known limitation: `runtime.shutdown_timeout` is validated but no
-component currently enforces a timed join — shutdown is cooperative.
 
 `InterruptCoordinator` (`asis/system/interrupt.py`, scopes
 `inference` and `voice`) lets one subsystem cancel another's blocking
@@ -105,7 +99,7 @@ Default personality template supports `{name}`/`{title}`.
 ```text
 asis/
 ├── ai/               inference, conversation, context, providers
-├── app/              auto-memory extraction, process result
+├── app/              assistant runtime, tool actions, auto-memory, result
 ├── cli/              entry point, chat REPL, voice loop
 ├── configuration/    defaults → env → validated Settings
 ├── errors/           ASISError hierarchy (see below)

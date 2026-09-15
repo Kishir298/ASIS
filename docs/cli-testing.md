@@ -22,16 +22,19 @@ failures exit `2` unless `--debug` re-raises.
 ## Testing
 
 ```bash
-python3 -m pytest -q        # full suite: 128 tests, ~1s
+python3 -m pytest -q        # full suite: 158 tests, ~1s
 ```
 
 | File | Collected tests | Covers |
 |---|---|---|
 | `test_configuration.py` | 49 | defaults/overrides/precedence/validation/paths/voice |
 | `test_voice.py` | 28 | models/buffer/engines/pipeline/CLI, mock-only |
+| `test_assistant.py` | 20 | session/memory/tools wiring, fail-open, permissions |
 | `test_ai.py` | 9 | providers, manager, conversation, context, inference |
 | `test_app.py` | 6 | auto-memory extraction and result handling |
 | `test_cli.py` | 7 | entry point, flags, REPL shutdown, memory building |
+| `test_runtime_integration.py` | 5 | multi-turn CLI, memory/tool paths, voice app path |
+| `test_shutdown.py` | 5 | bounded shutdown, timeout FAILED, reverse order |
 | `test_events.py` | 5 | event bus and event types |
 | `test_identity.py` | 5 | identity rendering, personality template |
 | `test_memory.py` | 10 | manager, storage, search, models |
