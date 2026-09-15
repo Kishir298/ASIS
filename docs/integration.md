@@ -28,6 +28,11 @@ CORE-HOST
 client; `MockCoreAdapter` remains the offline stand-in. Configuration:
 `ASIS_CORE_*` (see `docs/configuration.md` and `.env.example`);
 standalone by default; bounded reconnect; bounded shutdown.
+The `asis` and `asis voice` entry points (`asis/cli/main.py:
+build_core_manager`) own the single process-wide manager and pass it
+to `AssistantApp`, so text, A.S.C.S., and voice share one connection;
+the provisioning credential arrives only via the runtime-only
+`ASIS_CORE_CREDENTIAL` environment variable.
 Physical Windows ↔ Mac LAN validation: NOT PERFORMED.
 
 ## R.E.S.C.S. (future)

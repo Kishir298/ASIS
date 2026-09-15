@@ -66,6 +66,20 @@ and never touch the global.
 | Security | `require_confirmation_for_dangerous` (strict bool) |
 | Paths | `data/config/cache/logs/memory/runtime` (platformdirs, overridable) |
 
+## C.O.R.E. uplink lifecycle
+
+Standalone by default (`ASIS_CORE_ENABLED=false`). When enabled, the
+`asis` and `asis voice` entry points build exactly one
+`CoreConnectionManager` (one `RealCoreAdapter`, one CORE-CLIENT session)
+and pass it to `AssistantApp`, so GENERAL, A.S.C.S. coding, and voice
+share the same connection. The provisioning credential is runtime-only:
+export `ASIS_CORE_CREDENTIAL` in the shell before starting — it is read
+at connect time, never written to disk, logs, memory, or model context,
+and never belongs in `.env` files. Without it (or when the host is
+unreachable) A.S.I.S. runs fully locally and CORE tools report
+`CORE_UNAVAILABLE`; shutdown always disconnects and clears the
+ephemeral session.
+
 ## Paths
 
 `platformdirs` on macOS/Windows/Linux; nothing persistent lives in the

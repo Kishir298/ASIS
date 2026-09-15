@@ -3,8 +3,9 @@
 A.S.I.S. (**A Smart Intelligence System**) is the intelligence/assistant
 layer of the R.I.S.A.R.M.S. ecosystem. It runs independently: AI
 interaction, conversation, memory, tools, permissions, voice, and
-identity all work with no C.O.R.E. or R.E.S.C.S. process present (see
-`docs/integration.md` for the future boundaries).
+identity all work with no C.O.R.E. or R.E.S.C.S. process present (C.O.R.E.
+is a real but optional uplink; R.E.S.C.S. remains a future boundary —
+see `docs/integration.md`).
 
 ## Runtime shape
 
@@ -112,7 +113,7 @@ asis/
 ├── errors/           ASISError hierarchy (see below)
 ├── events/           EventBus (AI, tools, memory, voice events)
 ├── identity/         config-driven identity + personality
-├── integrations/     future CORE/RESCS contracts + mock adapters
+├── integrations/     real CORE adapter + mock; RESCS contract (future)
 ├── logging/          console + rotating-file handlers
 ├── memory/           local SQLite memory
 ├── permissions/      levels, confirmation, sandbox, secrets helper
