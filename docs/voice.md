@@ -6,11 +6,23 @@ scripted test double, **Optional** = needs an extra + hardware/model.
 
 ## Pipeline order (`VoicePipeline.run_once`)
 
-`listen → check_voice_activity → transcribe → normalize_text →
-detect_wake_text (if required) → identify_speaker → process_fn →
-speak`, returning `{text, speaker, response, status}` with status
-`spoken | no-speech | no-wake-word`. Each stage is independently
-callable and interrupt-checked; `VoiceEvent`s never carry raw audio.
+Audio-first gating (no ambient speech sent to STT unnecessarily):
+
+`listen → check_voice_activity (voice.vad) → detect_wake_word(audio)
+→ capture_command (utterance, bounded) → transcribe → normalize_text →
+detect_wake_text confirmation (if required) → identify_speaker →
+process_fn (voice.assistant.started/finished) → speak`, returning
+`{text, speaker, response, status}` with status
+`spoken | no-speech | no-wake-word`. An audio-gate miss returns
+`no-wake-word` with empty text and zero STT calls. Each stage is
+independently callable and interrupt-checked (`voice.interrupted` on
+cancel); `VoiceEvent`s never carry raw audio or embeddings.
+
+Continuous listening lives in `VoiceRunner` (`asis/voice/runner.py`,
+`RuntimeComponent name="voice"`): waiting → wake → command → response
+→ waiting, with `max_turns`, shutdown-phrase, idle sleep (no 100% CPU
+spin), single provider set reused across turns, and bounded shutdown
+via `InterruptCoordinator("voice")` + `pipeline.stop()`.
 
 ## Engines
 
@@ -31,32 +43,57 @@ Unknown engine names raise `VoiceError` pointing at the corresponding
 
 - **Audio input** (`input/`): `Microphone` (lazy sounddevice,
   discovery/capture), `AudioBuffer` (thread-safe deque, numpy-optional),
+  `utterance.py` (`capture_utterance` + `UtteranceConfig`: VAD-gated
+  end-of-utterance, `ASIS_VOICE_MAX_UTTERANCE_S`/`ASIS_VOICE_SILENCE_S`
+  bounds, fail-open to the wake segment),
   `VoiceActivityDetector` (256/512 frames) + `SileroVadDetector` adapter.
 - **STT** (`speech/`): `SpeechTranscriber` (lazy WhisperModel,
   auto-language) + `FasterWhisperRecognizer` adapter
   (`model/device/compute_type/language` from settings) +
   `TranscriptionNormalizer`.
 - **Speaker** (`speaker/`): JSON-file/memory `SpeakerStore` (never
-  stores audio), `register_speaker()` merge, `EmbeddingSpeakerIdentifier`
+  stores audio), `register_speaker()` merge (explicit CLI only:
+  `asis voice --register-speaker ID --sample a.wav`, `--list-speakers`;
+  never auto-registers strangers), `EmbeddingSpeakerIdentifier`
   (`threshold`, `cosine` metric, `unknown` fallback), pure-python
-  embedding math + lazy SpeechBrain provider.
+  embedding math + lazy SpeechBrain provider. Known speakers prefix
+  chat as `[id] text` for memory context; no separate voice memory.
 - **TTS** (`tts/`): `Pyttsx3Engine` renders offline to wav and returns
-  `AudioData`; empty `voice` allowed (provider auto-selects).
+  `AudioData` (temp files always cleaned); empty `voice` allowed,
+  `--tts-rate` override supported.
 - **Output** (`output/`): `SoundDeviceOutputProvider.play/stop` with
   validation and channel-mismatch warning.
-- **Wake** (`engines/`): text keyphrase detector, scriptable mocks,
-  `OpenWakeWordDetector` (threshold + optional model path).
+- **Wake** (`engines/`): text keyphrase detector (fallback/test only),
+  scriptable mocks, `OpenWakeWordDetector` (threshold + optional model
+  path, `ASIS_VOICE_WAKE_THRESHOLD`/`ASIS_VOICE_WAKE_MODEL`).
+- **Modes** (`commands.py` + `runner.py`): explicit phrases only
+  (`switch to coding/general mode`, `enable ascs`, …) flip
+  `AssistantApp.set_mode()` without touching provider/model; anything
+  else flows to `app.chat()`. Same provider/model/session/memory/tools
+  as text; A.S.C.S. coding tools/context apply when CODING is active.
 
-## Current limitations
+## CLI (`asis voice`)
 
-- The voice CLI hardcodes mock audio input/output regardless of
-  `VOICE_INPUT/OUTPUT_ENGINE` (engines apply via the factory API).
-- `--wake-word` forces a mock keyphrase detector, bypassing wake
-  engine/threshold/model settings.
-- `VAD`/`wake`/`speaker` thresholds and `tts.sample_rate` have no CLI
-  flags (configuration only).
-- Standard tests are mock-only: no microphone, speakers, GPU, models,
-  or network required.
+Follows configured `ASIS_VOICE_*_ENGINE` values (no hardcoded mocks).
+Overrides: `--input-engine/--output-engine/--vad-engine/--wake-engine`,
+`--wake-word/--wake-threshold/--vad-threshold`, `--stt-engine/--stt-model`,
+`--tts-engine/--tts-voice/--tts-rate`, `--speaker-engine`,
+`--max-utterance-s/--silence-s`, `--no-wake-word`, `--mode/--workspace`,
+`--max-turns`, `--debug`. Failures are structured exit `2`, never raw
+tracebacks unless `--debug`.
+
+## Status labels
+
+- **IMPLEMENTED**: pipeline audio gating, utterance capture, runner loop,
+  factory + CLI wiring, speaker store/registration, mode commands,
+  interruption (`voice` scope), lifecycle `stop()`, events
+  (`voice.vad/assistant.started/finished/interrupted` added).
+- **TESTED WITH MOCKS**: `tests/test_voice.py`, `test_voice_audio_gate.py`
+  (no hardware).
+- **OPTIONAL REAL-PROVIDER TEST**: `tests/test_voice_real.py`
+  (`ASIS_REAL_VOICE_TESTS=1`, skips when deps missing).
+- **MANUAL HARDWARE VALIDATION**: see `docs/voice-manual-test.md` (not
+  claimed until performed on real Mac/Windows hardware).
 
 Voice uses the same `AssistantApp` intelligence as the text CLI
 (stateful session + memory recall + single tool cycle via
