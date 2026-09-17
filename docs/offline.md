@@ -31,7 +31,7 @@ Runtime never downloads models automatically. A missing model is a
 deterministic error, never a silent download:
 
 - **Ollama:** install Ollama and pull the configured model while online
-  (`ollama pull qwen2.5:3b` for the default `ASIS_AI_MODEL`), then run
+  (`ollama pull qwen3:14b` for the default `ASIS_AI_MODEL`), then run
   offline. Down server → `InferenceError("Could not communicate with
   Ollama: …")`. Without Ollama at all, run fully offline with
   `ASIS_AI_PROVIDER=mock`.
