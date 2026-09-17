@@ -33,7 +33,11 @@ def test_parse_mode_invalid():
 
 
 def test_list_modes_general_first():
-    assert list_modes() == [AssistantMode.GENERAL, AssistantMode.CODING]
+    assert list_modes() == [
+        AssistantMode.GENERAL,
+        AssistantMode.CODING,
+        AssistantMode.TRANSLATION,
+    ]
 
 
 def test_profiles_centralized():
