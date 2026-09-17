@@ -24,13 +24,13 @@ Conversation Engine            asis/ai/conversation.py (bounded session)
  │
  ├── Model Provider            asis/ai/ (Ollama default, mock for tests/dev)
  │
- └── Tool System               asis/tools/ (registry → router → executor)
-       │
-       ▼
-   Permission Manager          asis/permissions/ (levels + confirmation)
-       │
-       ▼
-    Tool Execution             bounded by tools.timeout
+  └── Tool System               asis/tools/ (registry → router → executor)
+        │  Permission Manager     asis/permissions/ (levels + confirmation)
+        │  Tool Execution         bounded by tools.timeout
+        │
+        ├── CORE tools → CORE adapter → CORE-CLIENT → CORE-HOST (optional)
+        │
+        └── Web tools → WebProvider → Internet (optional, bounded)
 ```
 
 **Runtime wiring status:** the CLI and voice paths share one stateful
@@ -119,6 +119,7 @@ asis/
 ├── permissions/      levels, confirmation, sandbox, secrets helper
 ├── system/           lifecycle, runtime, interrupts
 ├── tools/            registry, router, executor, provided tools
+├── web/              web provider (search + fetch), SSRF guard, extraction
 └── voice/            canonical voice subsystem
 ```
 

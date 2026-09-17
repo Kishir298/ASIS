@@ -18,6 +18,40 @@ explicit tool requests through registry → router → executor.
 | `git_commit` | Commit (never pushes) | CRITICAL | Implemented, confirm-gated (coding mode) |
 | `core_status` | Local CORE connection snapshot | SAFE | Implemented (needs CORE manager) |
 | `core_discover_devices` / `core_device_info` / `core_data_request` / `core_service_request` / `core_agent_request` / `core_send_to_device` | C.O.R.E. infrastructure operations | HIGH | Implemented, confirm-gated (needs CORE session) |
+| `web_search` | Web search, bounded structured results (`title`, `url`, `snippet`, `source`) | LOW | Implemented (optional, on by default) |
+| `web_fetch` | Fetch readable text from a public HTTP/HTTPS page (bounded + metadata) | LOW | Implemented (optional, on by default) |
+
+## Web access (`asis/web/` + `asis/tools/provided/web_tools.py`)
+
+`web_search(query, max_results)` and `web_fetch(url, max_chars)` travel
+the exact same path as every other tool: native definitions from
+`tool_definitions_for()` → `normalize_native_call()` → `ToolRouter` →
+`PermissionManager`/authorizer → `ToolExecutor` → tool → `WebProvider`
+(`asis/web/provider.py`, DuckDuckGo HTTP backend, no key, no browser).
+No second framework exists for the web: A.S.C.S. coding mode and voice
+use the same shared registry via `AssistantApp`.
+
+Rules: only `http`/`https` (everything else → `WEB_UNSUPPORTED_SCHEME`);
+SSRF protection resolves every hostname and re-checks every redirect hop
+(`127/8`, `10/8`, `172.16/12`, `192.168/16`, `169.254/16`, `::1`,
+`fc00::/7`, `fe80::/10`, `localhost` blocked → `WEB_BLOCKED_DESTINATION`);
+bounded results (≤ configured max, default 5), download bytes (default
+1 MB → `WEB_RESPONSE_TOO_LARGE`), returned chars (default 8 000,
+`truncated: true`), redirects (default 3), URL/query lengths, and network
+timeouts (`ASIS_WEB_TIMEOUT`). HTML is reduced to readable text with the
+standard library only — no JavaScript, no downloads, no shell.
+
+Web content is **untrusted data**: it reaches the model as information
+inside `[tool … result]` context, never as instructions, and is never
+auto-stored to memory. Errors use `WEB_*` codes (`WEB_DISABLED`,
+`WEB_UNAVAILABLE`, `WEB_TIMEOUT`, `WEB_INVALID_URL`,
+`WEB_UNSUPPORTED_SCHEME`, `WEB_BLOCKED_DESTINATION`, `WEB_HTTP_ERROR`,
+`WEB_RESPONSE_TOO_LARGE`, `WEB_PARSE_ERROR`, `WEB_PROVIDER_ERROR`) with
+sanitized messages (no keys, headers, cookies, IPs, or paths). When
+`ASIS_WEB_ENABLED=false` both tools return `WEB_DISABLED` and everything
+else (chat, memory, local tools, A.S.C.S., voice, CORE) keeps working.
+Live-network tests are opt-in (`ASIS_WEB_LIVE=1`,
+`tests/test_web_live.py`); the default suite never dials out.
 
 No dangerous tools ship today. `ToolResult(success, data, error,
 tool_name)` is frozen; non-`ToolResult` returns are wrapped.

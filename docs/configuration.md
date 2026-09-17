@@ -61,6 +61,7 @@ and never touch the global.
 | Voice | audio (`sample_rate`, `channels`, `block_size` >0; `input/output_engine`), STT (`engine/model/device/compute_type`, optional `language`), TTS (`engine`, optional `voice`, `sample_rate`), speaker (`engine/model/device/metric`, `confidence/threshold` 0–1), wake (`engine`, `threshold` 0–1, `model` optional; `wake_word` required unless engine is mock/none/off), VAD (`engine`, `threshold` 0–1) |
 | Network | `timeout` (>0), `retries` (≥0) |
 | Tools | `timeout` (>0, per-run bound) |
+| Web | `enabled` (bool, default on), `search_provider` (`duckduckgo` only), `timeout` (1–120), `max_results` (1–10), `max_chars` (500–50000), `max_response_bytes` (10000–5000000), `max_redirects` (0–5), `max_query_length` (1–2000), `max_url_length` (100–8000) |
 | Tool loop | `max_calls_per_turn` (1–10, native calls per turn) |
 | AI native | `native_tools` (`auto`/`true`/`false`) |
 | Coding | `default_mode` (`general`/`coding`), `workspace` (dir at use), `command_timeout`/`max_file_size`/`max_output_size` (>0) |
@@ -98,8 +99,8 @@ platform defaults when unset.
 
 ## Reference
 
-`.env.example` documents all 59 variables with type, range, and default
-(53 set explicitly; the 6 `ASIS_*_DIRECTORY` path overrides appear
+`.env.example` documents all 68 variables with type, range, and default
+(62 set explicitly; the 6 `ASIS_*_DIRECTORY` path overrides appear
 commented-out since platform defaults apply). It is cross-checked
 against `settings.py` — if they ever disagree, the code wins and the
 file must be fixed.

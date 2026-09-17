@@ -16,6 +16,7 @@ but optional uplink; R.E.S.C.S. remains a future boundary; see
 | Conversation / context | Implemented + wired (`AssistantApp` owns session) |
 | Local memory (SQLite) | Implemented + wired (query-scoped recall, fail-open) |
 | Tools (`echo`, `current_time`) | Implemented + application-wired (native function calling primary, heuristic fallback, permission-mandatory) |
+| Web access (`web_search`, `web_fetch`) | Implemented + application-wired (shared registry for GENERAL/A.S.C.S./voice, SSRF-guarded bounded provider, optional via `ASIS_WEB_ENABLED`) |
 | A.S.C.S. coding mode | Implemented + wired (shared provider/model, workspace-bound tools) |
 | Permissions / confirmation | Implemented (no dangerous tools ship) |
 | Voice architecture + mocks | Implemented |
@@ -50,6 +51,7 @@ ASIS/
 │   ├── integrations/      # C.O.R.E. adapter (real) / R.E.S.C.S. (future)
 │   ├── memory/            # local memory provider
 │   ├── tools/             # tool system + permissions
+│   ├── web/              # web provider (search + fetch, SSRF guard)
 │   ├── voice/             # sole production voice implementation
 │   └── ...
 ├── tests/                 # canonical test suite

@@ -39,6 +39,28 @@ the provisioning credential arrives only via the runtime-only
 `ASIS_CORE_CREDENTIAL` environment variable.
 Physical Windows ↔ Mac LAN validation: NOT PERFORMED.
 
+## Web (implemented)
+
+Basic web access is a separate, CORE-independent capability:
+
+```text
+A.S.I.S. (AssistantApp, GENERAL + A.S.C.S. modes, voice)
+   ↓  ToolRouter / PermissionManager / ToolExecutor
+web_search / web_fetch (shared registry, LOW permission)
+   ↓
+WebProvider ABC  asis/web/provider.py (DuckDuckGo HTTP backend, no key)
+   ↓
+Internet
+```
+
+Web traffic is never routed through CORE, and CORE code is never
+touched by web changes. Configuration: `ASIS_WEB_*` (see
+`docs/configuration.md` and `.env.example`); optional and off-switchable
+via `ASIS_WEB_ENABLED`; bounded and shutdown-safe. Retrieved pages are
+untrusted data (see `docs/tools-permissions.md`). Live internet
+validation: PERFORMED (2026-09-17, `ASIS_WEB_LIVE=1`: real fetch of a
+public page + real search query, both passing).
+
 ## R.E.S.C.S. (future)
 
 Intended relationship:
