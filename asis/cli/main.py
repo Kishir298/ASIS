@@ -9,6 +9,7 @@ message processing, and a stdin REPL.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import sys
 from collections.abc import Sequence
@@ -186,6 +187,17 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="coding workspace root (default: configured workspace or CWD)",
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="enable verbose debug logging (default: quiet in interactive mode)",
+    )
+    parser.add_argument(
+        "--log-level",
+        default=None,
+        metavar="LEVEL",
+        help="log level override (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
+    )
     return parser
 
 
@@ -287,9 +299,119 @@ def handle_message(
     return app.chat(message)
 
 
+def _normalize_argv(raw: Sequence[str] | None) -> list[str]:
+    """Return a clean argument list for the ``asis`` entry point.
+
+    Some Windows console-script launchers prepend the executable path as
+    ``sys.argv[0]`` *and* duplicate it into ``sys.argv[1]``.  When that
+    happens the first user argument looks like ``...asis.exe`` and breaks
+    ``argparse``.  Drop exactly one such leading launcher artifact; normal
+    invocations (including ``python -m asis``) are untouched.
+    """
+    items = list(raw) if raw is not None else sys.argv[1:]
+    if items and items[0].lower().endswith((".exe", "asis", "asis.py", "__main__.py")):
+        first = items[0].replace("\\", "/").lower()
+        if first.endswith(("asis.exe", "/asis", "asis.py", "__main__.py")) or (
+            first == "asis"
+        ):
+            items = items[1:]
+    return items
+
+
+def apply_cli_log_level(args) -> None:
+    """Apply log-level overrides for this CLI invocation.
+
+    Interactive/single-shot sessions default to a quiet console (WARNING)
+    so normal use stays clean (no ``[INFO] Sending tool-enabled
+    request...`` spam).  ``--debug`` forces DEBUG everywhere;
+    ``--log-level`` forces an explicit console level.  File logging is
+    preserved at the configured level; only console noise is reduced.
+
+    Must run before any ``get_logger`` call takes effect AND after, since
+    ``configure_logging()`` (re)creates handlers from settings and would
+    otherwise reset the console level back to INFO.
+    """
+    import logging
+    from logging.handlers import RotatingFileHandler
+
+    from asis.logging.logger import configure_logging
+
+    if getattr(args, "debug", False):
+        console_level = logging.DEBUG
+        file_level = logging.DEBUG
+    elif getattr(args, "log_level", None):
+        console_level = getattr(logging, str(args.log_level).upper(), None)
+        if not isinstance(console_level, int):
+            console_level = logging.WARNING
+        file_level = console_level
+    else:
+        console_level = logging.WARNING
+        file_level = getattr(logging, str(settings.runtime.log_level).upper(), logging.INFO)
+        if not isinstance(file_level, int):
+            file_level = logging.INFO
+
+    # Ensure handlers exist before adjusting them.
+    configure_logging()
+    root = logging.getLogger("asis")
+    # Root must allow the lowest level through; handlers filter the rest.
+    root.setLevel(min(console_level, file_level))
+    for handler in root.handlers:
+        try:
+            if isinstance(handler, RotatingFileHandler):
+                handler.setLevel(file_level)
+            else:
+                handler.setLevel(console_level)
+        except Exception:
+            with contextlib.suppress(Exception):
+                handler.setLevel(console_level)
+
+
+def _build_interactive_pipeline():
+    """Build the shared voice pipeline for the interactive session.
+
+    Reuses the existing voice factory; falls back to scriptable mocks so
+    the terminal works with zero audio hardware or heavy dependencies.
+    Never raises: worst case returns a fully-mocked pipeline.
+    """
+    try:
+        from asis.voice import factory as vf
+        from asis.voice.pipeline import VoicePipeline
+
+        def _try(make, fallback):
+            try:
+                return make()
+            except Exception:
+                return fallback()
+
+        from asis.voice.engines.mock import (
+            MockAudioInput,
+            MockAudioOutput,
+            MockSpeakerIdentifier,
+            MockSpeechRecognizer,
+            MockTextToSpeech,
+            MockVadDetector,
+        )
+
+        pipeline = VoicePipeline(
+            audio_input=_try(vf.create_audio_input, lambda: MockAudioInput([])),
+            speech_recognizer=_try(vf.create_speech_recognizer, MockSpeechRecognizer),
+            speaker_identifier=_try(
+                vf.create_speaker_identifier, MockSpeakerIdentifier
+            ),
+            tts=_try(vf.create_tts, MockTextToSpeech),
+            audio_output=_try(vf.create_audio_output, MockAudioOutput),
+            vad=_try(vf.create_vad, MockVadDetector),
+        )
+        with contextlib.suppress(Exception):
+            pipeline.audio_input.start()
+        return pipeline
+    except Exception:
+        return None
+
+
 def entry(argv: Sequence[str] | None = None) -> int:
     """Console entry point for A.S.I.S."""
-    raw = list(argv) if argv is not None else sys.argv[1:]
+    raw = _normalize_argv(argv)
     if raw and raw[0] == "voice":
         from asis.cli.voice import run_voice
 
@@ -303,7 +425,8 @@ def entry(argv: Sequence[str] | None = None) -> int:
 
         return run_calculate(raw[1:])
 
-    args = build_parser().parse_args(argv)
+    args = build_parser().parse_args(raw)
+    apply_cli_log_level(args)
 
     if args.version:
         print(f"{settings.app_name} {settings.app_version}")
@@ -358,28 +481,33 @@ def entry(argv: Sequence[str] | None = None) -> int:
             print(handle_message(identity, ai, memory, args.message, assistant=app))
             return 0
 
-        print(identity.greeting)
-        shutdown = settings.identity.shutdown_phrase.lower()
-        for raw in sys.stdin:
-            message = raw.strip()
-            if not message:
-                continue
-            if message.lower() == shutdown:
-                print("Shutting down.")
-                break
-            mode_reply = handle_mode_command(app, message)
-            if mode_reply is not None:
-                print(mode_reply)
-                continue
-            print(handle_message(identity, ai, memory, message, assistant=app))
+        # Persistent interactive terminal (TEXT/VOICE, docs, typing effect).
+        from asis.cli.interactive import run_interactive
+        from asis.documents import DocumentStore
+
+        pipeline = _build_interactive_pipeline()
+
+        def _cleanup() -> None:
+            if pipeline is not None:
+                with contextlib.suppress(Exception):
+                    pipeline.stop()
+            if core_manager is not None and core_ctx is not None:
+                with contextlib.suppress(Exception):
+                    core_manager.stop(core_ctx)
+
+        try:
+            return run_interactive(
+                app, pipeline=pipeline, doc_store=DocumentStore(), cleanup=_cleanup
+            )
+        finally:
+            # run_interactive already ran _cleanup; guard double-stop above.
+            pass
     finally:
         # Bounded shutdown: stop new CORE operations, disconnect the
         # device client, and clear the ephemeral session state.
         if core_manager is not None and core_ctx is not None:
-            try:
+            with contextlib.suppress(Exception):
                 core_manager.stop(core_ctx)
-            except Exception:
-                pass
     return 0
 
 

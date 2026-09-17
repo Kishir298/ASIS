@@ -1,0 +1,92 @@
+"""Stdlib-only keyboard watcher: ESC interrupts, CTRL+C exits.
+
+Windows uses ``msvcrt``; POSIX uses ``termios``/``tty`` + ``select``.
+Degrades to a no-op when stdin is not a TTY (tests, pipes).
+"""
+
+from __future__ import annotations
+
+import contextlib
+import sys
+import threading
+from collections.abc import Callable
+
+
+class KeyWatcher:
+    """Watches for ESC in the background; CTRL+C flows via KeyboardInterrupt."""
+
+    def __init__(self, on_esc: Callable[[], None] | None = None) -> None:
+        self._on_esc = on_esc
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.active = False
+
+    def start(self) -> bool:
+        """Start watching. Returns True when a real watcher is running."""
+        if self._thread is not None and self._thread.is_alive():
+            return True
+        try:
+            if not sys.stdin.isatty():
+                return False
+        except Exception:
+            return False
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        self.active = True
+        return True
+
+    def stop(self) -> None:
+        self._stop.set()
+        self.active = False
+
+    def _emit_esc(self) -> None:
+        if self._on_esc is not None:
+            with contextlib.suppress(Exception):
+                self._on_esc()
+
+    def _run(self) -> None:
+        try:
+            if sys.platform == "win32":
+                self._run_windows()
+            else:
+                self._run_posix()
+        except Exception:
+            pass
+
+    def _run_windows(self) -> None:
+        import msvcrt
+
+        while not self._stop.is_set():
+            if msvcrt.kbhit():
+                try:
+                    ch = msvcrt.getwch()
+                except Exception:
+                    continue
+                if ch == "\x1b":  # ESC
+                    self._emit_esc()
+                elif ch == "\x03":  # CTRL+C
+                    raise KeyboardInterrupt
+            self._stop.wait(0.05)
+
+    def _run_posix(self) -> None:
+        import select
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+        try:
+            tty.setcbreak(fd)
+            while not self._stop.is_set():
+                ready, _, _ = select.select([sys.stdin], [], [], 0.05)
+                if not ready:
+                    continue
+                ch = sys.stdin.read(1)
+                if ch == "\x1b":
+                    self._emit_esc()
+                elif ch == "\x03":
+                    raise KeyboardInterrupt
+        finally:
+            with contextlib.suppress(Exception):
+                termios.tcsetattr(fd, termios.TCSADRAIN, old)
