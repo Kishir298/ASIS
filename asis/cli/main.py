@@ -23,6 +23,7 @@ from asis.events import EventBus
 from asis.identity import Identity, build_identity
 from asis.memory import MemoryDatabase, MemoryManager, MemoryStorage
 from asis.tools.provided import (
+    CalculateTool,
     CurrentTimeTool,
     EchoTool,
     TranslateTextTool,
@@ -297,6 +298,10 @@ def entry(argv: Sequence[str] | None = None) -> int:
         from asis.cli.translate import run_translate
 
         return run_translate(raw[1:])
+    if raw and raw[0] == "calculate":
+        from asis.cli.calculate import run_calculate
+
+        return run_calculate(raw[1:])
 
     args = build_parser().parse_args(argv)
 
@@ -312,6 +317,7 @@ def entry(argv: Sequence[str] | None = None) -> int:
         for tool in (
             EchoTool(),
             CurrentTimeTool(),
+            CalculateTool(),
             TranslateTextTool(),
             *build_core_tools(None),
         ):
