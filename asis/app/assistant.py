@@ -49,7 +49,11 @@ def build_default_tool_router(
     executor: ToolExecutor | None = None,
 ) -> ToolRouter:
     """Build the default safe router with the audited built-in tools."""
-    from asis.tools.provided import register_translation_tools, register_web_tools
+    from asis.tools.provided import (
+        register_calculator_tools,
+        register_translation_tools,
+        register_web_tools,
+    )
 
     registry = ToolRegistry()
     registry.register(EchoTool())
@@ -64,6 +68,11 @@ def build_default_tool_router(
     except Exception:
         # Translation tools are optional; never break the default router.
         pass
+    try:
+        register_calculator_tools(registry)
+    except Exception:
+        # Calculator tools are optional; never break the default router.
+        pass
     return ToolRouter(registry=registry, executor=build_executor(executor))
 
 
@@ -73,7 +82,11 @@ def build_coding_tool_router(
 ) -> ToolRouter:
     """Build the coding router (general tools + workspace-bound coding tools)."""
     from asis.coding.tools import build_coding_registry
-    from asis.tools.provided import register_translation_tools, register_web_tools
+    from asis.tools.provided import (
+        register_calculator_tools,
+        register_translation_tools,
+        register_web_tools,
+    )
 
     registry = ToolRegistry()
     registry.register(EchoTool())
@@ -84,6 +97,10 @@ def build_coding_tool_router(
         pass
     try:
         register_translation_tools(registry)
+    except Exception:
+        pass
+    try:
+        register_calculator_tools(registry)
     except Exception:
         pass
     for tool in build_coding_registry(workspace).list_tools():
@@ -134,6 +151,7 @@ class AssistantApp:
         self._ensure_core_tools(self._general_router)
         self._ensure_web_tools(self._general_router)
         self._ensure_translation_tools(self._general_router)
+        self._ensure_calculator_tools(self._general_router)
         translation_settings = settings.translation
         self._translation_source = translation_settings.default_source
         self._translation_target = translation_settings.default_target
@@ -197,6 +215,20 @@ class AssistantApp:
             return
         try:
             register_translation_tools(router.registry)
+        except Exception:
+            # Already registered (or registry rejected) — never fatal.
+            pass
+
+    def _ensure_calculator_tools(self, router: ToolRouter) -> None:
+        """Register shared calculator tools once (duplicate-safe)."""
+        if router is None:
+            return
+        try:
+            from asis.tools.provided import register_calculator_tools
+        except Exception:
+            return
+        try:
+            register_calculator_tools(router.registry)
         except Exception:
             # Already registered (or registry rejected) — never fatal.
             pass
@@ -307,6 +339,7 @@ class AssistantApp:
                 self._ensure_core_tools(self._coding_router)
                 self._ensure_web_tools(self._coding_router)
                 self._ensure_translation_tools(self._coding_router)
+                self._ensure_calculator_tools(self._coding_router)
             return self._coding_router
         return self._general_router
 
@@ -317,6 +350,7 @@ class AssistantApp:
             self._ensure_core_tools(router)
             self._ensure_web_tools(router)
             self._ensure_translation_tools(router)
+            self._ensure_calculator_tools(router)
 
     def _execute_tool(self, request: ToolRequest) -> ToolResult:
         try:

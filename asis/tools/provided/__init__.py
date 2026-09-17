@@ -19,6 +19,11 @@ from .core_tools import (
 )
 from .echo import EchoTool
 from .time import CurrentTimeTool
+from .calculator_tools import (
+    CalculateTool,
+    build_calculator_tools,
+    register_calculator_tools,
+)
 from .translation_tools import (
     TranslateTextTool,
     build_translation_tools,
@@ -34,6 +39,9 @@ from .web_tools import (
 __all__ = [
     "EchoTool",
     "CurrentTimeTool",
+    "CalculateTool",
+    "build_calculator_tools",
+    "register_calculator_tools",
     "TranslateTextTool",
     "build_translation_tools",
     "register_translation_tools",
