@@ -21,6 +21,7 @@ explicit tool requests through registry → router → executor.
 | `web_search` | Web search, bounded structured results (`title`, `url`, `snippet`, `source`) | LOW | Implemented (optional, on by default) |
 | `web_fetch` | Fetch readable text from a public HTTP/HTTPS page (bounded + metadata) | LOW | Implemented (optional, on by default) |
 | `translate_text` | Offline translation (`text`, `target_language`, optional `source_language` → auto-detect) | LOW | Implemented (optional, on by default; mock backend by default) |
+| `calculate` | Offline mathematics (`operation` + string args; exact + verified results) | LOW | Implemented (optional, on by default; SymPy-backed, stdlib only otherwise) |
 
 ## Web access (`asis/web/` + `asis/tools/provided/web_tools.py`)
 

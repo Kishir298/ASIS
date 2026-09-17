@@ -113,6 +113,7 @@ Default personality template supports `{name}`/`{title}`.
 asis/
 ├── ai/               inference, conversation, context, providers
 ├── app/              assistant runtime, tool actions, auto-memory, result
+├── calculator/       offline math engine (SymPy-backed, verified)
 ├── cli/              entry point, chat REPL, voice loop
 ├── configuration/    defaults → env → validated Settings
 ├── errors/           ASISError hierarchy (see below)

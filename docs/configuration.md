@@ -63,6 +63,7 @@ and never touch the global.
 | Tools | `timeout` (>0, per-run bound) |
 | Web | `enabled` (bool, default on), `search_provider` (`duckduckgo` only), `timeout` (1–120), `max_results` (1–10), `max_chars` (500–50000), `max_response_bytes` (10000–5000000), `max_redirects` (0–5), `max_query_length` (1–2000), `max_url_length` (100–8000) |
 | Translation | `enabled` (bool, default on), `provider` (`mock`/`madlad`), `model` (non-empty id), `model_path` (local dir, may be empty), `device` (non-empty, e.g. `cpu`), `cache_enabled` (bool), `cache_size` (1–10000), `default_source` (`auto` or code), `default_target` (code), `max_chars` (1–50000) |
+| Calculator | `enabled` (bool, default on), `max_expression_chars` (100–20000), `max_matrix_size` (2–50), `timeout` (1–300), `precision` (0–30), `angle_mode` (`radians`/`degrees`/`gradians`) |
 | Tool loop | `max_calls_per_turn` (1–10, native calls per turn) |
 | AI native | `native_tools` (`auto`/`true`/`false`) |
 | Coding | `default_mode` (`general`/`coding`/`translation`), `workspace` (dir at use), `command_timeout`/`max_file_size`/`max_output_size` (>0) |
@@ -100,9 +101,11 @@ platform defaults when unset.
 
 ## Reference
 
-`.env.example` documents all 78 variables with type, range, and default
-(71 set explicitly; `ASIS_TRANSLATION_MODEL_PATH` and the 6
+`.env.example` documents all 96 settings variables with type, range,
+and default (87 set explicitly; `ASIS_TRANSLATION_MODEL_PATH`,
+`ASIS_CORE_DEVICE_FILE`, `ASIS_CORE_CA_FILE`, and the 6
 `ASIS_*_DIRECTORY` path overrides appear commented-out since empty /
-platform defaults apply). It is cross-checked
+platform defaults apply). `ASIS_CORE_CREDENTIAL` is runtime-only and
+never belongs in settings. Counts are cross-checked
 against `settings.py` — if they ever disagree, the code wins and the
 file must be fixed.

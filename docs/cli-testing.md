@@ -21,6 +21,13 @@ default from settings; all work offline with `--provider mock`.
 `--model`, `--memory-db PATH`. REPL supports `/tr-to`, `/tr-from`,
 `/mode` (see `docs/translation.md`).
 
+`asis calculate` subcommand (offline deterministic math): positional or
+`--expression TEXT`, `--operation OP` (30 engine operations),
+`--equation/--equations/--variables/--variable/--function/--arguments/`
+`--value/--from/--to/--data/--angle-mode`, repeatable `--param KEY=VALUE`.
+Exit `2` with a `CALCULATION_*` code on failure
+(see `docs/calculator.md`).
+
 `asis voice` flags: `--stt-engine`, `--stt-model`, `--tts-engine`,
 `--tts-voice`, `--speaker-engine`, `--wake-word`, `--no-wake-word`,
 `--provider`, `--model`, `--memory-db PATH`, `--mode`, `--workspace`,

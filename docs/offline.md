@@ -11,7 +11,7 @@ and DNS unavailable.
 |---|---|---|
 | LLM inference | Ollama on loopback (`ASIS_AI_ENDPOINT`, default `http://127.0.0.1:11434`) or `mock` | None / loopback |
 | Memory | Local SQLite (`ASIS_MEMORY_*`, `local` only) | None |
-| Local tools | `echo`, `current_time` | None |
+| Local tools | `echo`, `current_time`, `calculate` | None |
 | Coding (A.S.C.S.) | Workspace FS + local `git`/`pytest`/`python` | None |
 | Voice mocks | All `ASIS_VOICE_*_ENGINE=mock` (defaults) | None |
 | Voice real engines | faster-whisper / speechbrain / silero / openwakeword / pyttsx3 / sounddevice | None **after** one-time model setup (below) |
