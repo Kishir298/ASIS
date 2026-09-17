@@ -7,6 +7,11 @@ identity all work with no C.O.R.E. or R.E.S.C.S. process present (C.O.R.E.
 is a real but optional uplink; R.E.S.C.S. remains a future boundary —
 see `docs/integration.md`).
 
+A.S.I.S. is offline-first: everything above runs with no public
+internet — the only intentional internet boundary is the web tool
+branch (`web_search`/`web_fetch`, optional via `ASIS_WEB_ENABLED`),
+and CORE stays LAN-only. Details in `docs/offline.md`.
+
 ## Runtime shape
 
 ```text

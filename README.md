@@ -24,6 +24,7 @@ but optional uplink; R.E.S.C.S. remains a future boundary; see
 | CLI (`asis`, `asis voice`) | Implemented (stateful multi-turn) |
 | Shutdown timeout | Implemented (bounded stop, FAILED + log on expiry) |
 | C.O.R.E. integration | Implemented (optional uplink; standalone by default) |
+| Offline-first | Implemented (local-only except explicit web tools; see `docs/offline.md`) |
 | R.E.S.C.S. integration | Future (placeholder adapter) |
 
 ## Docs
@@ -31,6 +32,7 @@ but optional uplink; R.E.S.C.S. remains a future boundary; see
 | File | Covers |
 |---|---|
 | `docs/architecture.md` | runtime, lifecycle, identity, errors, logging |
+| `docs/offline.md` | offline-first operation, model setup, web boundary |
 | `docs/configuration.md` | settings, precedence, validation, paths |
 | `docs/ai-memory.md` | providers, inference, conversation, memory |
 | `docs/coding.md` | A.S.C.S. modes, workspace, coding tools, permissions |

@@ -8,7 +8,7 @@ Abstract contract `AIProvider`: `name`, `model`, `chat(messages)`,
 | Provider | Status | Details |
 |---|---|---|
 | `mock` | Implemented (tests/dev) | `MockAIProvider`: scripted responses, `fail`/`delay` knobs, offline; optional scripted `tool_sequences` enable native-call tests |
-| `ollama` | Implemented (optional dep) | Local server: model/host/timeout/**temperature**/**retries** from settings; `temperature` sent as chat `options` only when set; `available()` probes `/api/tags`; native function calling via `/api/chat` `tools` (`supports_native_tools=True`, model-dependent) |
+| `ollama` | Implemented (needs `requests` + a local Ollama server) | Local server: model/host/timeout/**temperature**/**retries** from settings; `temperature` sent as chat `options` only when set; `available()` probes `/api/tags` with a capped probe timeout (fast offline/down detection); native function calling via `/api/chat` `tools` (`supports_native_tools=True`, model-dependent). Down server → deterministic `InferenceError` (no cloud fallback, no auto-download); use `ASIS_AI_PROVIDER=mock` for fully offline runs without Ollama |
 
 No Hugging Face or cloud providers exist — anything else is future.
 

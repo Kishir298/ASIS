@@ -58,7 +58,8 @@ claim 100% coverage.
   `pyproject.toml`/`requirements/base.txt` but not yet imported by any
   `asis/` module — reserved for future system/resource features),
   `python-dotenv`.
-- **AI (optional):** `requests`, `ollama`.
+- **AI (optional):** `requests` (the Ollama provider uses HTTP via
+  `requests`; the `ollama` client package is not used).
 - **Voice (optional):** `numpy`, `scipy`, `sounddevice`, `soundfile`,
   `silero-vad`, `faster-whisper`, `torch`, `torchaudio`, `speechbrain`,
   `openwakeword`, `pyttsx3` (+ `pycaw/comtypes/pywin32` on Windows).
