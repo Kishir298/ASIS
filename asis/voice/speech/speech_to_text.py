@@ -53,11 +53,24 @@ class SpeechTranscriber:
                 "ASIS_VOICE_STT_ENGINE=mock."
             ) from exc
 
-        self.model = WhisperModel(
-            model_size,
-            device=device,
-            compute_type=compute_type,
-        )
+        try:
+            self.model = WhisperModel(
+                model_size,
+                device=device,
+                compute_type=compute_type,
+            )
+        except Exception as exc:
+            from asis.errors import SpeechRecognitionError
+            from asis.voice.model_cache import model_missing_message
+
+            raise SpeechRecognitionError(
+                model_missing_message(
+                    engine="STT",
+                    model=str(model_size),
+                    setting="ASIS_VOICE_STT_ENGINE",
+                    detail=str(exc)[:200],
+                )
+            ) from exc
 
     def transcribe(
         self,

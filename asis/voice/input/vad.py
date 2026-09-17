@@ -80,10 +80,22 @@ class VoiceActivityDetector:
 
         self.device = torch.device("cpu")
 
-        if model_path is not None:
-            self.model = load_silero_vad(model_path=str(model_path))
-        else:
-            self.model = load_silero_vad()
+        try:
+            if model_path is not None:
+                self.model = load_silero_vad(model_path=str(model_path))
+            else:
+                self.model = load_silero_vad()
+        except Exception as exc:
+            from asis.voice.model_cache import model_missing_message
+
+            raise VoiceError(
+                model_missing_message(
+                    engine="VAD",
+                    model=str(model_path) if model_path is not None else "silero-vad",
+                    setting="ASIS_VOICE_VAD_ENGINE",
+                    detail=str(exc)[:200],
+                )
+            ) from exc
 
         self.model.to(self.device)
         self.model.eval()

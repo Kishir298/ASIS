@@ -15,6 +15,11 @@ from asis.errors import InferenceError
 from ..models import AIMessage, AIResponse, NativeToolCall
 from .base import AIProvider
 
+# Upper bound for the implicit availability probe so a down/unreachable
+# server is reported fast. Inference timeouts are unaffected; callers may
+# still pass an explicit ``timeout`` to ``available()``.
+AVAILABILITY_PROBE_TIMEOUT = 5.0
+
 
 class OllamaProvider(AIProvider):
     """AI provider backed by a local Ollama server."""
@@ -44,11 +49,20 @@ class OllamaProvider(AIProvider):
         return self._model
 
     def available(self, timeout: float | None = None) -> bool:
-        """Return True when the Ollama server is reachable."""
+        """Return True when the Ollama server is reachable.
+
+        The implicit probe is capped at ``AVAILABILITY_PROBE_TIMEOUT``
+        seconds so offline/down servers report fast instead of blocking
+        on the (long) inference timeout.
+        """
+        if timeout is None:
+            probe = min(float(self.timeout), AVAILABILITY_PROBE_TIMEOUT)
+        else:
+            probe = timeout
         try:
             response = requests.get(
                 f"{self.host}/api/tags",
-                timeout=self.timeout if timeout is None else timeout,
+                timeout=probe,
             )
             return response.ok
 

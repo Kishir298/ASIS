@@ -76,7 +76,18 @@ class OpenWakeWordDetector(WakeWordDetector):
             else:
                 self._model = Model(inference_framework="onnx")
         except Exception as exc:
-            raise VoiceError(f"could not load wake-word model: {exc}") from exc
+            from asis.voice.model_cache import model_missing_message
+
+            raise VoiceError(
+                model_missing_message(
+                    engine="wake-word",
+                    model=str(self._model_path)
+                    if self._model_path
+                    else "openwakeword-default",
+                    setting="ASIS_VOICE_WAKE_ENGINE",
+                    detail=str(exc)[:200],
+                )
+            ) from exc
 
     @property
     def phrases(self) -> tuple[str, ...]:

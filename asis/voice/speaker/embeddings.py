@@ -115,8 +115,15 @@ class SpeechBrainEmbeddingProvider(SpeakerEmbeddingProvider):
                 source=model, run_opts={"device": device}
             )
         except Exception as exc:
+            from asis.voice.model_cache import model_missing_message
+
             raise SpeakerRecognitionError(
-                f"Could not load speaker model '{model}': {exc}"
+                model_missing_message(
+                    engine="speaker",
+                    model=str(model),
+                    setting="ASIS_VOICE_SPEAKER_ENGINE",
+                    detail=str(exc)[:200],
+                )
             ) from exc
 
     def embed(self, audio: AudioData) -> list[float]:
