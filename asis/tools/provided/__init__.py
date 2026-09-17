@@ -19,10 +19,20 @@ from .core_tools import (
 )
 from .echo import EchoTool
 from .time import CurrentTimeTool
+from .web_tools import (
+    WebFetchTool,
+    WebSearchTool,
+    build_web_tools,
+    register_web_tools,
+)
 
 __all__ = [
     "EchoTool",
     "CurrentTimeTool",
+    "WebFetchTool",
+    "WebSearchTool",
+    "build_web_tools",
+    "register_web_tools",
     "CoreAgentRequestTool",
     "CoreDataRequestTool",
     "CoreDeviceInfoTool",

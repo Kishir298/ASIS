@@ -56,6 +56,21 @@ class ToolSettings:
 
 
 @dataclass(frozen=True)
+class WebSettings:
+    """Optional basic web access (search + fetch, standalone capability)."""
+
+    enabled: bool
+    search_provider: str
+    timeout: int
+    max_results: int
+    max_chars: int
+    max_response_bytes: int
+    max_redirects: int
+    max_query_length: int
+    max_url_length: int
+
+
+@dataclass(frozen=True)
 class SecuritySettings:
     require_confirmation_for_dangerous: bool
 
@@ -181,6 +196,7 @@ class Settings:
     conversation: ConversationSettings
     network: NetworkSettings
     tools: ToolSettings
+    web: WebSettings
     security: SecuritySettings
     memory: MemorySettings
     voice: VoiceSettings
@@ -261,6 +277,39 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
                 timeout=get_i("ASIS_TOOL_TIMEOUT", d.TOOL_TIMEOUT),
                 max_calls_per_turn=environment.get_bounded_int(
                     "ASIS_TOOL_MAX_CALLS_PER_TURN", d.TOOL_MAX_CALLS_PER_TURN, 1, 10
+                ),
+            ),
+            web=WebSettings(
+                enabled=get_b("ASIS_WEB_ENABLED", d.WEB_ENABLED),
+                search_provider=get_s(
+                    "ASIS_WEB_SEARCH_PROVIDER", d.WEB_SEARCH_PROVIDER
+                ),
+                timeout=environment.get_bounded_int(
+                    "ASIS_WEB_TIMEOUT", d.WEB_TIMEOUT, 1, 120
+                ),
+                max_results=environment.get_bounded_int(
+                    "ASIS_WEB_MAX_RESULTS", d.WEB_MAX_RESULTS, 1, 10
+                ),
+                max_chars=environment.get_bounded_int(
+                    "ASIS_WEB_MAX_CHARS", d.WEB_MAX_CHARS, 500, 50_000
+                ),
+                max_response_bytes=environment.get_bounded_int(
+                    "ASIS_WEB_MAX_RESPONSE_BYTES",
+                    d.WEB_MAX_RESPONSE_BYTES,
+                    10_000,
+                    5_000_000,
+                ),
+                max_redirects=environment.get_bounded_int(
+                    "ASIS_WEB_MAX_REDIRECTS", d.WEB_MAX_REDIRECTS, 0, 5
+                ),
+                max_query_length=environment.get_bounded_int(
+                    "ASIS_WEB_MAX_QUERY_LENGTH",
+                    d.WEB_MAX_QUERY_LENGTH,
+                    1,
+                    2_000,
+                ),
+                max_url_length=environment.get_bounded_int(
+                    "ASIS_WEB_MAX_URL_LENGTH", d.WEB_MAX_URL_LENGTH, 100, 8_000
                 ),
             ),
             security=SecuritySettings(

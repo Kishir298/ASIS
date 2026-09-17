@@ -134,6 +134,33 @@ def validate_settings(settings: Settings) -> Settings:
             f"integer between 1 and 10, received {calls!r}."
         )
 
+    # Web (optional basic web access)
+    if not isinstance(settings.web.enabled, bool):
+        raise ConfigurationError(
+            "Invalid configuration web.enabled: expected a boolean."
+        )
+    _require_non_empty("web", "search_provider", settings.web.search_provider)
+    if settings.web.search_provider.strip().lower() not in ("duckduckgo",):
+        raise ConfigurationError(
+            "Invalid configuration web.search_provider: expected one of "
+            f"'duckduckgo', received {settings.web.search_provider!r}."
+        )
+    for field_name, low, high in (
+        ("timeout", 1, 120),
+        ("max_results", 1, 10),
+        ("max_chars", 500, 50_000),
+        ("max_response_bytes", 10_000, 5_000_000),
+        ("max_redirects", 0, 5),
+        ("max_query_length", 1, 2_000),
+        ("max_url_length", 100, 8_000),
+    ):
+        value = getattr(settings.web, field_name)
+        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+            raise ConfigurationError(
+                f"Invalid configuration web.{field_name}: expected an "
+                f"integer between {low} and {high}, received {value!r}."
+            )
+
     # Security
     if not isinstance(settings.security.require_confirmation_for_dangerous, bool):
         raise ConfigurationError(

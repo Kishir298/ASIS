@@ -77,6 +77,17 @@ TOOL_TIMEOUT = 30
 # Maximum validated native tool calls per assistant turn (1-10).
 TOOL_MAX_CALLS_PER_TURN = 3
 
+# Basic web access (optional capability; standalone by default)
+WEB_ENABLED = True
+WEB_SEARCH_PROVIDER = "duckduckgo"
+WEB_TIMEOUT = 10
+WEB_MAX_RESULTS = 5
+WEB_MAX_CHARS = 8_000
+WEB_MAX_RESPONSE_BYTES = 1_000_000
+WEB_MAX_REDIRECTS = 3
+WEB_MAX_QUERY_LENGTH = 500
+WEB_MAX_URL_LENGTH = 2_000
+
 # Security / permissions
 REQUIRE_CONFIRMATION_FOR_DANGEROUS = True
 
