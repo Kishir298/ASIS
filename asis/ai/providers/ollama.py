@@ -10,6 +10,7 @@ from typing import Any
 
 import requests
 
+from asis.configuration.defaults import AI_MODEL as DEFAULT_OLLAMA_MODEL
 from asis.errors import InferenceError
 
 from ..models import AIMessage, AIResponse, NativeToolCall
@@ -26,7 +27,7 @@ class OllamaProvider(AIProvider):
 
     def __init__(
         self,
-        model: str = "qwen2.5:3b",
+        model: str = DEFAULT_OLLAMA_MODEL,
         host: str = "http://127.0.0.1:11434",
         timeout: float = 120.0,
         temperature: float | None = None,

@@ -19,7 +19,7 @@ LOG_LEVEL = "INFO"
 
 # AI provider
 AI_PROVIDER = "ollama"
-AI_MODEL = "qwen2.5:3b"
+AI_MODEL = "qwen3:14b"
 AI_ENDPOINT = "http://127.0.0.1:11434"
 
 # AI behavior
