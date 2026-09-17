@@ -87,6 +87,18 @@ class TranslationSettings:
 
 
 @dataclass(frozen=True)
+class CalculatorSettings:
+    """Local deterministic calculator engine (offline, SymPy-backed)."""
+
+    enabled: bool
+    max_expression_chars: int
+    max_matrix_size: int
+    timeout: int
+    precision: int
+    angle_mode: str
+
+
+@dataclass(frozen=True)
 class SecuritySettings:
     require_confirmation_for_dangerous: bool
 
@@ -214,6 +226,7 @@ class Settings:
     tools: ToolSettings
     web: WebSettings
     translation: TranslationSettings
+    calculator: CalculatorSettings
     security: SecuritySettings
     memory: MemorySettings
     voice: VoiceSettings
@@ -352,6 +365,28 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
                 max_chars=environment.get_bounded_int(
                     "ASIS_TRANSLATION_MAX_CHARS", d.TRANSLATION_MAX_CHARS, 1, 50_000
                 ),
+            ),
+            calculator=CalculatorSettings(
+                enabled=get_b("ASIS_CALCULATOR_ENABLED", d.CALCULATOR_ENABLED),
+                max_expression_chars=environment.get_bounded_int(
+                    "ASIS_CALCULATOR_MAX_EXPRESSION_CHARS",
+                    d.CALCULATOR_MAX_EXPRESSION_CHARS,
+                    100,
+                    20_000,
+                ),
+                max_matrix_size=environment.get_bounded_int(
+                    "ASIS_CALCULATOR_MAX_MATRIX_SIZE",
+                    d.CALCULATOR_MAX_MATRIX_SIZE,
+                    2,
+                    50,
+                ),
+                timeout=environment.get_bounded_int(
+                    "ASIS_CALCULATOR_TIMEOUT", d.CALCULATOR_TIMEOUT, 1, 300
+                ),
+                precision=environment.get_bounded_int(
+                    "ASIS_CALCULATOR_PRECISION", d.CALCULATOR_PRECISION, 0, 30
+                ),
+                angle_mode=get_s("ASIS_CALCULATOR_ANGLE_MODE", d.CALCULATOR_ANGLE_MODE),
             ),
             security=SecuritySettings(
                 require_confirmation_for_dangerous=get_b(

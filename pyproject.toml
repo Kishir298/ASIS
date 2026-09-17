@@ -15,6 +15,7 @@ dependencies = [
     "platformdirs>=4",
     "psutil>=5.9",
     "python-dotenv>=1.0",
+    "sympy>=1.13",
 ]
 
 [project.optional-dependencies]

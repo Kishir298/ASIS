@@ -3,3 +3,5 @@
 platformdirs>=4
 psutil>=5.9
 python-dotenv>=1.0
+# Local offline mathematics (calculator engine; pure Python, no network).
+sympy>=1.13

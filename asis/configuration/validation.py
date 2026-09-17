@@ -228,6 +228,35 @@ def validate_settings(settings: Settings) -> Settings:
             f"integer between 1 and 50000, received {max_chars!r}."
         )
 
+    # Calculator (local deterministic engine)
+    if not isinstance(settings.calculator.enabled, bool):
+        raise ConfigurationError(
+            "Invalid configuration calculator.enabled: expected a boolean."
+        )
+    for field_name, low, high in (
+        ("max_expression_chars", 100, 20_000),
+        ("max_matrix_size", 2, 50),
+        ("timeout", 1, 300),
+        ("precision", 0, 30),
+    ):
+        value = getattr(settings.calculator, field_name)
+        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+            raise ConfigurationError(
+                f"Invalid configuration calculator.{field_name}: expected an "
+                f"integer between {low} and {high}, received {value!r}."
+            )
+    _require_non_empty("calculator", "angle_mode", settings.calculator.angle_mode)
+    if settings.calculator.angle_mode.strip().lower() not in (
+        "radians",
+        "degrees",
+        "gradians",
+    ):
+        raise ConfigurationError(
+            "Invalid configuration calculator.angle_mode: expected one of "
+            "'radians', 'degrees', 'gradians', received "
+            f"{settings.calculator.angle_mode!r}."
+        )
+
     # Security
     if not isinstance(settings.security.require_confirmation_for_dangerous, bool):
         raise ConfigurationError(
