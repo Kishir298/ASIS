@@ -171,6 +171,13 @@ python3 -m pytest -q        # canonical suite (tests/)
 ## CLI
 
 ```bash
+asis                  # persistent interactive terminal (text/voice/docs)
 asis --help
-asis voice                  # voice loop (mock engines by default)
+asis --message "hi"   # single shot (default model qwen3:14b)
+asis voice            # voice loop (mock engines by default)
+python -m asis        # alias for the asis console script
 ```
+
+Interactive commands: `/help`, `/mode [text|voice]`, `/upload <path>` /
+`/attach <path>`, `/docs`, `/clear-docs`, `/clear`, `/exit`, `/quit`.
+ESC interrupts the response/speech; CTRL+C exits cleanly.

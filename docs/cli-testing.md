@@ -3,18 +3,35 @@
 ## CLI
 
 Installed entry point `asis` (`pyproject.toml [project.scripts]`).
-There is **no `python -m asis`** (`__main__.py` does not exist) — use
-the `asis` command (or `entry()` programmatically).
+`python -m asis` is supported as an alias (`asis/__main__.py`).
 
-`asis` flags (verified from `--help`): `--version`, `--identify`
-(prints configured identity system prompt), `--provider
-{mock,ollama}`, `--model MODEL`, `--memory-db PATH`, `--list-tools`,
-`--message TEXT` (single shot, else stdin REPL until the shutdown
-phrase, default `asis shutdown`), `--mode {general,coding,translation}`,
-`--workspace PATH`. REPL commands: `/mode [general|coding|translation]`,
-`/ascs` (coding shortcut), `/translate` (translation shortcut),
-`/tr-to LANG` / `/tr-from LANG|auto`, `/mode` (print current). All
-default from settings; all work offline with `--provider mock`.
+Bare `asis` launches the persistent interactive terminal (TEXT/VOICE,
+documents, typing effect) on top of the existing `AssistantApp` runtime:
+
+```text
+A.S.I.S. ready.
+
+You > hello
+
+A.S.I.S. > Hello! How can I help?
+
+You >
+```
+
+`asis` flags: `--version`, `--identify`, `--provider {mock,ollama}`,
+`--model MODEL` (default `qwen3:14b`), `--memory-db PATH`,
+`--list-tools`, `--core-status`, `--message TEXT` (single shot),
+`--mode {general,coding,translation}`, `--workspace PATH`, `--debug`,
+`--log-level LEVEL`. Normal interactive use defaults to a quiet console
+(WARNING); `--debug` restores verbose logs. File logging is preserved.
+
+Interactive slash commands (handled by the CLI, never sent to the LLM):
+`/help`, `/mode [text|voice]` (bare `/mode` toggles), `/upload <path>` /
+`/attach <path>` (`.txt .md .pdf .docx .csv .json`), `/docs`,
+`/clear-docs`, `/clear`, `/exit`, `/quit`. Keys: ENTER submit, ESC
+interrupt response/speech (app stays alive), CTRL+C exit cleanly with
+terminal restore. Documents persist across text/voice switches and are
+injected as bounded offline context (4k chars/doc, 12k total).
 
 `asis translate` subcommand (offline translation REPL/single-shot):
 `--to LANG`, `--from LANG|auto`, `--message TEXT`, `--provider`,
@@ -38,7 +55,9 @@ failures exit `2` unless `--debug` re-raises.
 ## Testing
 
 ```bash
-python3 -m pytest -q        # full suite: 197 tests, ~11s
+python -m pytest -q        # full deterministic suite (no HW/net/GPU)
+python -m pytest tests/test_cli.py tests/test_interactive.py tests/test_cli_hardening.py -q
+python -m pytest tests/test_voice.py tests/test_voice_runner.py tests/test_ollama_model_default.py -q
 ```
 
 | File | Collected tests | Covers |
@@ -76,6 +95,9 @@ claim 100% coverage.
 - **Voice (optional):** `numpy`, `scipy`, `sounddevice`, `soundfile`,
   `silero-vad`, `faster-whisper`, `torch`, `torchaudio`, `speechbrain`,
   `openwakeword`, `pyttsx3` (+ `pycaw/comtypes/pywin32` on Windows).
+- **Docs (optional):** `pypdf`, `python-docx` (`requirements/docs.txt`,
+  `pip install -e ".[docs]"`). Parsers fall back to stdlib-only
+  extraction when these are absent.
 - **Dev:** `pytest`, `pytest-cov`, `ruff`, `black` (line-length 88;
   ruff rules `E,F,W,I,UP,B,SIM`).
 
