@@ -40,7 +40,7 @@ def test_defaults_load_without_environment(monkeypatch):
             monkeypatch.delenv(key, raising=False)
     config = load_settings()
     assert config.ai.provider == "ollama"
-    assert config.ai.model == "qwen2.5:3b"
+    assert config.ai.model == "qwen3:14b"
     assert config.ai.endpoint == "http://127.0.0.1:11434"
     assert config.ai.request_timeout == 120
     assert config.ai.temperature == 0.7
@@ -257,7 +257,7 @@ def test_empty_values_count_as_unset(monkeypatch):
     monkeypatch.setenv("ASIS_AI_MODEL", "   ")
     monkeypatch.setenv("ASIS_VOICE_WAKE_WORD", "")
     config = load_settings()
-    assert config.ai.model == "qwen2.5:3b"
+    assert config.ai.model == "qwen3:14b"
     assert config.voice.wake_word == "hey asis"
 
 
