@@ -28,6 +28,16 @@ _GENERAL_PHRASES = (
     "disable coding mode",
     "disable ascs",
     "exit coding mode",
+    "exit translation mode",
+    "disable translation mode",
+)
+
+_TRANSLATION_PHRASES = (
+    "switch to translation mode",
+    "enable translation mode",
+    "go to translation mode",
+    "start translation mode",
+    "translation mode",
 )
 
 
@@ -38,6 +48,8 @@ def parse_voice_mode_command(text: str) -> AssistantMode | None:
         return None
     if normalized in _CODING_PHRASES:
         return AssistantMode.CODING
+    if normalized in _TRANSLATION_PHRASES:
+        return AssistantMode.TRANSLATION
     if normalized in _GENERAL_PHRASES:
         return AssistantMode.GENERAL
     return None

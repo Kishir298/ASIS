@@ -17,6 +17,7 @@ class AssistantMode(StrEnum):
 
     GENERAL = "general"
     CODING = "coding"
+    TRANSLATION = "translation"
 
 
 def parse_mode(value: str) -> AssistantMode:

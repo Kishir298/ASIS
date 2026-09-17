@@ -22,7 +22,12 @@ from asis.configuration import settings
 from asis.events import EventBus
 from asis.identity import Identity, build_identity
 from asis.memory import MemoryDatabase, MemoryManager, MemoryStorage
-from asis.tools.provided import CurrentTimeTool, EchoTool, build_core_tools
+from asis.tools.provided import (
+    CurrentTimeTool,
+    EchoTool,
+    TranslateTextTool,
+    build_core_tools,
+)
 
 
 def build_memory(db_path: str | Path | None = None) -> MemoryManager:
@@ -171,7 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mode",
         default=settings.coding.default_mode,
-        choices=["general", "coding"],
+        choices=["general", "coding", "translation"],
         help="assistant mode to use (default: %(default)s)",
     )
     parser.add_argument(
@@ -222,12 +227,18 @@ def core_status_line() -> str:
 
 
 def handle_mode_command(app: AssistantApp, message: str) -> str | None:
-    """Handle /mode and /ascs REPL commands; None when not a mode command."""
+    """Handle /mode, /ascs, /translate and translation REPL commands."""
     text = message.strip()
     lowered = text.lower()
     if lowered == "/ascs":
         app.set_mode(AssistantMode.CODING)
         return f"A.S.C.S. coding mode enabled.\nWorkspace: {app.workspace.root}"
+    if lowered == "/translate":
+        app.set_mode(AssistantMode.TRANSLATION)
+        return (
+            "Translation mode enabled "
+            f"(source={app.translation_source}, target={app.translation_target})."
+        )
     if lowered == "/mode":
         return f"Current mode: {app.mode.value}"
     if lowered.startswith("/mode "):
@@ -237,7 +248,24 @@ def handle_mode_command(app: AssistantApp, message: str) -> str | None:
             return str(exc)
         if app.mode is AssistantMode.CODING:
             return f"A.S.C.S. coding mode enabled.\nWorkspace: {app.workspace.root}"
+        if app.mode is AssistantMode.TRANSLATION:
+            return (
+                "Translation mode enabled "
+                f"(source={app.translation_source}, target={app.translation_target})."
+            )
         return "A.S.I.S. general mode enabled."
+    if lowered.startswith("/tr-to "):
+        try:
+            _, target = app.set_translation_languages(target=text.split(None, 1)[1])
+        except ValueError as exc:
+            return str(exc)
+        return f"Translation target: {target}."
+    if lowered.startswith("/tr-from "):
+        try:
+            source, _ = app.set_translation_languages(source=text.split(None, 1)[1])
+        except ValueError as exc:
+            return str(exc)
+        return f"Translation source: {source}."
     return None
 
 
@@ -265,6 +293,10 @@ def entry(argv: Sequence[str] | None = None) -> int:
         from asis.cli.voice import run_voice
 
         return run_voice(raw[1:])
+    if raw and raw[0] == "translate":
+        from asis.cli.translate import run_translate
+
+        return run_translate(raw[1:])
 
     args = build_parser().parse_args(argv)
 
@@ -277,7 +309,12 @@ def entry(argv: Sequence[str] | None = None) -> int:
         return 0
 
     if args.list_tools:
-        for tool in (EchoTool(), CurrentTimeTool(), *build_core_tools(None)):
+        for tool in (
+            EchoTool(),
+            CurrentTimeTool(),
+            TranslateTextTool(),
+            *build_core_tools(None),
+        ):
             print(f"{tool.name}: {tool.description}")
         return 0
 

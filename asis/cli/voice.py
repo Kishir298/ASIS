@@ -93,7 +93,7 @@ def build_voice_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--mode",
         default=settings.coding.default_mode,
-        choices=["general", "coding"],
+        choices=["general", "coding", "translation"],
         help="assistant mode to use (default: %(default)s)",
     )
     parser.add_argument(

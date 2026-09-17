@@ -49,7 +49,7 @@ def build_default_tool_router(
     executor: ToolExecutor | None = None,
 ) -> ToolRouter:
     """Build the default safe router with the audited built-in tools."""
-    from asis.tools.provided import register_web_tools
+    from asis.tools.provided import register_translation_tools, register_web_tools
 
     registry = ToolRegistry()
     registry.register(EchoTool())
@@ -58,6 +58,11 @@ def build_default_tool_router(
         register_web_tools(registry)
     except Exception:
         # Web tools are optional; never break the default router.
+        pass
+    try:
+        register_translation_tools(registry)
+    except Exception:
+        # Translation tools are optional; never break the default router.
         pass
     return ToolRouter(registry=registry, executor=build_executor(executor))
 
@@ -68,13 +73,17 @@ def build_coding_tool_router(
 ) -> ToolRouter:
     """Build the coding router (general tools + workspace-bound coding tools)."""
     from asis.coding.tools import build_coding_registry
-    from asis.tools.provided import register_web_tools
+    from asis.tools.provided import register_translation_tools, register_web_tools
 
     registry = ToolRegistry()
     registry.register(EchoTool())
     registry.register(CurrentTimeTool())
     try:
         register_web_tools(registry)
+    except Exception:
+        pass
+    try:
+        register_translation_tools(registry)
     except Exception:
         pass
     for tool in build_coding_registry(workspace).list_tools():
@@ -124,6 +133,10 @@ class AssistantApp:
         self._general_router = tools_router or build_default_tool_router()
         self._ensure_core_tools(self._general_router)
         self._ensure_web_tools(self._general_router)
+        self._ensure_translation_tools(self._general_router)
+        translation_settings = settings.translation
+        self._translation_source = translation_settings.default_source
+        self._translation_target = translation_settings.default_target
 
     @property
     def core_available(self) -> bool:
@@ -174,6 +187,20 @@ class AssistantApp:
             # Already registered (or registry rejected) — never fatal.
             pass
 
+    def _ensure_translation_tools(self, router: ToolRouter) -> None:
+        """Register shared translation tools once (duplicate-safe)."""
+        if router is None:
+            return
+        try:
+            from asis.tools.provided import register_translation_tools
+        except Exception:
+            return
+        try:
+            register_translation_tools(router.registry)
+        except Exception:
+            # Already registered (or registry rejected) — never fatal.
+            pass
+
     @staticmethod
     def _coerce_mode(mode: AssistantMode | str | None) -> AssistantMode:
         if mode is None:
@@ -192,6 +219,34 @@ class AssistantApp:
         self._mode = self._coerce_mode(mode)
         self.logger.info("Assistant mode: %s", self._mode.value)
         return self._mode
+
+    @property
+    def translation_source(self) -> str:
+        """Session source language (``auto`` means detect per message)."""
+        return self._translation_source
+
+    @property
+    def translation_target(self) -> str:
+        """Session target language."""
+        return self._translation_target
+
+    def set_translation_languages(
+        self, source: str | None = None, target: str | None = None
+    ) -> tuple[str, str]:
+        """Set session translation languages (validated registry codes)."""
+        from asis.translation.languages import normalize_code
+
+        if source is not None:
+            cleaned = source.strip().lower()
+            if cleaned != "auto" and normalize_code(cleaned) is None:
+                raise ValueError(f"Unsupported source language: {source!r}.")
+            self._translation_source = cleaned
+        if target is not None:
+            code = normalize_code(target)
+            if code is None:
+                raise ValueError(f"Unsupported target language: {target!r}.")
+            self._translation_target = code
+        return self._translation_source, self._translation_target
 
     @property
     def workspace(self):
@@ -235,6 +290,8 @@ class AssistantApp:
                 sections.append(self._coding_resolver.build())
             except Exception as exc:
                 self.logger.warning("Coding context unavailable, continuing: %s", exc)
+        elif self._mode is AssistantMode.TRANSLATION:
+            sections.append(get_profile(self._mode).instructions)
         text = "\n\n".join(s for s in sections if s.strip())
         return text
 
@@ -249,6 +306,7 @@ class AssistantApp:
                 )
                 self._ensure_core_tools(self._coding_router)
                 self._ensure_web_tools(self._coding_router)
+                self._ensure_translation_tools(self._coding_router)
             return self._coding_router
         return self._general_router
 
@@ -258,6 +316,7 @@ class AssistantApp:
             self._general_router = router
             self._ensure_core_tools(router)
             self._ensure_web_tools(router)
+            self._ensure_translation_tools(router)
 
     def _execute_tool(self, request: ToolRequest) -> ToolResult:
         try:
@@ -354,6 +413,25 @@ class AssistantApp:
         self.session.add_assistant(final.content)
         return final.content
 
+    def _run_translation_turn(self, text: str) -> str:
+        """Translate directly through the shared router (no LLM needed)."""
+        result = self.tools_router.execute(
+            "translate_text",
+            text=text,
+            target_language=self._translation_target,
+            source_language=self._translation_source,
+        )
+        if result.success:
+            data = result.data or {}
+            reply = str(data.get("translated_text", ""))
+            if data.get("detected_source"):
+                reply = f"[{data.get('source_language')}] {reply}"
+            self.session.add_assistant(reply)
+            return reply
+        note = str(result.error or "translation failed.")
+        self.session.add_assistant(f"[translation error] {note}")
+        return note
+
     def chat(self, message: str) -> str:
         """Process one user message through the full wired pipeline."""
         text = (message or "").strip()
@@ -364,6 +442,8 @@ class AssistantApp:
         explicit = self._run_core_command(text)
         if explicit is not None:
             return explicit
+        if self._mode is AssistantMode.TRANSLATION:
+            return self._run_translation_turn(text)
         self._pending_memory_query = text
         try:
             native_reply = self._run_native_tool_loop(text)
