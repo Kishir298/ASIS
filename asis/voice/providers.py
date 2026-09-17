@@ -64,6 +64,10 @@ class TextToSpeechProvider(ABC):
     def synthesize(self, text: str) -> AudioData:
         raise NotImplementedError
 
+    def stop(self) -> None:
+        """Interrupt active speech where supported (no-op by default)."""
+        return None
+
 
 class WakeWordDetector(ABC):
     """Detects a configured wake phrase in audio.

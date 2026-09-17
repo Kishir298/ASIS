@@ -115,6 +115,7 @@ class MockTextToSpeech(TextToSpeechProvider):
     def __init__(self, sample_rate: int = 16_000) -> None:
         self._sample_rate = sample_rate
         self.synthesized: list[str] = []
+        self.stopped = False
 
     def synthesize(self, text: str) -> AudioData:
         self.synthesized.append(text)
@@ -123,6 +124,9 @@ class MockTextToSpeech(TextToSpeechProvider):
             samples=[0, 0, 0],
             sample_rate=self._sample_rate,
         )
+
+    def stop(self) -> None:
+        self.stopped = True
 
 
 class MockWakeWordDetector(WakeWordDetector):

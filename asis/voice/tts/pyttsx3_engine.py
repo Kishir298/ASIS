@@ -63,6 +63,13 @@ class Pyttsx3Engine(TextToSpeechProvider):
     def sample_rate(self) -> int:
         return self._sample_rate
 
+    def stop(self) -> None:
+        """Interrupt active speech where supported (pyttsx3 stop, safe)."""
+        try:
+            self._engine.stop()
+        except Exception as exc:
+            self._logger.warning("TTS stop warning: %s", exc)
+
     def synthesize(self, text: str) -> AudioData:
         if not isinstance(text, str) or not text.strip():
             raise TTSError("text must be a non-empty str.")
