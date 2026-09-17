@@ -71,6 +71,22 @@ class WebSettings:
 
 
 @dataclass(frozen=True)
+class TranslationSettings:
+    """Optional local translation engine (offline, mock backend default)."""
+
+    enabled: bool
+    provider: str
+    model: str
+    model_path: str
+    device: str
+    cache_enabled: bool
+    cache_size: int
+    default_source: str
+    default_target: str
+    max_chars: int
+
+
+@dataclass(frozen=True)
 class SecuritySettings:
     require_confirmation_for_dangerous: bool
 
@@ -197,6 +213,7 @@ class Settings:
     network: NetworkSettings
     tools: ToolSettings
     web: WebSettings
+    translation: TranslationSettings
     security: SecuritySettings
     memory: MemorySettings
     voice: VoiceSettings
@@ -310,6 +327,30 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
                 ),
                 max_url_length=environment.get_bounded_int(
                     "ASIS_WEB_MAX_URL_LENGTH", d.WEB_MAX_URL_LENGTH, 100, 8_000
+                ),
+            ),
+            translation=TranslationSettings(
+                enabled=get_b("ASIS_TRANSLATION_ENABLED", d.TRANSLATION_ENABLED),
+                provider=get_s("ASIS_TRANSLATION_PROVIDER", d.TRANSLATION_PROVIDER),
+                model=get_s("ASIS_TRANSLATION_MODEL", d.TRANSLATION_MODEL),
+                model_path=get_s(
+                    "ASIS_TRANSLATION_MODEL_PATH", d.TRANSLATION_MODEL_PATH
+                ),
+                device=get_s("ASIS_TRANSLATION_DEVICE", d.TRANSLATION_DEVICE),
+                cache_enabled=get_b(
+                    "ASIS_TRANSLATION_CACHE_ENABLED", d.TRANSLATION_CACHE_ENABLED
+                ),
+                cache_size=environment.get_bounded_int(
+                    "ASIS_TRANSLATION_CACHE_SIZE", d.TRANSLATION_CACHE_SIZE, 1, 10_000
+                ),
+                default_source=get_s(
+                    "ASIS_TRANSLATION_DEFAULT_SOURCE", d.TRANSLATION_DEFAULT_SOURCE
+                ),
+                default_target=get_s(
+                    "ASIS_TRANSLATION_DEFAULT_TARGET", d.TRANSLATION_DEFAULT_TARGET
+                ),
+                max_chars=environment.get_bounded_int(
+                    "ASIS_TRANSLATION_MAX_CHARS", d.TRANSLATION_MAX_CHARS, 1, 50_000
                 ),
             ),
             security=SecuritySettings(

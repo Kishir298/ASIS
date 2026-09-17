@@ -161,6 +161,73 @@ def validate_settings(settings: Settings) -> Settings:
                 f"integer between {low} and {high}, received {value!r}."
             )
 
+    # Translation (optional local engine)
+    if not isinstance(settings.translation.enabled, bool):
+        raise ConfigurationError(
+            "Invalid configuration translation.enabled: expected a boolean."
+        )
+    _require_non_empty("translation", "provider", settings.translation.provider)
+    if settings.translation.provider.strip().lower() not in ("mock", "madlad"):
+        raise ConfigurationError(
+            "Invalid configuration translation.provider: expected one of "
+            f"'mock', 'madlad', received {settings.translation.provider!r}."
+        )
+    _require_non_empty("translation", "model", settings.translation.model)
+    _require_non_empty("translation", "device", settings.translation.device)
+    for field_name in ("model_path",):
+        value = getattr(settings.translation, field_name)
+        if not isinstance(value, str):
+            raise ConfigurationError(
+                f"Invalid configuration translation.{field_name}: "
+                "expected a string."
+            )
+        if "\x00" in value:
+            raise ConfigurationError(
+                f"Invalid configuration translation.{field_name}: "
+                "must not contain NUL bytes."
+            )
+    if not isinstance(settings.translation.cache_enabled, bool):
+        raise ConfigurationError(
+            "Invalid configuration translation.cache_enabled: expected a boolean."
+        )
+    cache_size = settings.translation.cache_size
+    if (
+        isinstance(cache_size, bool)
+        or not isinstance(cache_size, int)
+        or not 1 <= cache_size <= 10_000
+    ):
+        raise ConfigurationError(
+            "Invalid configuration translation.cache_size: expected an "
+            f"integer between 1 and 10000, received {cache_size!r}."
+        )
+    from asis.translation.languages import normalize_code as _normalize_code
+
+    default_source = settings.translation.default_source
+    if not isinstance(default_source, str) or (
+        default_source.strip().lower() != "auto"
+        and _normalize_code(default_source) is None
+    ):
+        raise ConfigurationError(
+            "Invalid configuration translation.default_source: expected "
+            f"'auto' or a supported language code, received {default_source!r}."
+        )
+    if _normalize_code(settings.translation.default_target) is None:
+        raise ConfigurationError(
+            "Invalid configuration translation.default_target: expected a "
+            "supported language code, received "
+            f"{settings.translation.default_target!r}."
+        )
+    max_chars = settings.translation.max_chars
+    if (
+        isinstance(max_chars, bool)
+        or not isinstance(max_chars, int)
+        or not 1 <= max_chars <= 50_000
+    ):
+        raise ConfigurationError(
+            "Invalid configuration translation.max_chars: expected an "
+            f"integer between 1 and 50000, received {max_chars!r}."
+        )
+
     # Security
     if not isinstance(settings.security.require_confirmation_for_dangerous, bool):
         raise ConfigurationError(
@@ -240,10 +307,14 @@ def validate_settings(settings: Settings) -> Settings:
 
     # Coding (A.S.C.S. capability)
     _require_non_empty("coding", "default_mode", settings.coding.default_mode)
-    if settings.coding.default_mode.strip().lower() not in ("general", "coding"):
+    if settings.coding.default_mode.strip().lower() not in (
+        "general",
+        "coding",
+        "translation",
+    ):
         raise ConfigurationError(
-            "Invalid configuration coding.default_mode: expected 'general' "
-            f"or 'coding', received {settings.coding.default_mode!r}."
+            "Invalid configuration coding.default_mode: expected 'general', "
+            f"'coding', or 'translation', received {settings.coding.default_mode!r}."
         )
     _require_positive_int("coding", "command_timeout", settings.coding.command_timeout)
     _require_positive_int("coding", "max_file_size", settings.coding.max_file_size)
