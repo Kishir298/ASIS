@@ -321,7 +321,7 @@ def test_offline_no_hidden_network_dependencies():
     banned: list[str] = []
     for path in sorted(root.rglob("*.py")):
         text = path.read_text(encoding="utf-8")
-        rel = str(path.relative_to(root))
+        rel = str(path.relative_to(root)).replace("\\", "/")
         if "import requests" in text or "from requests" in text:
             request_users.add(rel)
         if "import socket" in text or "from socket" in text:

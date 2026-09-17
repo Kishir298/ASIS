@@ -38,6 +38,10 @@ voice = [
     "comtypes; sys_platform == 'win32'",
     "pywin32; sys_platform == 'win32'",
 ]
+docs = [
+    "pypdf>=4",
+    "python-docx>=1.1",
+]
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
