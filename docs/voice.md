@@ -67,10 +67,12 @@ Unknown engine names raise `VoiceError` pointing at the corresponding
   scriptable mocks, `OpenWakeWordDetector` (threshold + optional model
   path, `ASIS_VOICE_WAKE_THRESHOLD`/`ASIS_VOICE_WAKE_MODEL`).
 - **Modes** (`commands.py` + `runner.py`): explicit phrases only
-  (`switch to coding/general mode`, `enable ascs`, …) flip
+  (`switch to coding/general/translation mode`, `enable ascs`, …) flip
   `AssistantApp.set_mode()` without touching provider/model; anything
   else flows to `app.chat()`. Same provider/model/session/memory/tools
   as text; A.S.C.S. coding tools/context apply when CODING is active.
+  In TRANSLATION mode transcripts are translated via the shared
+  Translation Engine and may be spoken back (see `docs/translation.md`).
    Spoken `core:…` commands execute CORE tools through the same
    Router/permission path as typed `core:…` commands; CORE failure
    becomes a spoken-safe notice, never a traceback. Native function

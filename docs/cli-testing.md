@@ -10,10 +10,16 @@ the `asis` command (or `entry()` programmatically).
 (prints configured identity system prompt), `--provider
 {mock,ollama}`, `--model MODEL`, `--memory-db PATH`, `--list-tools`,
 `--message TEXT` (single shot, else stdin REPL until the shutdown
-phrase, default `asis shutdown`), `--mode {general,coding}`,
-`--workspace PATH`. REPL commands: `/mode [general|coding]`, `/ascs`
-(coding shortcut), `/mode` (print current). All default from settings;
-all work offline with `--provider mock`.
+phrase, default `asis shutdown`), `--mode {general,coding,translation}`,
+`--workspace PATH`. REPL commands: `/mode [general|coding|translation]`,
+`/ascs` (coding shortcut), `/translate` (translation shortcut),
+`/tr-to LANG` / `/tr-from LANG|auto`, `/mode` (print current). All
+default from settings; all work offline with `--provider mock`.
+
+`asis translate` subcommand (offline translation REPL/single-shot):
+`--to LANG`, `--from LANG|auto`, `--message TEXT`, `--provider`,
+`--model`, `--memory-db PATH`. REPL supports `/tr-to`, `/tr-from`,
+`/mode` (see `docs/translation.md`).
 
 `asis voice` flags: `--stt-engine`, `--stt-model`, `--tts-engine`,
 `--tts-voice`, `--speaker-engine`, `--wake-word`, `--no-wake-word`,

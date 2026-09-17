@@ -17,6 +17,7 @@ but optional uplink; R.E.S.C.S. remains a future boundary; see
 | Local memory (SQLite) | Implemented + wired (query-scoped recall, fail-open) |
 | Tools (`echo`, `current_time`) | Implemented + application-wired (native function calling primary, heuristic fallback, permission-mandatory) |
 | Web access (`web_search`, `web_fetch`) | Implemented + application-wired (shared registry for GENERAL/A.S.C.S./voice, SSRF-guarded bounded provider, optional via `ASIS_WEB_ENABLED`) |
+| Translation (`translate_text`, TRANSLATION mode) | Implemented, offline-first (136 text languages, MADLAD-400 backend optional, mock by default; see `docs/translation.md`) |
 | A.S.C.S. coding mode | Implemented + wired (shared provider/model, workspace-bound tools) |
 | Permissions / confirmation | Implemented (no dangerous tools ship) |
 | Voice architecture + mocks | Implemented |
@@ -32,6 +33,7 @@ but optional uplink; R.E.S.C.S. remains a future boundary; see
 | File | Covers |
 |---|---|
 | `docs/architecture.md` | runtime, lifecycle, identity, errors, logging |
+| `docs/translation.md` | offline translation engine, languages, model, config |
 | `docs/offline.md` | offline-first operation, model setup, web boundary |
 | `docs/configuration.md` | settings, precedence, validation, paths |
 | `docs/ai-memory.md` | providers, inference, conversation, memory |
@@ -53,6 +55,7 @@ ASIS/
 │   ├── integrations/      # C.O.R.E. adapter (real) / R.E.S.C.S. (future)
 │   ├── memory/            # local memory provider
 │   ├── tools/             # tool system + permissions
+│   ├── translation/      # offline translation engine (registry, detection, providers)
 │   ├── web/              # web provider (search + fetch, SSRF guard)
 │   ├── voice/             # sole production voice implementation
 │   └── ...

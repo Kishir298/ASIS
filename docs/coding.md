@@ -11,6 +11,7 @@ instructions, context providers and tool registries only.
 |---|---|---|
 | `GENERAL` (default) | `general` | Normal assistant: identity + memory context, `echo`/`current_time` tools, no repo injection |
 | `CODING` (A.S.C.S.) | `coding` | Engineering assistant: coding instructions + `REPOSITORY CONTEXT` + 10 coding tools |
+| `TRANSLATION` | `translation` | Offline translation: deterministic local translation turns (see `docs/translation.md`) |
 
 Mode lives on `AssistantApp.mode` (`asis/app/modes.py: AssistantMode`,
 `parse_mode()`); profiles in `asis/app/profiles.py`. `set_mode()` flips
@@ -29,7 +30,7 @@ A.S.I.S. general mode enabled.
 > /mode               # prints current mode
 ```
 
-Flags: `asis --mode {general,coding} --workspace PATH`,
+Flags: `asis --mode {general,coding,translation} --workspace PATH`,
 `asis voice --mode ... --workspace ...`. No auto-detection by design;
 explicit selection always wins.
 
@@ -93,7 +94,7 @@ shared router — one tool architecture, mode-specific tool sets.
 
 | Variable | Default | Validation |
 |---|---|---|
-| `ASIS_DEFAULT_MODE` | `general` | `general`/`coding` |
+| `ASIS_DEFAULT_MODE` | `general` | `general`/`coding`/`translation` |
 | `ASIS_CODING_WORKSPACE` | _(empty → CWD)_ | existing dir at use time |
 | `ASIS_CODING_COMMAND_TIMEOUT` | `120` | positive int |
 | `ASIS_CODING_MAX_FILE_SIZE` | `200000` | positive int |

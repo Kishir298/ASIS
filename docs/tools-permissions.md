@@ -20,6 +20,7 @@ explicit tool requests through registry → router → executor.
 | `core_discover_devices` / `core_device_info` / `core_data_request` / `core_service_request` / `core_agent_request` / `core_send_to_device` | C.O.R.E. infrastructure operations | HIGH | Implemented, confirm-gated (needs CORE session) |
 | `web_search` | Web search, bounded structured results (`title`, `url`, `snippet`, `source`) | LOW | Implemented (optional, on by default) |
 | `web_fetch` | Fetch readable text from a public HTTP/HTTPS page (bounded + metadata) | LOW | Implemented (optional, on by default) |
+| `translate_text` | Offline translation (`text`, `target_language`, optional `source_language` → auto-detect) | LOW | Implemented (optional, on by default; mock backend by default) |
 
 ## Web access (`asis/web/` + `asis/tools/provided/web_tools.py`)
 

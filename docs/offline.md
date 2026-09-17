@@ -49,10 +49,13 @@ Never commit model weights to Git.
 
 ## Translation
 
-No translation engine exists in the repository yet (verified: no
-translation code, no cloud translation SDKs). The architecture stays
-ready: any future Translation Engine must run locally under the same
-rules (local models, `MODEL_NOT_INSTALLED` when absent, no cloud API).
+The offline Translation Engine (`asis/translation/`, see
+`docs/translation.md`) runs locally under the same rules: local models
+(MADLAD-400 3B MT via transformers/torch, or mock backend),
+`TRANSLATION_MODEL_NOT_INSTALLED` when weights are absent, no cloud API.
+Only `translate_text` and TRANSLATION mode need the local model file;
+everything else about translation (registry, detection, cache, tools)
+works with zero dependencies.
 
 ## Offline test mode
 
