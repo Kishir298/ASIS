@@ -40,6 +40,15 @@ AI_NUM_PREDICT = 0
 # Keep the model loaded between turns ("" = server default).
 AI_KEEP_ALIVE = "30m"
 
+# Ollama lifecycle ownership (A.S.I.S.-started `ollama serve` only).
+# MANAGED: "auto" (connect if running, else start owned), "on" (always
+# ensure owned when down), "off" (never start; fail fast with guidance).
+OLLAMA_MANAGED = "auto"
+# How long to wait for a freshly started `ollama serve` to answer /api/tags.
+OLLAMA_SERVE_TIMEOUT = 60
+# Bounded graceful shutdown for an A.S.I.S.-owned Ollama process.
+OLLAMA_SHUTDOWN_TIMEOUT = 10
+
 # Conversation
 CONVERSATION_MAX_HISTORY = 20
 

@@ -42,6 +42,15 @@ class AISettings:
 
 
 @dataclass(frozen=True)
+class OllamaSettings:
+    """Local Ollama server lifecycle (ownership-safe, standalone by default)."""
+
+    managed: str
+    serve_timeout: int
+    shutdown_timeout: int
+
+
+@dataclass(frozen=True)
 class ConversationSettings:
     max_history: int
 
@@ -224,6 +233,7 @@ class Settings:
 
     identity: IdentitySettings
     ai: AISettings
+    ollama: OllamaSettings
     conversation: ConversationSettings
     network: NetworkSettings
     tools: ToolSettings
@@ -283,6 +293,18 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             conversation=ConversationSettings(
                 max_history=get_i(
                     "ASIS_CONVERSATION_MAX_HISTORY", d.CONVERSATION_MAX_HISTORY
+                ),
+            ),
+            ollama=OllamaSettings(
+                managed=get_s("ASIS_OLLAMA_MANAGED", d.OLLAMA_MANAGED),
+                serve_timeout=environment.get_bounded_int(
+                    "ASIS_OLLAMA_SERVE_TIMEOUT", d.OLLAMA_SERVE_TIMEOUT, 5, 300
+                ),
+                shutdown_timeout=environment.get_bounded_int(
+                    "ASIS_OLLAMA_SHUTDOWN_TIMEOUT",
+                    d.OLLAMA_SHUTDOWN_TIMEOUT,
+                    1,
+                    120,
                 ),
             ),
             core=CoreSettings(

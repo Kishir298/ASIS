@@ -134,6 +134,28 @@ def validate_settings(settings: Settings) -> Settings:
             f"{settings.ai.keep_alive!r}."
         )
 
+    # Ollama lifecycle ownership
+    managed = settings.ollama.managed
+    if (
+        not isinstance(managed, str)
+        or managed.strip().lower() not in ("auto", "on", "off")
+    ):
+        raise ConfigurationError(
+            "Invalid configuration ollama.managed: expected one of "
+            f"'auto', 'on', 'off', received {managed!r}."
+        )
+    for field_name, low, high in (
+        ("serve_timeout", 5, 300),
+        ("shutdown_timeout", 1, 120),
+    ):
+        value = getattr(settings.ollama, field_name)
+        bad_type = isinstance(value, bool) or not isinstance(value, int)
+        if bad_type or not low <= value <= high:
+            raise ConfigurationError(
+                f"Invalid configuration ollama.{field_name}: expected an "
+                f"integer between {low} and {high}, received {value!r}."
+            )
+
     # Conversation
     _require_positive_int(
         "conversation", "max_history", settings.conversation.max_history
