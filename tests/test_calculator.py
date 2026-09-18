@@ -846,7 +846,7 @@ def test_native_calculate_unknown_operation(memory_manager):
         ],
     )
     app = _app(memory_manager, ai, router=_calc_router(_engine()))
-    assert app.chat("frob") == "cannot do that."
+    assert app.chat("calculate frob") == "cannot do that."
 
 
 def test_coding_mode_calculate(memory_manager, tmp_path):

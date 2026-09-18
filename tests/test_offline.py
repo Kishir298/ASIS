@@ -145,7 +145,7 @@ def test_offline_native_tool_calling(memory_manager):
     registry.register(EchoTool())
     registry.register(CurrentTimeTool())
     router = ToolRouter(registry, ToolExecutor(authorizer=lambda tool: True))
-    assert _app(memory_manager, ai, router=router).chat("say x") == "done."
+    assert _app(memory_manager, ai, router=router).chat("run echo x") == "done."
 
 
 # -- voice architecture -------------------------------------------------------

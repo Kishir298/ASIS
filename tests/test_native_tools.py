@@ -367,7 +367,7 @@ def test_native_call_denied_never_executes(memory_manager):
         tool_sequences=[[{"name": "echo", "arguments": {"text": "hi"}}], None],
     )
     app = _app(memory_manager, provider, router=denied_router)
-    reply = app.chat("say hi")
+    reply = app.chat("run echo hi")
     assert reply == "fallback final"
     blob = " ".join(m.content for m in app.session.messages)
     assert "echo result" not in blob  # denied: no execution
@@ -409,7 +409,7 @@ def test_malformed_native_arguments_rejected(memory_manager):
         tool_sequences=[[{"name": "echo", "arguments": {}}], None],
     )
     app = _app(memory_manager, provider)
-    assert app.chat("say hi") == "need valid args."
+    assert app.chat("run echo hi") == "need valid args."
     blob = " ".join(m.content for m in app.session.messages)
     assert "Invalid arguments" in blob
 
@@ -420,7 +420,7 @@ def test_multi_step_loop_is_bounded(memory_manager):
         tool_sequences=[[{"name": "echo", "arguments": {"text": "x"}}]] * 6,
     )
     app = _app(memory_manager, provider)
-    app.chat("loop please")
+    app.chat("run loop please")
     blob = " ".join(m.content for m in app.session.messages)
     assert blob.count("echo result") == max_tool_calls()
 
@@ -530,7 +530,7 @@ def test_voice_native_tool_same_application_path(memory_manager):
     tts = MockTextToSpeech()
     pipe = VoicePipeline(
         MockAudioInput([AudioData(samples=[0], sample_rate=16000)]),
-        MockSpeechRecognizer(text="say hi"),
+        MockSpeechRecognizer(text="run echo hi"),
         MockSpeakerIdentifier(),
         tts,
         MockAudioOutput(),
@@ -612,7 +612,7 @@ def test_native_call_cannot_confirm_itself(memory_manager):
         ],
     )
     app = _app(memory_manager, provider)
-    assert app.chat("say hi") == "still gated."
+    assert app.chat("run echo hi") == "still gated."
     blob = " ".join(m.content for m in app.session.messages)
     assert "echo result" not in blob
     assert "unknown parameter" in blob
