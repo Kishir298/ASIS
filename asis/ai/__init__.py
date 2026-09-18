@@ -7,6 +7,7 @@ from .conversation import ConversationSession
 from .inference import InferenceEngine
 from .manager import AIManager, create_provider
 from .models import AIMessage, AIResponse, MessageRole, NativeToolCall
+from .orchestrator import Intent, OrchestratorPlan, build_plan, classify_intent
 from .providers import AIProvider, MockAIProvider
 from .tool_schemas import (
     ToolDefinition,
@@ -40,6 +41,10 @@ __all__ = [
     "ConversationSession",
     "ContextAssembler",
     "InferenceEngine",
+    "Intent",
+    "OrchestratorPlan",
+    "build_plan",
+    "classify_intent",
     "ToolDefinition",
     "ollama_tools",
     "tool_definition_for",

@@ -13,7 +13,7 @@ from typing import Any
 from asis.configuration.settings import settings
 from asis.errors import ConfigurationError
 
-from .personality import DEFAULT_PERSONALITY
+from .personality import DEFAULT_PERSONALITY, load_personality_file
 
 
 @dataclass(frozen=True)
@@ -34,9 +34,17 @@ class Identity:
 def build_identity(
     personality_text: str | None = None,
     preferences: dict[str, Any] | None = None,
+    personality_file: str | None = None,
 ) -> Identity:
-    """Build an Identity from configuration and optional overrides."""
-    text = personality_text or DEFAULT_PERSONALITY
+    """Build an Identity from configuration and optional overrides.
+
+    Precedence: explicit ``personality_text`` > optional personality file
+    (``personality_file`` or ``ASIS_PERSONALITY_FILE``) > built-in default.
+    Missing/empty/unreadable files fall back gracefully to the default.
+    """
+    text = personality_text or load_personality_file(personality_file)
+    if not (text or "").strip():
+        text = DEFAULT_PERSONALITY
 
     try:
         rendered = text.format(

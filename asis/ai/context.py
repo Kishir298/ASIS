@@ -1,9 +1,13 @@
 """
 Prompt context assembly for A.S.I.S.
 
-Assembles the system prompt from the active identity, long-term memory
-context and correctness rules, then builds the final message list sent
-to the AI model with history trimmed to the configured limit.
+Assembles the system prompt from stable identity/personality plus dynamic
+mode/memory/capabilities sections with correctness rules, then builds the
+final message list with history trimmed to the configured limit.
+
+Stable (identity/personality/rules) vs dynamic (mode/memory/capabilities)
+split keeps prompts bounded: total system text never exceeds
+``context_char_limit``.
 """
 
 from __future__ import annotations
@@ -20,8 +24,11 @@ MemoryContextProvider = Callable[[], str]
 _MEMORY_RULES = (
     "MEMORY RULES:\n"
     "- Use these memories when relevant.\n"
+    "- If the user asks what they shared earlier, answer from the memories\n"
+    "  shown, even when this conversation just started.\n"
     "- Never invent memories.\n"
     "- Never claim to remember something that is not shown.\n"
+    "- Never deny a memory that is shown.\n"
     "- Do not mention the memory system unless asked."
 )
 
@@ -33,32 +40,62 @@ class ContextAssembler:
         self,
         identity: Identity,
         memory_context_provider: MemoryContextProvider | None = None,
+        mode_context_provider: MemoryContextProvider | None = None,
+        capabilities_provider: MemoryContextProvider | None = None,
         max_context_messages: int | None = None,
         context_char_limit: int | None = None,
     ) -> None:
         self.identity = identity
         self.memory_context_provider = memory_context_provider
+        self.mode_context_provider = mode_context_provider
+        self.capabilities_provider = capabilities_provider
         self.max_context_messages = (
             max_context_messages or settings.ai.max_context_messages
         )
         self.context_char_limit = context_char_limit or settings.ai.context_char_limit
 
+    def _section(self, provider: MemoryContextProvider | None) -> str:
+        if provider is None:
+            return ""
+        try:
+            text = provider() or ""
+        except Exception:
+            return ""
+        return text.strip()
+
+    def estimate_size(self) -> int:
+        """Return the current system-prompt length (stable + dynamic)."""
+        return len(self.system_prompt())
+
     def system_prompt(self) -> str:
-        """Build the full system prompt for this identity."""
-        sections = [self.identity.system_prompt()]
+        """Build the full labeled, bounded system prompt."""
+        stable = f"SYSTEM:\n{self.identity.system_prompt().strip()}"
+        sections = [stable]
 
-        if self.memory_context_provider is not None:
-            memory_context = self.memory_context_provider()
+        mode_text = self._section(self.mode_context_provider)
+        if mode_text:
+            sections.append(f"MODE:\n{mode_text}")
 
-            if memory_context.strip():
-                text = memory_context.strip()
-                if len(text) > self.context_char_limit:
-                    text = text[: self.context_char_limit]
-                sections.append(text)
+        caps = self._section(self.capabilities_provider)
+        if caps:
+            if caps.lstrip().startswith("CAPABILITIES:"):
+                sections.append(caps)
+            else:
+                sections.append(f"CAPABILITIES:\n{caps}")
+
+        memory_text = self._section(self.memory_context_provider)
+        if memory_text:
+            sections.append(memory_text)
 
         sections.append(_MEMORY_RULES)
 
-        return "\n\n".join(sections)
+        prompt = "\n\n".join(s for s in sections if s.strip())
+        if len(prompt) > self.context_char_limit:
+            # Keep stable identity head; truncate dynamic tail.
+            head, sep, _ = stable.partition("\n")
+            budget = self.context_char_limit
+            prompt = prompt[:budget].rstrip() + "\n\n[context truncated]"
+        return prompt
 
     def build_messages(
         self,

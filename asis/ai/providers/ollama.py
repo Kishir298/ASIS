@@ -21,6 +21,97 @@ from .base import AIProvider
 # still pass an explicit ``timeout`` to ``available()``.
 AVAILABILITY_PROBE_TIMEOUT = 5.0
 
+_THINK_OPEN = "<think>"
+_THINK_CLOSE = "</think>"
+
+
+def strip_thinking(content: str) -> tuple[str, str]:
+    """Split qwen3-style thinking from user-visible content.
+
+    Returns ``(visible, thinking)``. Handles ``<think>...</think>``
+    blocks (case-insensitive) and unclosed blocks (rest is thinking).
+    Private reasoning is never part of ``visible``.
+    """
+    import re as _re
+
+    text = content or ""
+    thinking_parts: list[str] = []
+
+    pattern = _re.compile(r"<think\s*>.*?(</think\s*>|$)", _re.IGNORECASE | _re.DOTALL)
+    pos = 0
+    visible_parts: list[str] = []
+    for match in pattern.finditer(text):
+        visible_parts.append(text[pos : match.start()])
+        thinking_parts.append(match.group(0))
+        pos = match.end()
+    visible_parts.append(text[pos:])
+    visible = "".join(visible_parts).strip()
+    thinking = "".join(thinking_parts).strip()
+    return visible, thinking
+
+
+class _ThinkingStreamFilter:
+    """Incremental filter so streamed thinking never reaches the terminal."""
+
+    def __init__(self) -> None:
+        self._in_think = False
+        self._buf = ""
+
+    def feed(self, chunk: str) -> str:
+        """Return only the user-visible portion of ``chunk``."""
+        text = f"{self._buf}{chunk or ''}"
+        self._buf = ""
+        out: list[str] = []
+        lowered_tag_open = _THINK_OPEN
+        lowered_tag_close = _THINK_CLOSE
+        while text:
+            low = text.lower()
+            if not self._in_think:
+                idx = low.find(lowered_tag_open)
+                if idx == -1:
+                    # Keep a tail that could be a split "<think" prefix.
+                    keep = _split_prefix_tail(text)
+                    if keep < len(text):
+                        out.append(text[:keep])
+                        self._buf = text[keep:]
+                        text = ""
+                    else:
+                        out.append(text)
+                        text = ""
+                else:
+                    out.append(text[:idx])
+                    text = text[idx + len(lowered_tag_open) :]
+                    self._in_think = True
+            else:
+                idx = low.find(lowered_tag_close)
+                if idx == -1:
+                    keep = _split_prefix_tail(text, closing=True)
+                    if keep < len(text):
+                        self._buf = text[keep:]
+                    # All thinking so far: emit nothing.
+                    text = ""
+                else:
+                    text = text[idx + len(lowered_tag_close) :]
+                    self._in_think = False
+        return "".join(out)
+
+
+def _split_prefix_tail(text: str, closing: bool = False) -> int:
+    """Return safe-emit length, holding back a possible split tag tail."""
+    tags = ("</think>", "<think>") if not closing else ("</think>",)
+    low = text.lower()
+    # Hold back up to len("</think>")-1 chars that could complete a tag.
+    hold = max(1, len("</think>") - 1)
+    tail = low[max(0, len(low) - hold - 1) :]
+    for tag in tags:
+        for i in range(1, min(len(tail), len(tag)) + 1):
+            if tag.startswith(tail[-i:]):
+                return len(text) - i
+    # Also hold a bare "<" tail that could start a tag.
+    if "<" in tail:
+        return text.rfind("<")
+    return len(text)
+
 
 class OllamaProvider(AIProvider):
     """AI provider backed by a local Ollama server."""
@@ -117,13 +208,22 @@ class OllamaProvider(AIProvider):
                     raise self._communication_error(exc) from exc
 
         data = response.json()
-        content = (data.get("message") or {}).get("content")
+        message = data.get("message") or {}
+        content = message.get("content")
+        thinking_field = message.get("thinking") or message.get("reasoning") or ""
 
         if not isinstance(content, str):
             raise InferenceError("Ollama returned an invalid response.")
+        if thinking_field and not isinstance(thinking_field, str):
+            thinking_field = str(thinking_field)
+
+        visible, thinking = strip_thinking(content)
+        combined_thinking = "\n".join(
+            part for part in (str(thinking_field or "").strip(), thinking) if part
+        )
 
         return AIResponse(
-            content=content,
+            content=visible,
             model=self._model,
             provider=self.name,
             metadata={
@@ -131,6 +231,7 @@ class OllamaProvider(AIProvider):
                 "total_duration": data.get("total_duration"),
                 "prompt_eval_count": data.get("prompt_eval_count"),
                 "eval_count": data.get("eval_count"),
+                "thinking": combined_thinking,
             },
         )
 
@@ -194,13 +295,21 @@ class OllamaProvider(AIProvider):
         data = response.json()
         message = data.get("message") or {}
         content = message.get("content")
+        thinking_field = message.get("thinking") or message.get("reasoning") or ""
         if content is None:
             content = ""
         if not isinstance(content, str):
             raise InferenceError("Ollama returned an invalid response.")
+        if thinking_field and not isinstance(thinking_field, str):
+            thinking_field = str(thinking_field)
+
+        visible, thinking = strip_thinking(content)
+        combined_thinking = "\n".join(
+            part for part in (str(thinking_field or "").strip(), thinking) if part
+        )
 
         return AIResponse(
-            content=content,
+            content=visible,
             model=self._model,
             provider=self.name,
             metadata={
@@ -209,6 +318,7 @@ class OllamaProvider(AIProvider):
                 "prompt_eval_count": data.get("prompt_eval_count"),
                 "eval_count": data.get("eval_count"),
                 "native_tools": True,
+                "thinking": combined_thinking,
             },
             tool_calls=self.parse_tool_calls(message),
         )
@@ -235,6 +345,7 @@ class OllamaProvider(AIProvider):
                 timeout=self.timeout,
             )
             response.raise_for_status()
+            thinking_filter = _ThinkingStreamFilter()
 
             for line in response.iter_lines(
                 decode_unicode=True,
@@ -250,12 +361,19 @@ class OllamaProvider(AIProvider):
                         "Ollama returned invalid streaming data."
                     ) from exc
 
-                content = (data.get("message") or {}).get("content", "")
+                message = data.get("message") or {}
+                content = message.get("content", "")
 
                 if content:
-                    yield content
+                    visible = thinking_filter.feed(content)
+                    if visible:
+                        yield visible
 
                 if data.get("done"):
+                    # Flush any buffered visible tail (never thinking).
+                    tail = thinking_filter.feed("")
+                    if tail:
+                        yield tail
                     break
 
         except requests.RequestException as exc:

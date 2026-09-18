@@ -23,6 +23,7 @@ from asis.ai.context import ContextAssembler
 from asis.ai.conversation import ConversationSession
 from asis.ai.inference import InferenceEngine
 from asis.ai.manager import AIManager
+from asis.ai.orchestrator import Intent, build_plan
 from asis.configuration.settings import settings
 from asis.events.bus import EventBus
 from asis.identity.identity import Identity
@@ -133,6 +134,7 @@ class AssistantApp:
         self.session = ConversationSession()
         self._pending_memory_query = ""
         self._max_memory_items = max(1, max_memory_items)
+        self._last_plan = None
         self._mode = self._coerce_mode(mode)
         self._workspace = workspace
         self._coding_resolver = None
@@ -141,6 +143,8 @@ class AssistantApp:
         self.assembler = ContextAssembler(
             identity=identity,
             memory_context_provider=self._assembler_context,
+            mode_context_provider=self._mode_section,
+            capabilities_provider=self._capabilities_section,
             max_context_messages=settings.ai.max_context_messages,
             context_char_limit=settings.ai.context_char_limit,
         )
@@ -306,14 +310,39 @@ class AssistantApp:
             self.logger.warning("Memory retrieval failed, continuing: %s", exc)
             return ""
 
+    def _mode_section(self) -> str:
+        """Mode instructions for the labeled MODE context block."""
+        try:
+            return get_profile(self._mode).instructions.strip()
+        except Exception:
+            return ""
+
+    def _capabilities_section(self) -> str:
+        """Bounded capabilities summary + active tool names (no schemas)."""
+        try:
+            from asis.identity.personality import CAPABILITY_SUMMARY
+        except Exception:
+            CAPABILITY_SUMMARY = ""
+        try:
+            names = sorted(self.tools_router.registry.list_names())
+        except Exception:
+            names = []
+        # Bound tool list so capabilities never bloat the prompt.
+        shown = ", ".join(names[:24])
+        if len(names) > 24:
+            shown += f" (+{len(names) - 24} more)"
+        caps = CAPABILITY_SUMMARY.strip()
+        tool_line = f"Tools: {shown}" if shown else ""
+        parts = [p for p in (caps, tool_line) if p]
+        text = "\n".join(parts)
+        return text[:2000]
+
     def _assembler_context(self) -> str:
         sections = []
         memory_text = self._memory_context()
         if memory_text:
             sections.append(memory_text)
         if self._mode is AssistantMode.CODING:
-            profile = get_profile(self._mode)
-            sections.append(profile.instructions)
             try:
                 if self._coding_resolver is None:
                     from asis.coding.context import CodingContextResolver
@@ -322,8 +351,6 @@ class AssistantApp:
                 sections.append(self._coding_resolver.build())
             except Exception as exc:
                 self.logger.warning("Coding context unavailable, continuing: %s", exc)
-        elif self._mode is AssistantMode.TRANSLATION:
-            sections.append(get_profile(self._mode).instructions)
         text = "\n\n".join(s for s in sections if s.strip())
         return text
 
@@ -359,7 +386,25 @@ class AssistantApp:
             self.logger.exception("Tool dispatch failed: %s", request.tool_name)
             return ToolResult.failure(error=str(exc), tool_name=request.tool_name)
 
-    def _run_native_tool_loop(self, user_text: str) -> str | None:
+    def _generate_text(self, messages, on_chunk=None) -> str:
+        """Generate user-visible text, streamed when a callback is given."""
+        if on_chunk is None:
+            return self.engine.generate(messages).content
+        try:
+            return self.engine.generate_streamed(messages, on_chunk=on_chunk)
+        except Exception as exc:
+            from asis.errors import CancellationError
+
+            if isinstance(exc, CancellationError):
+                raise
+            self.logger.warning("Streamed generation failed; using fallback.")
+            return self.engine.generate(messages).content
+
+    def _finalize_with_text(self, text: str) -> str:
+        self.session.add_assistant(text)
+        return text
+
+    def _run_native_tool_loop(self, user_text: str, on_chunk=None) -> str | None:
         """Bounded native function-calling turn; None → heuristic fallback.
 
         The model receives tool definitions derived from the active-mode
@@ -441,11 +486,15 @@ class AssistantApp:
         # Fell out of the loop (call bound reached, calls rejected, or
         # continuation failed/empty): finalize with a plain generation.
         try:
-            final = self.engine.generate(self.session.messages)
+            if on_chunk is None:
+                final = self.engine.generate(self.session.messages)
+                text = final.content
+            else:
+                text = self._generate_text(self.session.messages, on_chunk=on_chunk)
         finally:
             self._pending_memory_query = ""
-        self.session.add_assistant(final.content)
-        return final.content
+        self.session.add_assistant(text)
+        return text
 
     def _run_translation_turn(self, text: str) -> str:
         """Translate directly through the shared router (no LLM needed)."""
@@ -468,44 +517,77 @@ class AssistantApp:
 
     def chat(self, message: str) -> str:
         """Process one user message through the full wired pipeline."""
+        return self.chat_streamed(message)
+
+    def chat_streamed(self, message: str, on_chunk=None) -> str:
+        """Process one message; stream user-visible chunks via ``on_chunk``.
+
+        Orchestration (intent/memory/tool/mode) is deterministic and runs
+        before inference. Tool/permission flow is unchanged; only the
+        final user-visible generation streams when a callback is given.
+        """
         text = (message or "").strip()
         if not text:
             return ""
+        plan = build_plan(
+            text,
+            mode=self._mode.value,
+            has_docs=True,
+            memory_limit=self._max_memory_items,
+        )
+        self._last_plan = plan
         store_auto_memories(text, self.memory)
         self.session.add_user(text)
-        explicit = self._run_core_command(text)
-        if explicit is not None:
-            return explicit
+        # Deterministic short-circuits (no model needed).
+        if plan.intent is Intent.CORE_OPERATION:
+            explicit = self._run_core_command(text)
+            if explicit is not None:
+                return explicit
+            # Not actually a core command: fall through to normal handling.
         if self._mode is AssistantMode.TRANSLATION:
             return self._run_translation_turn(text)
-        self._pending_memory_query = text
+        self._pending_memory_query = (
+            plan.memory_query if plan.memory_needed else ""
+        )
         try:
-            native_reply = self._run_native_tool_loop(text)
+            native_reply = self._run_native_tool_loop(text, on_chunk=on_chunk)
             if native_reply is not None:
                 return native_reply
-            response = self.engine.generate(self.session.messages)
+            if on_chunk is None:
+                response = self.engine.generate(self.session.messages)
+                content = response.content
+            else:
+                content = self._generate_text(
+                    self.session.messages, on_chunk=on_chunk
+                )
         finally:
             self._pending_memory_query = ""
 
         coding = self._mode is AssistantMode.CODING
-        request = parse_tool_request(response.content, user_text=text, coding=coding)
+        request = parse_tool_request(content, user_text=text, coding=coding)
         if request is None:
-            self.session.add_assistant(response.content)
-            return response.content
+            self.session.add_assistant(content)
+            return content
 
         result = self._execute_tool(request)
         # Record the intermediate model action + explicit tool result so the
         # history stays auditable; tool output is never user-authored.
-        self.session.add_assistant(response.content)
+        self.session.add_assistant(content)
         self.session.add_assistant(format_tool_result_for_context(result))
 
         self._pending_memory_query = ""
         try:
-            final = self.engine.generate(self.session.messages)
+            if on_chunk is None:
+                final = self.engine.generate(self.session.messages)
+                final_text = final.content
+            else:
+                final_text = self._generate_text(
+                    self.session.messages, on_chunk=on_chunk
+                )
         finally:
             self._pending_memory_query = ""
-        self.session.add_assistant(final.content)
-        return final.content
+        self.session.add_assistant(final_text)
+        return final_text
 
     def _run_core_command(self, text: str) -> str | None:
         """Execute an explicit ``core:`` user command; None when absent.

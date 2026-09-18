@@ -23,8 +23,11 @@ _MEMORY_RULES = (
     "- User memories describe the user.\n"
     "- Identity memories describe A.S.I.S.\n"
     "- Use these memories when relevant.\n"
+    "- If the user asks what they shared earlier, answer from the memories\n"
+    "  shown, even when this conversation just started.\n"
     "- Never invent memories.\n"
     "- Never claim to remember something that is not shown.\n"
+    "- Never deny a memory that is shown.\n"
     "- Do not mention the memory system unless asked."
 )
 
@@ -121,6 +124,19 @@ def _query_keywords(query: str) -> list[str]:
         if fallback:
             keywords.append(fallback[:64])
     return keywords
+
+
+def _is_generic_recall(text: str) -> bool:
+    """Return True for keyword-free recall phrasing needing fallback."""
+    import re as _re
+
+    return bool(
+        _re.search(
+            r"\b(what did i (just )?(tell|say)|what do you (remember|recall|know)"
+            r"|do you remember|what have i (told|said))\b",
+            text.lower(),
+        )
+    )
 
 
 class MemoryManager:
@@ -278,6 +294,18 @@ class MemoryManager:
                 if key not in seen:
                     seen[key] = True
                     ordered.append(item)
+
+        if not ordered and _is_generic_recall(text):
+            # Generic recall ("what did I just tell you?", "what do you
+            # remember about me?") carries no content keywords. Fall back
+            # to the most important recent memories so multi-turn recall
+            # works; specific-but-unmatched queries still return "".
+            try:
+                recent = self.storage.list_all()
+            except Exception:
+                raise
+            recent.sort(key=lambda m: (-m.importance, m.content))
+            ordered = recent
 
         if not ordered:
             return ""

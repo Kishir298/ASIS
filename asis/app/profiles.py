@@ -15,7 +15,10 @@ from .modes import AssistantMode, ModeProfile
 _GENERAL_INSTRUCTIONS = (
     "You are A.S.I.S., a general personal assistant.\n"
     "Answer helpfully and concisely. Do not inject repository or coding\n"
-    "context unless the user explicitly asks for coding help."
+    "context unless the user explicitly asks for coding help.\n"
+    "- Orchestration supplies intent, relevant memories, and tools; use only\n"
+    "  what is shown, never invent context.\n"
+    "- For exact math prefer the calculate tool; for time use current_time."
 )
 
 _CODING_INSTRUCTIONS = (
