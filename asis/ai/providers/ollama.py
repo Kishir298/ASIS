@@ -47,6 +47,11 @@ def strip_thinking(content: str) -> tuple[str, str]:
     visible_parts.append(text[pos:])
     visible = "".join(visible_parts).strip()
     thinking = "".join(thinking_parts).strip()
+    # Drop stray unpaired markers (e.g. a lone </think> with no opener):
+    # with thinking disabled these are always model artifacts, never
+    # legitimate content, and must not reach the terminal (live 2026-09-18:
+    # qwen3:14b emitted a bare </think> around a tool-turn answer).
+    visible = _re.sub(r"</?think\s*>", "", visible, flags=_re.IGNORECASE).strip()
     return visible, thinking
 
 
@@ -93,7 +98,14 @@ class _ThinkingStreamFilter:
                 else:
                     text = text[idx + len(lowered_tag_close) :]
                     self._in_think = False
-        return "".join(out)
+        # Drop stray unpaired markers outside thinking spans (same live
+        # artifact as strip_thinking: a bare </think> with no opener).
+        # Split-tag tails are held in _buf, never in out, so this is safe.
+        import re as _re_filter
+
+        return _re_filter.sub(
+            r"</?think\s*>", "", "".join(out), flags=_re_filter.IGNORECASE
+        )
 
 
 def _split_prefix_tail(text: str, closing: bool = False) -> int:

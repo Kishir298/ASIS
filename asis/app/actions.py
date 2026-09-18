@@ -34,6 +34,13 @@ _TEST_PATTERN = re.compile(
     r"\b(run|execute)\b.{0,20}\b(tests?|pytest|test suite)\b", re.IGNORECASE
 )
 
+# Per-call bound on tool results re-injected as model context. Tool-side
+# limits still apply first (e.g. web 8k, coding outputs up to 60-200k);
+# this cap keeps the next model request bounded even when a tool returns
+# a large payload, well within the 12k assembler budget across up to
+# max_calls_per_turn calls.
+_TOOL_RESULT_MAX_CHARS = 4000
+
 
 @dataclass(frozen=True)
 class ToolRequest:
@@ -130,5 +137,13 @@ def parse_tool_request(
 def format_tool_result_for_context(result: ToolResult) -> str:
     """Render a tool result as model context, never as user authorship."""
     if result.success:
-        return f"[tool {result.tool_name or 'unknown'} result] {result.data!r}"
-    return f"[tool {result.tool_name or 'unknown'} error] {result.error or 'failed'}"
+        text = f"[tool {result.tool_name or 'unknown'} result] {result.data!r}"
+    else:
+        text = (
+            f"[tool {result.tool_name or 'unknown'} error] "
+            f"{result.error or 'failed'}"
+        )
+    if len(text) > _TOOL_RESULT_MAX_CHARS:
+        clipped = text[:_TOOL_RESULT_MAX_CHARS].rstrip()
+        text = f"{clipped}…[truncated {len(text) - len(clipped)} chars]"
+    return text
