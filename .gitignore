@@ -22,6 +22,15 @@ dist/
 !.env.example
 *.pem
 *.key
+*.pfx
+*.p12
+*.crt
+*.cer
+
+# Remembered external-device files (real device files live in home dir)
+.risarms-device.json
+*-device.json
+device.json
 
 # VS Code / IDEs
 .vscode/
