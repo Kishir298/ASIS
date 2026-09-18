@@ -88,8 +88,9 @@ class CoreClient(ABC):
         """Establish the authenticated session (default: unavailable)."""
         raise NotImplementedError
 
-    def disconnect(self) -> None:
+    def disconnect(self) -> None:  # noqa: B027 - intentional no-op default
         """Close the session and destroy ephemeral state (default: no-op)."""
+        return None
 
     def is_connected(self) -> bool:
         """Return whether an authenticated session is live."""

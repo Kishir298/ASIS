@@ -97,26 +97,22 @@ python -m pytest tests/test_cli.py tests/test_interactive.py tests/test_cli_hard
 python -m pytest tests/test_voice.py tests/test_voice_runner.py tests/test_ollama_model_default.py -q
 ```
 
-| File | Collected tests | Covers |
+> Canonical result: **693 passed, 10 skipped (2026-09-18)** — verify with `python3 -m pytest -q`. Counts below are approximate per-file snapshots, not a substitute for the runner.
+
+| File | Approx tests | Covers |
 |---|---|---|
-| `test_configuration.py` | 49 | defaults/overrides/precedence/validation/paths/voice/coding |
-| `test_voice.py` | 28 | models/buffer/engines/pipeline/CLI, mock-only |
-| `test_assistant.py` | 20 | session/memory/tools wiring, fail-open, permissions |
-| `test_modes.py` | 13 | mode parse/switch/persistence, shared provider, CLI commands |
-| `test_coding_tools.py` | 11 | read/search/list/write/tests/git through shared runtime |
-| `test_coding_security.py` | 10 | traversal/symlink/allowlist/timeout/denied git safety |
-| `test_ai.py` | 9 | providers, manager, conversation, context, inference |
-| `test_app.py` | 6 | auto-memory extraction and result handling |
-| `test_cli.py` | 7 | entry point, flags, REPL shutdown, memory building |
-| `test_cli_interrupt.py` | 14 | launcher basename hardening, model override, shutdown-event contract, cooperative cancel/recovery, mode+doc persistence, doc→context proof, oversized/zip-bomb bounds, quoted paths, renderer edges, logging dedup |
-| `test_base_install.py` | 4 | mock/offline CLI imports without `requests`; ollama without `requests` fails with install hint; lazy `OllamaProvider` identity |
-| `test_runtime_integration.py` | 5 | multi-turn CLI, memory/tool paths, voice app path |
-| `test_coding_integration.py` | 5 | integrated coding path, multi-turn fix flow, memory separation |
-| `test_shutdown.py` | 5 | bounded shutdown, timeout FAILED, reverse order |
-| `test_events.py` | 5 | event bus and event types |
-| `test_identity.py` | 5 | identity rendering, personality template |
-| `test_memory.py` | 10 | manager, storage, search, models |
-| `test_tools.py` | 9 | registry, router, executor, permissions, provided tools |
+| `test_configuration.py` | ~49 | defaults/overrides/precedence/validation/paths/voice/coding |
+| `test_calculator.py` | ~62 | offline calculator engine, 30 ops, SymPy verification |
+| `test_translation.py` | ~54 | offline translation, 136 langs, detection/providers |
+| `test_web.py` | ~89 | web search/fetch, SSRF guard, bounded provider |
+| `test_native_tools.py` | ~33 | native function-calling, router/permission convergence |
+| `test_assistant_app.py` | ~20 | session/memory/tools wiring, fail-open, permissions |
+| `test_interactive.py` | ~27 | REPL, docs attach, shutdown, interrupts |
+| `test_offline.py` | ~15 | offline-first guards, network boundaries |
+| `test_core_*.py (7 files)` | ~60 | RealCoreAdapter, connection, tools, e2e (LAN NOT PERFORMED) |
+| `test_voice_*.py` | ~40 | pipeline/engines/runner, mock-only; hardware NOT PERFORMED |
+| `test_cli.py` | ~8 | entry point, flags, REPL shutdown, memory building |
+| + remaining (permissions, memory, tools, events, identity, shutdown, etc.) | ~250 | see runner for exact split |
 
 Mock providers everywhere: **no Ollama, microphone, speakers, GPU,
 models, internet, CORE, or RESCS required**. No coverage gate is

@@ -42,11 +42,10 @@ Conversation Engine            asis/ai/conversation.py (bounded session)
 `AssistantApp` (`asis/app/assistant.py`) owning a single
 `ConversationSession` per session: input → session → query-scoped memory
 retrieval → `ContextAssembler` → `InferenceEngine` → `AIManager` →
-optional single tool action (router → permission → executor) → final
+optional tool actions (router → permission → executor, up to ASIS_TOOL_MAX_CALLS_PER_TURN validated native calls + final generation) → final
 response stored back in the session. Memory is recalled via
 `MemoryManager.search_context()` (fail-open: log + continue when
-retrieval fails). There is still **no agentic loop**: at most one
-tool action per turn; normal conversation never requires a tool.
+retrieval fails). Normal conversation never requires a tool.
 
 **Modes:** `AssistantApp` carries `app.mode` (`GENERAL`/`CODING`/
 `TRANSLATION`, `asis/app/modes.py`); CODING is A.S.C.S. — same
@@ -112,10 +111,12 @@ Default personality template supports `{name}`/`{title}`.
 ```text
 asis/
 ├── ai/               inference, conversation, context, providers
-├── app/              assistant runtime, tool actions, auto-memory, result
+├── app/              assistant runtime, tool actions, auto-memory, result (modes GENERAL/CODING/TRANSLATION)
 ├── calculator/       offline math engine (SymPy-backed, verified)
-├── cli/              entry point, chat REPL, voice loop
+├── cli/              entry point, chat REPL, voice loop (python -m asis alias supported)
+├── coding/           A.S.C.S. mode profiles, workspace context, coding tools
 ├── configuration/    defaults → env → validated Settings
+├── documents/        document store, parsers, context injection
 ├── errors/           ASISError hierarchy (see below)
 ├── events/           EventBus (AI, tools, memory, voice events)
 ├── identity/         config-driven identity + personality
@@ -125,12 +126,12 @@ asis/
 ├── permissions/      levels, confirmation, sandbox, secrets helper
 ├── system/           lifecycle, runtime, interrupts
 ├── tools/            registry, router, executor, provided tools
+├── translation/      offline translation engine (registry, detection, providers)
 ├── web/              web provider (search + fetch), SSRF guard, extraction
 └── voice/            canonical voice subsystem
 ```
 
-Not present: `asis/__main__.py` — there is no `python -m asis`; use the
-installed `asis` command.
+Entry: installed `asis` command; `python -m asis` alias supported via `asis/__main__.py`.
 
 ## Error hierarchy
 

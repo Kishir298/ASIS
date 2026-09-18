@@ -20,13 +20,13 @@ but optional uplink; R.E.S.C.S. remains a future boundary; see
 | Translation (`translate_text`, TRANSLATION mode) | Implemented, offline-first (136 text languages, MADLAD-400 backend optional, mock by default; see `docs/translation.md`) |
 | Calculator (`calculate`, 30 operations) | Implemented, offline-first (SymPy-backed exact math + verification; see `docs/calculator.md`) |
 | A.S.C.S. coding mode | Implemented + wired (shared provider/model, workspace-bound tools) |
-| Permissions / confirmation | Implemented (no dangerous tools ship) |
+| Permissions / confirmation | Implemented (no ungated dangerous tools; HIGH/CRITICAL gated) |
 | Voice architecture + mocks | Implemented |
-| Local STT / TTS / speaker / wake / VAD | Implemented (optional deps) |
+| Local STT / TTS / speaker / wake / VAD | Implemented (pipeline+mocks; optional deps; hardware NOT PERFORMED) |
 | CLI (`asis`, `asis voice`) | Implemented (stateful multi-turn) |
 | Shutdown timeout | Implemented (bounded stop, FAILED + log on expiry) |
-| C.O.R.E. integration | Implemented (optional uplink; standalone by default) |
-| Offline-first | Implemented (local-only except explicit web tools; see `docs/offline.md`) |
+| C.O.R.E. integration | Implemented (optional uplink; standalone by default; LAN NOT PERFORMED) |
+| Offline-first | Implemented (simulated suite passes; physical Wi-Fi-off NOT PERFORMED; see `docs/offline.md`) |
 | R.E.S.C.S. integration | Future (placeholder adapter) |
 
 ## Docs

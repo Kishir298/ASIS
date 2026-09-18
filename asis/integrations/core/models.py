@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any
 
 
-class CoreConnectionState(str, Enum):
+class CoreConnectionState(str, Enum):  # noqa: UP042 - str+Enum for py3.10 compat (StrEnum needs 3.11+)
     """Lifecycle states for the optional C.O.R.E. connection."""
 
     DISABLED = "DISABLED"

@@ -55,7 +55,7 @@ else (chat, memory, local tools, A.S.C.S., voice, CORE) keeps working.
 Live-network tests are opt-in (`ASIS_WEB_LIVE=1`,
 `tests/test_web_live.py`); the default suite never dials out.
 
-No dangerous tools ship today. `ToolResult(success, data, error,
+No ungated dangerous tools ship today (HIGH/CRITICAL gated). `ToolResult(success, data, error,
 tool_name)` is frozen; non-`ToolResult` returns are wrapped.
 
 **Wiring status:** the tool subsystem is application-wired via
