@@ -71,21 +71,35 @@ them into `/api/chat` `tools` and parses `message.tool_calls` into
 `False`, so incapable providers use the heuristic fallback).
 
 `AssistantApp.chat()` order per turn: explicit `core:` command →
-native loop (definitions → validate each call against its schema →
-`ToolRouter` → `PermissionManager` → `ToolExecutor`, at most
-`ASIS_TOOL_MAX_CALLS_PER_TURN` validated calls, then a final plain
+native loop (intent-filtered definitions → validate each call against
+its schema → `ToolRouter` → `PermissionManager` → `ToolExecutor`, at
+most `ASIS_TOOL_MAX_CALLS_PER_TURN` validated calls, then a final plain
 generation) → heuristic fallback (`parse_tool_request`, unchanged
-single cycle). Both paths converge on the same `ToolRequest` and the
-same permission boundary; the model only requests, A.S.I.S. authorizes.
+single cycle). Intent-aware tool selection (`select_tool_definitions`,
+deterministic orchestrator hint): `CALCULATION` sends only `calculate`
+(~676B vs ~2020B full general set), `TOOL_REQUEST` time/echo/translate/
+web sends only the matching tools, `CODING` keeps the full coding set,
+generic `QUESTION`/`TASK` and unknown hints keep the full set so the
+model is never starved; calls outside the filtered set are rejected as
+`unknown_tool` before permission/execution. Both paths converge on the
+same `ToolRequest` and the same permission boundary; the model only
+requests, A.S.I.S. authorizes.
 `ASIS_AI_NATIVE_TOOLS` (`auto`/`true`/`false`, default `auto`) controls
 the attempt; small local models that ignore `tools` simply fall back.
 Limitations: multi-step depth is bounded by configuration, and native
 support varies by Ollama model — fallback coverage is intentional, not
 a gap. Latency (measured 2026-09-18, `qwen3:14b` 9.3GB on this host):
 `GENERAL_CHAT` (no tool definitions sent, `think=false`, streaming)
-answers in seconds; tool-enabled turns send 6 tool definitions and run
-up to `max_calls_per_turn` (default 3, each tool ≤30s) plus a final
-generation — observed ~100s cold, faster warm via `keep_alive=30m`.
+answers in seconds; tool-enabled turns send intent-filtered tool
+definitions (calc ~64% smaller, web ~71%, time/echo ~92% vs the full
+~2020B general set) and run up to `max_calls_per_turn` (default 3, each
+tool ≤30s) plus a final generation — observed ~100s cold, faster warm
+via `keep_alive=30m`. Tool results re-injected as context are capped at
+4000 chars/call (`…[truncated N chars]`; small results byte-identical).
+Native tool decisions stay buffered (`chat_with_tools` is `stream=false`
+by design — Ollama partial-JSON `tool_calls` assembly would be fragile);
+only the final plain generation streams. Remaining tool-turn latency is
+model/hardware-bound, not application overhead.
 Worst-case bound per turn: `request_timeout` (120s) × (1+retries) per
 LLM call × up to 4 calls + tools. `GENERAL_CHAT` skipping the native
 attempt is what keeps greetings/repeat-backs fast.
