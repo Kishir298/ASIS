@@ -14,6 +14,7 @@ but optional uplink; R.E.S.C.S. remains a future boundary; see
 | AI provider abstraction | Implemented |
 | Ollama provider | Implemented (optional dep) |
 | Conversation / context | Implemented + wired (`AssistantApp` owns session) |
+| Intelligence orchestration (deterministic intent + true streaming) | Implemented + tested (rule-based `orchestrator`, thinking stripped to metadata, ESC-safe turn reset; live single-turn + name recall PASS with `qwen3:14b`) |
 | Local memory (SQLite) | Implemented + wired (query-scoped recall, fail-open) |
 | Tools (`echo`, `current_time`) | Implemented + application-wired (native function calling primary, heuristic fallback, permission-mandatory) |
 | Web access (`web_search`, `web_fetch`) | Implemented + application-wired (shared registry for GENERAL/A.S.C.S./voice, SSRF-guarded bounded provider, optional via `ASIS_WEB_ENABLED`) |

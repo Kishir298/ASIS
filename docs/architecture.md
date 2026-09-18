@@ -40,10 +40,14 @@ Conversation Engine            asis/ai/conversation.py (bounded session)
 
 **Runtime wiring status:** the CLI and voice paths share one stateful
 `AssistantApp` (`asis/app/assistant.py`) owning a single
-`ConversationSession` per session: input → session → query-scoped memory
-retrieval → `ContextAssembler` → `InferenceEngine` → `AIManager` →
+`ConversationSession` per session: input → deterministic orchestration
+(`asis/ai/orchestrator.py`: intent, memory/doc/tool needs, constraints)
+→ query-scoped memory retrieval → labeled bounded `ContextAssembler`
+(`SYSTEM`/`MODE`/`CAPABILITIES`/memory/docs) → `InferenceEngine`
+(`generate` or true-streaming `generate_streamed`, qwen3 thinking
+stripped to metadata, per-turn cancel reset) → `AIManager` →
 optional tool actions (router → permission → executor, up to ASIS_TOOL_MAX_CALLS_PER_TURN validated native calls + final generation) → final
-response stored back in the session. Memory is recalled via
+response stored back in the session, streamed live to the terminal. Memory is recalled via
 `MemoryManager.search_context()` (fail-open: log + continue when
 retrieval fails). Normal conversation never requires a tool.
 

@@ -21,15 +21,35 @@ temperature/retries from settings, matching the manager path.
 ## Inference (`asis/ai/inference.py`)
 
 ```text
-Input → Context Construction → Prompt Construction → Model Inference
-→ Response Parsing → Final Response
+Input → Orchestration → Context Construction → Prompt Construction
+→ Model Inference → Response Parsing → Final Response
 ```
 
 `InferenceEngine.generate()` = interrupt-check → assemble messages →
 single `manager.chat()` → interrupt-check. No retries at this layer
 (retries live in `OllamaProvider.chat`), no tool invocation, no
-agentic loop. Streaming variant yields per-chunk with per-chunk
-cancellation. All failures surface as `InferenceError`.
+agentic loop. `generate_streamed(history, on_chunk)` delivers provider
+chunks to the terminal as they arrive (true streaming path:
+Ollama → provider → engine → CLI renderer); `generate_and_stream()`
+yields per-chunk with per-chunk cancellation. qwen3 `<think>` blocks
+(and the `thinking`/`reasoning` message field) are stripped into
+`metadata["thinking"]` and never rendered. Cancellation tokens reset
+at each turn boundary (`reset_turn()`), so one ESC never poisons the
+next request. All failures surface as `InferenceError`.
+
+## Orchestration (`asis/ai/orchestrator.py`)
+
+Deterministic, rule-based pre-inference planning — no second LLM, no
+fabricated chain-of-thought. `build_plan()` classifies each message
+(`GENERAL_CHAT/QUESTION/TASK/TOOL_REQUEST/CODING/CALCULATION/
+TRANSLATION/DOCUMENT_QUERY/MEMORY_QUERY/CORE_OPERATION/
+VOICE_INTERACTION/UNKNOWN`) and decides memory/document/tool needs,
+mode, and response constraints. `AssistantApp.chat_streamed()` runs the
+plan, then the unchanged tool/permission flow; only the final
+user-visible generation streams. Live-tested with `qwen3:14b`
+(single-turn + direct name recall PASS 2026-09-18; generic
+"What did I just tell you?" phrasing is model-flaky despite verified
+memory context — see Final Report notes).
 
 ## Native function calling (`asis/ai/tool_schemas.py`, `asis/app/native_tools.py`)
 
@@ -65,9 +85,12 @@ Conversation Context  ≠  Permanent Memory
 
 - `ConversationSession`: in-memory turn list, tail-trimmed to
   `max_history` (no token counting).
-- `ContextAssembler`: system prompt = identity + memory text truncated
-  to `context_char_limit` + fixed rules; history tail-sliced to
-  `max_context_messages`. History itself is never char-truncated.
+- `ContextAssembler`: labeled bounded system prompt — `SYSTEM:` (stable
+  identity/personality) + `MODE:` + `CAPABILITIES:` (tool names, no
+  schemas) + query-scoped memory/docs + fixed rules; total capped at
+  `context_char_limit` (stable head kept, dynamic tail truncated).
+  History tail-sliced to `max_context_messages`; history itself is
+  never char-truncated. `estimate_size()` reports prompt length.
 
 **Wiring status:** `ConversationSession` + `ContextAssembler` +
 `InferenceEngine` are wired into the normal CLI and voice paths via
@@ -85,7 +108,7 @@ interrupt scope stays cancellable.
 | SQLite file storage (`memories` table, category/importance index) | Implemented |
 | LIKE search (`importance DESC, created_at DESC`) | Implemented (no embeddings/vector search) |
 | Auto-extraction (`my name is…`, `I like…`, `I'm building…`) | Implemented (`asis/app/memories.py`, invoked by chat CLI) |
-| Recall into prompts | Implemented + wired — `search_context()` keyword retrieval injected via `ContextAssembler`; empty → normal inference; failure → log + continue |
+| Recall into prompts | Implemented + wired — `search_context()` keyword retrieval injected via `ContextAssembler`; empty → normal inference; failure → log + continue; generic recall phrasing ("what did I just tell you?") falls back to top-importance memories |
 | Cloud sync | Future — R.E.S.C.S. responsibility, not A.S.I.S. |
 
 Database lives at `settings.paths.memory / settings.memory.database_name`
