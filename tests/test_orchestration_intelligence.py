@@ -226,6 +226,23 @@ def test_thinking_stream_filter_hides_reasoning():
     assert filt.feed("den</think>Hi") == "Hi"
 
 
+def test_stray_think_markers_never_reach_visible():
+    # Live 2026-09-18: qwen3:14b emitted a bare </think> with no opener
+    # around a tool-turn answer. Unpaired markers are always artifacts.
+    from asis.ai.providers.ollama import _ThinkingStreamFilter, strip_thinking
+
+    visible, _ = strip_thinking("It is 15:52 UTC.</think>\n\nIt is 15:52 UTC.")
+    assert "<think" not in visible.lower()
+    assert "</think" not in visible.lower()
+    assert "15:52" in visible
+    visible2, _ = strip_thinking("<THINK>draft answer.")
+    assert visible2 == ""
+    filt = _ThinkingStreamFilter()
+    assert "</think>" not in filt.feed("answer.</think>More")
+    assert "answer." in filt.feed("answer.</think>More")
+    assert "More" in filt.feed("answer.</think>More")
+
+
 # -- streaming / cancellation / CLI ----------------------------------------
 
 

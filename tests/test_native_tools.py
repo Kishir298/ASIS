@@ -16,6 +16,7 @@ from asis.ai.providers import MockAIProvider, OllamaProvider
 from asis.ai.tool_schemas import (
     ToolDefinition,
     ollama_tools,
+    select_tool_definitions,
     tool_definition_for,
     tool_definitions_for,
     validate_call_arguments,
@@ -654,3 +655,155 @@ def test_schemas_and_results_never_carry_secrets(memory_manager):
     app.chat("status")
     history = json.dumps([m.content for m in app.session.messages])
     assert "session_token" not in history
+
+
+# -- intent-aware tool selection ----------------------------------------
+
+
+def _default_definitions():
+    from asis.app.assistant import build_default_tool_router
+
+    return tool_definitions_for(build_default_tool_router().registry)
+
+
+def test_filter_calculator_request_sends_only_calculate():
+    selected = select_tool_definitions(_default_definitions(), "calculate")
+    assert [d.name for d in selected] == ["calculate"]
+
+
+def test_filter_web_request_sends_only_web_tools():
+    selected = select_tool_definitions(_default_definitions(), "web")
+    assert {d.name for d in selected} == {"web_search", "web_fetch"}
+
+
+def test_filter_time_echo_translate_singletons():
+    assert [
+        d.name for d in select_tool_definitions(_default_definitions(), "time")
+    ] == ["current_time"]
+    assert [
+        d.name for d in select_tool_definitions(_default_definitions(), "echo")
+    ] == ["echo"]
+    assert [
+        d.name for d in select_tool_definitions(_default_definitions(), "translate")
+    ] == ["translate_text"]
+
+
+def test_filter_unknown_hint_and_coding_keep_full_set():
+    full = _default_definitions()
+    assert select_tool_definitions(full, None) == full
+    assert select_tool_definitions(full, "coding-tools") == full
+    assert select_tool_definitions(full, "nonsense-hint") == full
+
+
+def test_filtered_out_tool_call_is_rejected_without_execution(memory_manager):
+    provider = MockAIProvider(
+        responses=("", "done."),
+        tool_sequences=[[{"name": "echo", "arguments": {"text": "hi"}}], None],
+    )
+    app = _app(memory_manager, provider)
+    # Calculator hint exposes only `calculate`; the model's `echo` call
+    # must be rejected before permission/execution.
+    reply = app._run_native_tool_loop("calculate 1+1", tool_hint="calculate")
+    assert reply == "done."
+    blob = " ".join(m.content for m in app.session.messages)
+    assert "Unknown tool" in blob
+    assert "echo result" not in blob
+
+
+def test_orchestrator_granular_hints():
+    from asis.ai.orchestrator import build_plan
+
+    assert build_plan("what time is it").tool_hint == "time"
+    assert build_plan("search the web").tool_hint == "web"
+    assert build_plan("fetch that page").tool_hint == "web"
+    assert build_plan("translate hello to french").tool_hint == "translate"
+    assert build_plan("calculate 6*7").tool_hint == "calculate"
+    assert build_plan("what is 6 times 7").tool_hint == "calculate"
+    # Generic questions keep the full set (conservative: never starve).
+    assert build_plan("What should I do today?").tool_hint is None
+
+
+def test_tool_turn_fallthrough_final_generation_streams(memory_manager):
+    # When the loop exhausts without a direct continuation answer, the
+    # final plain generation after the loop must stream through on_chunk.
+    # (A continuation that already answers returns its buffered text
+    # directly — no extra LLM call just to re-stream it; the CLI then
+    # displays it via its legacy render fallback.)
+    provider = MockAIProvider(
+        responses=("", "", "streamed final."),
+        tool_sequences=[[{"name": "echo", "arguments": {"text": "x"}}], []],
+    )
+    app = _app(memory_manager, provider)
+    chunks: list[str] = []
+    reply = app.chat_streamed("run echo hi", on_chunk=chunks.append)
+    assert reply.strip() == "streamed final."
+    assert chunks, "fall-through final generation must stream chunks"
+    assert "streamed final." in "".join(chunks)
+
+
+def test_tool_continuation_answer_returns_without_extra_call(memory_manager):
+    # A continuation that already answers with tool results in context is
+    # the final response: no extra generation call is spent re-streaming
+    # it (efficiency over the appearance of streaming).
+    provider = MockAIProvider(
+        responses=("", "direct answer."),
+        tool_sequences=[[{"name": "echo", "arguments": {"text": "x"}}], None],
+    )
+    app = _app(memory_manager, provider)
+    assert app.chat_streamed("run echo hi", on_chunk=lambda c: None) == (
+        "direct answer."
+    )
+
+
+def test_tool_decision_calls_stay_buffered(memory_manager):
+    # The native tool-decision requests must not go through the
+    # streaming path (Ollama chat_with_tools is stream=False by design).
+    calls = {"with_tools": 0, "stream": 0}
+
+    class Counting(MockAIProvider):
+        def chat_with_tools(self, messages, tools):
+            calls["with_tools"] += 1
+            return super().chat_with_tools(messages, tools)
+
+        def stream_chat(self, messages):
+            calls["stream"] += 1
+            yield from super().stream_chat(messages)
+
+    provider = Counting(
+        responses=("", "", "final answer."),
+        tool_sequences=[[{"name": "echo", "arguments": {"text": "x"}}], []],
+    )
+    app = _app(memory_manager, provider)
+    reply = app.chat_streamed("run echo hi", on_chunk=lambda c: None)
+    assert reply.strip() == "final answer."
+    assert calls["with_tools"] >= 1
+    assert calls["stream"] >= 1
+
+
+def test_tool_result_small_payloads_untouched():
+    from asis.app.actions import format_tool_result_for_context
+
+    ok = format_tool_result_for_context(ToolResult.ok(data={"a": 1}, tool_name="echo"))
+    assert ok == "[tool echo result] {'a': 1}"
+    err = format_tool_result_for_context(
+        ToolResult.failure(error="nope", tool_name="echo")
+    )
+    assert err == "[tool echo error] nope"
+
+
+def test_tool_result_large_payload_bounded_with_marker():
+    from asis.app.actions import _TOOL_RESULT_MAX_CHARS, format_tool_result_for_context
+
+    assert _TOOL_RESULT_MAX_CHARS == 4000
+    big = "x" * 20000
+    rendered = format_tool_result_for_context(
+        ToolResult.ok(data={"blob": big}, tool_name="read_file")
+    )
+    assert len(rendered) <= _TOOL_RESULT_MAX_CHARS + 64
+    assert "[truncated " in rendered
+    assert rendered.startswith("[tool read_file result]")
+    big_err = format_tool_result_for_context(
+        ToolResult.failure(error="e" * 9000, tool_name="run_command")
+    )
+    assert "[truncated " in big_err
+    assert big_err.startswith("[tool run_command error]")
