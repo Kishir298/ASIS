@@ -62,7 +62,25 @@ _CODING = re.compile(
 )
 _TOOL_HINT = re.compile(
     r"\b(what(\s+is)? (the )?(time|date|day)|current time|time now|"
-    r"^echo\s*:|translate( this| to)?)\b",
+    r"^echo\s*:|translate( this| to)?|"
+    r"web_search|web_fetch|search( the)? web|web search|"
+    r"fetch( (that|the|this) page| .*url|https?://)?|look up|google|"
+    r"\bsearch\b|\bfetch\b|keep searching)\b",
+    re.IGNORECASE,
+)
+_WEB_HINT = re.compile(
+    r"\b(web_search|web_fetch|search( the)? web|web search|"
+    r"fetch( (that|the|this) page)?|look up|keep searching|"
+    r"^(search|fetch)\b)",
+    re.IGNORECASE,
+)
+_SAY_REPEAT = re.compile(
+    r"^\s*(say(\s+exactly)?|repeat(\s+back)?|echo back)\b",
+    re.IGNORECASE,
+)
+_MATH_WORDS = re.compile(
+    r"\b(times|plus|minus|divided(\s+by)?|multiplied(\s+by)?|"
+    r"squared|cubed|percent|modulo|power)\b",
     re.IGNORECASE,
 )
 _TRANSLATE_VERB = re.compile(r"^\s*translat(e|ion)\b", re.IGNORECASE)
@@ -74,7 +92,7 @@ _QUESTION_WORD = re.compile(
 )
 _TASK_VERB = re.compile(
     r"^\s*(please )?(create|write|make|build|fix|run|execute|generate|"
-    r"implement|add|update|delete|remove|summarize|list|show|help me)\b",
+    r"implement|add|update|delete|remove|wipe|read|summarize|list|show|help me)\b",
     re.IGNORECASE,
 )
 
@@ -120,12 +138,22 @@ def classify_intent(
         return Intent.CODING
     if _CALC_EXPR.match(raw) and any(ch.isdigit() for ch in raw):
         return Intent.CALCULATION
+    lowered = raw.lower()
     if _CALC.search(raw) and (
-        _CALC_EXPR.match(raw) or "calculat" in raw.lower()
+        _CALC_EXPR.match(raw)
+        or "calculat" in lowered
+        or "compute" in lowered
+        or (_MATH_WORDS.search(raw) and any(ch.isdigit() for ch in raw))
+        or ("what is" in lowered and any(ch.isdigit() for ch in raw))
     ):
-        # "calculate ..." and math verbs go deterministic; bare math exprs too.
+        # "calculate ...", "compute ...", natural math ("what is 6 times 7")
+        # and bare math exprs go deterministic.
         return Intent.CALCULATION
-    if _TOOL_HINT.search(raw):
+    if _SAY_REPEAT.match(raw):
+        # Repeat-back requests ("say exactly Hi") are chat, not questions:
+        # fast streaming path, no memory retrieval tax.
+        return Intent.GENERAL_CHAT
+    if _TOOL_HINT.search(raw) or _WEB_HINT.search(raw):
         return Intent.TOOL_REQUEST
     if _CODING.search(raw) and normalized_mode == "coding":
         return Intent.CODING

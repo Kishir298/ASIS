@@ -45,6 +45,19 @@ from .native_tools import (
 )
 from .profiles import get_profile
 
+# Intents that never need the native function-calling attempt: a single
+# plain generation is faster (no tool-definition prompt tax) and
+# sufficient. Only true small-talk skips; QUESTION/MEMORY_QUERY/VOICE and
+# TOOL_REQUEST/CALCULATION/CODING always keep the native-first path so
+# natural questions ("what is 6 times 7", "core status?") can still use
+# tools. All other intents keep the native-first path with the
+# heuristic fallback unchanged.
+_NATIVE_SKIP_INTENTS = frozenset(
+    {
+        Intent.GENERAL_CHAT,
+    }
+)
+
 
 def build_default_tool_router(
     executor: ToolExecutor | None = None,
@@ -145,6 +158,7 @@ class AssistantApp:
             memory_context_provider=self._assembler_context,
             mode_context_provider=self._mode_section,
             capabilities_provider=self._capabilities_section,
+            constraints_provider=self._constraints_section,
             max_context_messages=settings.ai.max_context_messages,
             context_char_limit=settings.ai.context_char_limit,
         )
@@ -336,6 +350,14 @@ class AssistantApp:
         parts = [p for p in (caps, tool_line) if p]
         text = "\n".join(parts)
         return text[:2000]
+
+    def _constraints_section(self) -> str:
+        """Per-turn orchestrator constraints (empty outside a planned turn)."""
+        plan = self._last_plan
+        if plan is None:
+            return ""
+        lines = [c.strip() for c in (plan.response_constraints or ()) if c.strip()]
+        return "\n".join(f"- {line}" for line in lines[:8])
 
     def _assembler_context(self) -> str:
         sections = []
@@ -536,6 +558,7 @@ class AssistantApp:
             memory_limit=self._max_memory_items,
         )
         self._last_plan = plan
+        self.assembler.memory_first = plan.intent is Intent.MEMORY_QUERY
         store_auto_memories(text, self.memory)
         self.session.add_user(text)
         # Deterministic short-circuits (no model needed).
@@ -550,7 +573,10 @@ class AssistantApp:
             plan.memory_query if plan.memory_needed else ""
         )
         try:
-            native_reply = self._run_native_tool_loop(text, on_chunk=on_chunk)
+            if plan.tool_hint is None and plan.intent in _NATIVE_SKIP_INTENTS:
+                native_reply = None
+            else:
+                native_reply = self._run_native_tool_loop(text, on_chunk=on_chunk)
             if native_reply is not None:
                 return native_reply
             if on_chunk is None:
