@@ -37,7 +37,17 @@ try:
 except Exception:
     _BEHAVIOR_TEXT = ""
 
+try:
+    from asis.identity.personality import SAFETY_BOUNDS as _SAFETY_TEXT
+except Exception:
+    _SAFETY_TEXT = ""
+
 _BEHAVIOR_RULES = (_BEHAVIOR_TEXT or "").strip()
+# Immutable safety tail: DEFAULT_PERSONALITY already carries equivalent
+# safety prose, but a custom ASIS_PERSONALITY_FILE could strip it. This
+# compact bound always reaches the model regardless of personality
+# overrides, so safety never depends on user-supplied template text.
+_SAFETY_RULES = (_SAFETY_TEXT or "").strip()
 
 
 class ContextAssembler:
@@ -113,6 +123,8 @@ class ContextAssembler:
         sections.append(_MEMORY_RULES)
         if _BEHAVIOR_RULES:
             sections.append(_BEHAVIOR_RULES)
+        if _SAFETY_RULES:
+            sections.append(_SAFETY_RULES)
 
         prompt = "\n\n".join(s for s in sections if s.strip())
         if len(prompt) > self.context_char_limit:

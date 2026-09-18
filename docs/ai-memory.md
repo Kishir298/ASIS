@@ -81,7 +81,14 @@ same permission boundary; the model only requests, A.S.I.S. authorizes.
 the attempt; small local models that ignore `tools` simply fall back.
 Limitations: multi-step depth is bounded by configuration, and native
 support varies by Ollama model — fallback coverage is intentional, not
-a gap.
+a gap. Latency (measured 2026-09-18, `qwen3:14b` 9.3GB on this host):
+`GENERAL_CHAT` (no tool definitions sent, `think=false`, streaming)
+answers in seconds; tool-enabled turns send 6 tool definitions and run
+up to `max_calls_per_turn` (default 3, each tool ≤30s) plus a final
+generation — observed ~100s cold, faster warm via `keep_alive=30m`.
+Worst-case bound per turn: `request_timeout` (120s) × (1+retries) per
+LLM call × up to 4 calls + tools. `GENERAL_CHAT` skipping the native
+attempt is what keeps greetings/repeat-backs fast.
 
 ## Conversation vs memory
 
