@@ -124,7 +124,7 @@ def test_oversized_results_truncated_before_model():
     mock.set_resource("big", {"blob": "y" * 50_000})
     registry = ToolRegistry()
     register_core_tools(registry, mock)
-    router = ToolRouter(registry, ToolExecutor(authorizer=lambda tool: True))
+    assert "core_discover_devices" in registry.list_names()
     # Resource path normalizes through the size bound.
     resp = mock.get_resource("big")
     assert resp.ok is True

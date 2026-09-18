@@ -12,12 +12,13 @@ never persisted, logged, or exposed to the model.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from asis.logging.logger import get_logger
 
 from .client import CoreClient, CoreResponse, ServiceRequest
-from .errors import CoreAuthError, CoreProtocolError, CoreTimeout, CoreUnavailable
+from .errors import CoreProtocolError, CoreUnavailable
 from .models import CoreConnectionState, CoreDeviceInfo, CoreStatus
 from .protocol import error_message, normalize_result, redact, validate_envelope
 
@@ -383,7 +384,6 @@ class RealCoreAdapter(CoreClient):
         if "timeout" in lowered or "timed out" in lowered:
             return f"CORE_TIMEOUT: {text}"
         if "host error" in lowered or "malformed" in lowered or "frame" in lowered:
-            inner = text
             if isinstance(exc, CoreProtocolError):
                 return error_message(exc)
             if "host error" in lowered:

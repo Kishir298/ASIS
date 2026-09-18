@@ -20,7 +20,7 @@ from ..base import Tool, ToolMetadata
 from ..result import ToolResult
 
 
-def _core_of(tool: "CoreToolBase") -> Any:
+def _core_of(tool: CoreToolBase) -> Any:
     return tool._core
 
 

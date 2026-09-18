@@ -5,11 +5,9 @@ Deterministic only: no microphone, speaker, network, live Ollama, or GPU.
 
 from __future__ import annotations
 
-import io
 import logging
 
 from asis.cli.main import _normalize_argv, apply_cli_log_level, build_parser
-
 
 # -- launcher argv dedup -------------------------------------------------------
 
@@ -53,8 +51,6 @@ def test_entry_with_launcher_artifact_version(capsys):
 
 
 def test_interactive_log_level_quiet_console_preserves_file(tmp_path, monkeypatch):
-    from asis.logging.logger import configure_logging
-
     monkeypatch.setenv("ASIS_LOG_DIRECTORY", str(tmp_path))
     # Reset handlers so configure_logging recreates them under tmp.
     root = logging.getLogger("asis")
@@ -76,7 +72,6 @@ def test_interactive_log_level_quiet_console_preserves_file(tmp_path, monkeypatc
         for h in root.handlers
         if "File" not in h.__class__.__name__
     )
-    configure_logging  # silence linters
 
 
 def test_debug_flag_enables_verbose():
@@ -124,7 +119,7 @@ def test_exit_command_prints_goodbye():
         stream = _io.StringIO()
         code = run_interactive(
             _App(),
-            input_fn=lambda p: cmd,
+            input_fn=lambda p, _cmd=cmd: _cmd,
             renderer=TypingRenderer(stream=stream, char_delay=0),
             stream=stream,
         )

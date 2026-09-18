@@ -8,7 +8,7 @@ import pytest
 
 from asis.integrations.core.adapter import RealCoreAdapter
 from asis.integrations.core.client import CoreResponse, ServiceRequest
-from asis.integrations.core.errors import CoreUnavailable
+from asis.integrations.core.errors import CoreProtocolError, CoreUnavailable
 from asis.integrations.core.mock import MockCoreAdapter
 from asis.integrations.core.models import CoreConnectionState
 from asis.integrations.core.protocol import (
@@ -62,7 +62,7 @@ class FakeDevice:
 
     def request(self, destination, message_type, payload=None, timeout=None):
         assert self.is_connected, "not connected"
-        assert payload is not None and "_session_token" not in payload or True
+        assert payload is not None and "_session_token" not in payload
         return {
             "message_id": "m-1",
             "source": "core",
@@ -198,9 +198,9 @@ def test_redact_and_truncate():
 
 
 def test_validate_envelope_rejects_bad_shapes():
-    with pytest.raises(Exception):
+    with pytest.raises(CoreProtocolError):
         validate_envelope({"nope": True})
-    with pytest.raises(Exception):
+    with pytest.raises(CoreProtocolError):
         validate_envelope({"message_type": "", "payload": {}})
 
 

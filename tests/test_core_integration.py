@@ -97,7 +97,6 @@ def test_coding_mode_shares_registry_no_second_client():
     mock, manager, router = _stack()
     ctx = RuntimeContext()
     manager.start(ctx)
-    names = router._registry.list_names() if hasattr(router, "_registry") else []
     # Router holds the shared registry; CORE tools resolve to the ONE adapter.
     from asis.tools.provided.core_tools import CoreDiscoverDevicesTool
 

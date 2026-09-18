@@ -6,6 +6,11 @@ tools must be declared with a higher PermissionLevel and approved by the
 permission system via the ToolExecutor.
 """
 
+from .calculator_tools import (
+    CalculateTool,
+    build_calculator_tools,
+    register_calculator_tools,
+)
 from .core_tools import (
     CoreAgentRequestTool,
     CoreDataRequestTool,
@@ -19,11 +24,6 @@ from .core_tools import (
 )
 from .echo import EchoTool
 from .time import CurrentTimeTool
-from .calculator_tools import (
-    CalculateTool,
-    build_calculator_tools,
-    register_calculator_tools,
-)
 from .translation_tools import (
     TranslateTextTool,
     build_translation_tools,
