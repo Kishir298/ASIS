@@ -64,9 +64,15 @@ session live-tested (multi-turn, `/mode voice|text`, `/docs`,
 `/clear-docs`, `/upload`, `/exit`, exit `0`); installed `asis` console
 script verified equivalent via the `entry()` argv path (no binary on
 PATH in this container — run `pip install -e .` to install it).
-REAL OLLAMA VALIDATION: NOT PERFORMED (`qwen3:14b` not installed;
-server reachable but only `qwen2.5:3b` cached and CPU inference
-exceeded the validation window). REAL VOICE HARDWARE VALIDATION:
+REAL OLLAMA VALIDATION: PERFORMED 2026-09-18 (`qwen3:14b` present,
+`available()=True`): `asis --message "hi"` → visible greeting;
+`say exactly Hi back to me` → `Hi.`; `What are you?` → A.S.I.S.
+identity; `What can you do?` → capabilities (math/time/translation/
+web/general); multi-turn `My name is LiveTestUser` → `What is my
+name?` → `LiveTestUser` (memory write + query-scoped recall PASS).
+Historical note: an earlier validation environment had only a stale
+`qwen2.5:3b` cache and CPU inference exceeded the window — that model
+is NOT a default and MUST NOT be used. REAL VOICE HARDWARE VALIDATION:
 NOT PERFORMED (no audio hardware/deps; mock pipeline tests cover
 the path).
 

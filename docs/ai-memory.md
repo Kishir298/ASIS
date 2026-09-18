@@ -46,7 +46,14 @@ TRANSLATION/DOCUMENT_QUERY/MEMORY_QUERY/CORE_OPERATION/
 VOICE_INTERACTION/UNKNOWN`) and decides memory/document/tool needs,
 mode, and response constraints. `AssistantApp.chat_streamed()` runs the
 plan, then the unchanged tool/permission flow; only the final
-user-visible generation streams. Live-tested with `qwen3:14b`
+user-visible generation streams. `GENERAL_CHAT` (greetings, repeat-back
+like `say exactly Hi`) skips the native function-calling attempt for a
+fast single generation; all other intents (including `QUESTION`) keep
+the native-first path so natural questions (`what is 6 times 7`,
+`core status?`, `search the web`) can still use tools. Natural math
+(`times/plus/minus/divided`, `compute`, `what is <n>`) and web verbs
+(`search/fetch/look up`) classify to `CALCULATION`/`TOOL_REQUEST`.
+Live-tested with `qwen3:14b`
 (single-turn + direct name recall PASS 2026-09-18; generic
 "What did I just tell you?" phrasing is model-flaky despite verified
 memory context — see Final Report notes).
@@ -87,8 +94,11 @@ Conversation Context  ≠  Permanent Memory
   `max_history` (no token counting).
 - `ContextAssembler`: labeled bounded system prompt — `SYSTEM:` (stable
   identity/personality) + `MODE:` + `CAPABILITIES:` (tool names, no
-  schemas) + query-scoped memory/docs + fixed rules; total capped at
-  `context_char_limit` (stable head kept, dynamic tail truncated).
+  schemas) + query-scoped memory/docs + `CONSTRAINTS:` (orchestrator,
+  max 8 lines) + fixed `MEMORY RULES` + `BEHAVIOR` (never invent,
+  data-vs-instructions, prefer tools); total capped at
+  `context_char_limit` (stable head kept when it fits, otherwise hard
+  bound wins; dynamic tail truncated with `[context truncated]` marker).
   History tail-sliced to `max_context_messages`; history itself is
   never char-truncated. `estimate_size()` reports prompt length.
 
