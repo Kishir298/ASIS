@@ -171,11 +171,12 @@ python3 -m pytest -q        # canonical suite (tests/)
 ## CLI
 
 ```bash
+pip install -e .      # installs the `asis` console script
 asis                  # persistent interactive terminal (text/voice/docs)
 asis --help
 asis --message "hi"   # single shot (default model qwen3:14b)
 asis voice            # voice loop (mock engines by default)
-python -m asis        # alias for the asis console script
+python -m asis        # alias for the asis console script (works from source)
 ```
 
 Interactive commands: `/help`, `/mode [text|voice]`, `/upload <path>` /

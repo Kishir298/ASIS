@@ -33,6 +33,43 @@ interrupt response/speech (app stays alive), CTRL+C exit cleanly with
 terminal restore. Documents persist across text/voice switches and are
 injected as bounded offline context (4k chars/doc, 12k total).
 
+Interrupt semantics (implemented, deterministically tested):
+ESC sets a stop flag, cancels all `InterruptCoordinator` scopes
+(`inference`/`voice`/`tools`), stops TTS + audio output, and returns
+the prompt immediately. Cancellation is cooperative: chunk boundaries,
+VAD/STT stages, and the typing renderer observe it. Blocking Ollama
+HTTP (`requests.post`) cannot be safely killed mid-socket, so it stays
+bounded by the configured request timeout; the UI does not wait for
+it — the orphaned worker is a daemon thread whose late result is
+discarded and never touches conversation/tool/terminal state.
+CTRL+C is delivered to the main loop through a thread-safe
+`shutdown_event` (a background watcher thread cannot raise
+`KeyboardInterrupt` in the main thread); shutdown stops TTS/audio,
+stops the watcher (joining it), restores POSIX `termios` state in a
+`finally`, runs runtime cleanup, and exits `0`.
+Physical TTY ESC/CTRL+C timing is unit-tested with mocks only;
+manual TTY validation is recorded as NOT PERFORMED unless physically
+exercised (see validation status below).
+
+Document resource bounds (implemented, deterministically tested):
+files over 10 MB are rejected before reading (`stat` gate); text/JSON
+reads are capped at 2 MB; PDF extraction stops after 2 MB of text;
+DOCX archives with more than 64 entries or a `document.xml` over
+2 MB are treated as empty rather than extracted. All parsing is
+offline (stdlib-first, optional `pypdf`/`python-docx`).
+
+Validation status (this environment):
+`python -m asis --version/--help` live-tested; persistent mock-provider
+session live-tested (multi-turn, `/mode voice|text`, `/docs`,
+`/clear-docs`, `/upload`, `/exit`, exit `0`); installed `asis` console
+script verified equivalent via the `entry()` argv path (no binary on
+PATH in this container — run `pip install -e .` to install it).
+REAL OLLAMA VALIDATION: NOT PERFORMED (`qwen3:14b` not installed;
+server reachable but only `qwen2.5:3b` cached and CPU inference
+exceeded the validation window). REAL VOICE HARDWARE VALIDATION:
+NOT PERFORMED (no audio hardware/deps; mock pipeline tests cover
+the path).
+
 `asis translate` subcommand (offline translation REPL/single-shot):
 `--to LANG`, `--from LANG|auto`, `--message TEXT`, `--provider`,
 `--model`, `--memory-db PATH`. REPL supports `/tr-to`, `/tr-from`,
@@ -71,6 +108,7 @@ python -m pytest tests/test_voice.py tests/test_voice_runner.py tests/test_ollam
 | `test_ai.py` | 9 | providers, manager, conversation, context, inference |
 | `test_app.py` | 6 | auto-memory extraction and result handling |
 | `test_cli.py` | 7 | entry point, flags, REPL shutdown, memory building |
+| `test_cli_interrupt.py` | 14 | launcher basename hardening, model override, shutdown-event contract, cooperative cancel/recovery, mode+doc persistence, doc→context proof, oversized/zip-bomb bounds, quoted paths, renderer edges, logging dedup |
 | `test_runtime_integration.py` | 5 | multi-turn CLI, memory/tool paths, voice app path |
 | `test_coding_integration.py` | 5 | integrated coding path, multi-turn fix flow, memory separation |
 | `test_shutdown.py` | 5 | bounded shutdown, timeout FAILED, reverse order |
