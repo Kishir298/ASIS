@@ -109,6 +109,7 @@ python -m pytest tests/test_voice.py tests/test_voice_runner.py tests/test_ollam
 | `test_app.py` | 6 | auto-memory extraction and result handling |
 | `test_cli.py` | 7 | entry point, flags, REPL shutdown, memory building |
 | `test_cli_interrupt.py` | 14 | launcher basename hardening, model override, shutdown-event contract, cooperative cancel/recovery, mode+doc persistence, doc→context proof, oversized/zip-bomb bounds, quoted paths, renderer edges, logging dedup |
+| `test_base_install.py` | 4 | mock/offline CLI imports without `requests`; ollama without `requests` fails with install hint; lazy `OllamaProvider` identity |
 | `test_runtime_integration.py` | 5 | multi-turn CLI, memory/tool paths, voice app path |
 | `test_coding_integration.py` | 5 | integrated coding path, multi-turn fix flow, memory separation |
 | `test_shutdown.py` | 5 | bounded shutdown, timeout FAILED, reverse order |
@@ -129,7 +130,10 @@ claim 100% coverage.
   `asis/` module — reserved for future system/resource features),
   `python-dotenv`.
 - **AI (optional):** `requests` (the Ollama provider uses HTTP via
-  `requests`; the `ollama` client package is not used).
+  `requests`; the `ollama` client package is not used). A base install
+  without extras still runs the mock/offline CLI: `OllamaProvider` is
+  imported lazily and only actual Ollama or web-tool execution needs
+  `requests` (proven by `tests/test_base_install.py`).
 - **Voice (optional):** `numpy`, `scipy`, `sounddevice`, `soundfile`,
   `silero-vad`, `faster-whisper`, `torch`, `torchaudio`, `speechbrain`,
   `openwakeword`, `pyttsx3` (+ `pycaw/comtypes/pywin32` on Windows).
