@@ -119,7 +119,7 @@ class WebFetchTool(Tool):
     metadata = ToolMetadata(
         name="web_fetch",
         description=(
-            "Fetch readable content from a public HTTP or HTTPS webpage. "
+            "Fetch readable content from a public HTTP(S) webpage. "
             "Returns bounded text plus page metadata."
         ),
         category="web",

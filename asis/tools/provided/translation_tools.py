@@ -30,8 +30,8 @@ class TranslateTextTool(Tool):
     metadata = ToolMetadata(
         name="translate_text",
         description=(
-            "Translate text into a target language. Returns the translated "
-            "text plus source/target language metadata."
+            "Translate text into a target language. Returns translated "
+            "text plus language metadata."
         ),
         category="translation",
         permission=PermissionLevel.LOW,

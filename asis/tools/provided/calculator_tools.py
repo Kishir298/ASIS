@@ -75,10 +75,8 @@ class CalculateTool(Tool):
     metadata = ToolMetadata(
         name="calculate",
         description=(
-            "Perform exact local mathematical calculations: arithmetic, "
-            "algebra, equations, calculus, trigonometry, matrices, "
-            "statistics, units, physics, finance, and more. Returns exact "
-            "and numeric results with verification."
+            "Exact local math: arithmetic, algebra, calculus, matrices, "
+            "statistics, units. Returns exact and numeric results."
         ),
         category="calculator",
         permission=PermissionLevel.LOW,
