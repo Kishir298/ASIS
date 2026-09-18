@@ -37,7 +37,9 @@ def _from_response(resp: CoreResponse, tool_name: str) -> ToolResult:
             data=normalize_result(resp.data),
             tool_name=tool_name,
         )
-    return ToolResult.failure(error=str(resp.error or "CORE_ERROR"), tool_name=tool_name)
+    return ToolResult.failure(
+        error=str(resp.error or "CORE_ERROR"), tool_name=tool_name
+    )
 
 
 class CoreToolBase(Tool):
@@ -83,7 +85,9 @@ class CoreDiscoverDevicesTool(CoreToolBase):
         try:
             resp = adapter.send_request("core", "DEVICE_DISCOVER", {})
         except Exception as exc:
-            return ToolResult.failure(error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name)
+            return ToolResult.failure(
+                error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name
+            )
         return _from_response(resp, self.name)
 
 
@@ -117,7 +121,9 @@ class CoreDeviceInfoTool(CoreToolBase):
                 "core", "DEVICE_INFO", {"device_id": device_id.strip()}
             )
         except Exception as exc:
-            return ToolResult.failure(error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name)
+            return ToolResult.failure(
+                error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name
+            )
         return _from_response(resp, self.name)
 
 
@@ -158,7 +164,9 @@ class CoreStatusTool(CoreToolBase):
             resp = core.device_status()
             return _from_response(resp, self.name)
         except Exception as exc:
-            return ToolResult.failure(error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name)
+            return ToolResult.failure(
+                error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name
+            )
 
 
 class CoreServiceRequestTool(CoreToolBase):
@@ -220,7 +228,9 @@ class CoreServiceRequestTool(CoreToolBase):
                     {"operation": operation.strip(), **dict(params)},
                 )
         except Exception as exc:
-            return ToolResult.failure(error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name)
+            return ToolResult.failure(
+                error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name
+            )
         return _from_response(resp, self.name)
 
 
@@ -277,7 +287,9 @@ class CoreAgentRequestTool(CoreToolBase):
                     {"operation": operation.strip(), **dict(params)},
                 )
         except Exception as exc:
-            return ToolResult.failure(error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name)
+            return ToolResult.failure(
+                error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name
+            )
         return _from_response(resp, self.name)
 
 
@@ -336,7 +348,9 @@ class CoreDataRequestTool(CoreToolBase):
                     {"request_type": request_type.strip(), **dict(params)},
                 )
         except Exception as exc:
-            return ToolResult.failure(error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name)
+            return ToolResult.failure(
+                error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name
+            )
         return _from_response(resp, self.name)
 
 
@@ -397,7 +411,9 @@ class CoreSendToDeviceTool(CoreToolBase):
                     device_id.strip(), message_type.strip(), dict(payload)
                 )
         except Exception as exc:
-            return ToolResult.failure(error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name)
+            return ToolResult.failure(
+                error=f"CORE_UNAVAILABLE: {exc}", tool_name=self.name
+            )
         return _from_response(resp, self.name)
 
 

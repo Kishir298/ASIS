@@ -12,6 +12,7 @@ never persisted, logged, or exposed to the model.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Callable
 from typing import Any
 
@@ -133,10 +134,8 @@ class RealCoreAdapter(CoreClient):
             device.register()
         except Exception as exc:
             self._state = CoreConnectionState.FAILED
-            try:
+            with contextlib.suppress(Exception):
                 device.shutdown()
-            except Exception:
-                pass
             self._device = None
             return CoreResponse(ok=False, error=self._classify(exc))
         self._device = device
@@ -173,7 +172,9 @@ class RealCoreAdapter(CoreClient):
         if device is None:
             return CoreResponse(ok=False, error="CORE_UNAVAILABLE: not connected.")
         try:
-            remembered = device.remembered_state() if hasattr(device, "remembered_state") else {}
+            remembered = (
+                device.remembered_state() if hasattr(device, "remembered_state") else {}
+            )
             lease = device.lease_state if hasattr(device, "lease_state") else "UNKNOWN"
             lease_state = lease() if callable(lease) else lease
             info = CoreDeviceInfo(
@@ -212,7 +213,11 @@ class RealCoreAdapter(CoreClient):
                 status=str(data.get("status", "unknown")),
             )
         connected = self.is_connected()
-        state = self._state if not connected and self._state == CoreConnectionState.CONNECTED else self._state
+        state = (
+            self._state
+            if not connected and self._state == CoreConnectionState.CONNECTED
+            else self._state
+        )
         if connected:
             state = CoreConnectionState.CONNECTED
         elif state == CoreConnectionState.CONNECTED:
@@ -240,7 +245,9 @@ class RealCoreAdapter(CoreClient):
         wait = self._request_timeout if timeout is None else float(timeout)
         self._logger.info("CORE request %s -> %s", message_type, destination)
         try:
-            raw = device.request(destination, message_type, dict(payload or {}), timeout=wait)
+            raw = device.request(
+                destination, message_type, dict(payload or {}), timeout=wait
+            )
             message = validate_envelope(raw)
             data = normalize_result(message.get("payload"))
             self._logger.info("CORE response %s ok", message.get("message_type"))
@@ -266,15 +273,20 @@ class RealCoreAdapter(CoreClient):
         try:
             if hasattr(device, "data_request"):
                 raw = device.data_request(
-                    request_type, dict(params or {}), destination,
+                    request_type,
+                    dict(params or {}),
+                    destination,
                     timeout=self._request_timeout if timeout is None else timeout,
                 )
                 message = validate_envelope(raw)
-                return CoreResponse(ok=True, data=normalize_result(message.get("payload")))
+                return CoreResponse(
+                    ok=True, data=normalize_result(message.get("payload"))
+                )
         except Exception as exc:
             return CoreResponse(ok=False, error=self._classify(exc))
         return self.send_request(
-            destination, "DATA_REQUEST",
+            destination,
+            "DATA_REQUEST",
             {"request_type": request_type, **dict(params or {})},
             timeout=self._request_timeout if timeout is None else timeout,
         )
@@ -293,15 +305,21 @@ class RealCoreAdapter(CoreClient):
         try:
             if hasattr(device, "send_to_device"):
                 raw = device.send_to_device(
-                    device_id, message_type, dict(payload or {}),
+                    device_id,
+                    message_type,
+                    dict(payload or {}),
                     timeout=self._request_timeout if timeout is None else timeout,
                 )
                 message = validate_envelope(raw)
-                return CoreResponse(ok=True, data=normalize_result(message.get("payload")))
+                return CoreResponse(
+                    ok=True, data=normalize_result(message.get("payload"))
+                )
         except Exception as exc:
             return CoreResponse(ok=False, error=self._classify(exc))
         return self.send_request(
-            device_id, message_type, dict(payload or {}),
+            device_id,
+            message_type,
+            dict(payload or {}),
             timeout=self._request_timeout if timeout is None else timeout,
         )
 
@@ -315,9 +333,13 @@ class RealCoreAdapter(CoreClient):
             return CoreResponse(ok=False, error="CORE_UNAVAILABLE: not connected.")
         try:
             if hasattr(device, "service_request"):
-                raw = device.service_request(request.service, request.operation, dict(request.params))
+                raw = device.service_request(
+                    request.service, request.operation, dict(request.params)
+                )
                 message = validate_envelope(raw)
-                return CoreResponse(ok=True, data=normalize_result(message.get("payload")))
+                return CoreResponse(
+                    ok=True, data=normalize_result(message.get("payload"))
+                )
         except Exception as exc:
             return CoreResponse(ok=False, error=self._classify(exc))
         return self.send_request(
@@ -326,7 +348,9 @@ class RealCoreAdapter(CoreClient):
             {"operation": request.operation, **dict(request.params)},
         )
 
-    def publish_event(self, event_type: str, data: dict[str, Any] | None = None) -> None:
+    def publish_event(
+        self, event_type: str, data: dict[str, Any] | None = None
+    ) -> None:
         self._logger.info("CORE event %s (local-only; no host event API)", event_type)
 
     def get_resource(self, name: str) -> CoreResponse:
@@ -337,7 +361,9 @@ class RealCoreAdapter(CoreClient):
             if hasattr(device, "data_request"):
                 raw = device.data_request("record_get", {"key": name})
                 message = validate_envelope(raw)
-                return CoreResponse(ok=True, data=normalize_result(message.get("payload")))
+                return CoreResponse(
+                    ok=True, data=normalize_result(message.get("payload"))
+                )
         except Exception as exc:
             return CoreResponse(ok=False, error=self._classify(exc))
         return CoreResponse(ok=False, error="CORE_ERROR: resource API not mapped.")
@@ -347,7 +373,9 @@ class RealCoreAdapter(CoreClient):
     ) -> CoreResponse:
         redacted = redact(metadata or {})
         self._logger.info("CORE register component %s (local-only)", component_id)
-        return CoreResponse(ok=True, data={"component_id": component_id, "meta": redacted})
+        return CoreResponse(
+            ok=True, data={"component_id": component_id, "meta": redacted}
+        )
 
     def get_health(self) -> dict[str, Any]:
         status = self.status()
@@ -389,7 +417,11 @@ class RealCoreAdapter(CoreClient):
             if "host error" in lowered:
                 return f"CORE_ERROR: {text}"
             return f"CORE_PROTOCOL_ERROR: {text}"
-        if "closed" in lowered or "connection" in lowered or "register before" in lowered:
+        if (
+            "closed" in lowered
+            or "connection" in lowered
+            or "register before" in lowered
+        ):
             self._drop_session()
             return f"CORE_UNAVAILABLE: {text}"
         return error_message(exc)

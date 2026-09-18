@@ -8,6 +8,7 @@ down the local assistant. Reconnect is bounded and stop-aware.
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from collections.abc import Callable
 from typing import Any
@@ -49,7 +50,10 @@ class CoreConnectionManager(RuntimeComponent):
     @property
     def state(self) -> CoreConnectionState:
         adapter_state = getattr(self._adapter, "connection_state", None)
-        if isinstance(adapter_state, CoreConnectionState) and self._adapter.is_connected():
+        if (
+            isinstance(adapter_state, CoreConnectionState)
+            and self._adapter.is_connected()
+        ):
             return CoreConnectionState.CONNECTED
         return self._state
 
@@ -71,10 +75,8 @@ class CoreConnectionManager(RuntimeComponent):
     def stop(self, context: RuntimeContext) -> None:
         self._stop.set()
         self._state = CoreConnectionState.STOPPING
-        try:
+        with contextlib.suppress(Exception):
             self._adapter.disconnect()
-        except Exception:
-            pass
         self._state = (
             CoreConnectionState.DISABLED
             if not self._enabled
@@ -143,10 +145,8 @@ class CoreConnectionManager(RuntimeComponent):
         if not self._enabled or self._stop.is_set():
             return False
         self._state = CoreConnectionState.RECONNECTING
-        try:
+        with contextlib.suppress(Exception):
             self._adapter.disconnect()
-        except Exception:
-            pass
         return self._connect_once()
 
     # -- internals --
@@ -178,7 +178,9 @@ class CoreConnectionManager(RuntimeComponent):
                 self._state = CoreConnectionState.STOPPING
                 return
             delay = self._reconnect_delay * attempt
-            self._logger.info("CORE retry %s/%s in %.1fs", attempt, self._max_retries, delay)
+            self._logger.info(
+                "CORE retry %s/%s in %.1fs", attempt, self._max_retries, delay
+            )
             if delay > 0 and self._stop.wait(delay):
                 self._state = CoreConnectionState.STOPPING
                 return

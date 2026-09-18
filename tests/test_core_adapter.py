@@ -82,12 +82,18 @@ class FakeDevice:
             "message_type": "SERVICE_RESPONSE",
             "timestamp": "now",
             "request_id": "r-2",
-            "payload": {"service_id": service_id, "operation": operation,
-                        "result": dict(params or {}), "success": True},
+            "payload": {
+                "service_id": service_id,
+                "operation": operation,
+                "result": dict(params or {}),
+                "success": True,
+            },
             "identity_id": "core",
         }
 
-    def data_request(self, request_type, payload=None, destination="core", timeout=None):
+    def data_request(
+        self, request_type, payload=None, destination="core", timeout=None
+    ):
         return {
             "message_id": "m-3",
             "source": "core",
@@ -207,12 +213,16 @@ def test_validate_envelope_rejects_bad_shapes():
 def test_no_host_imports_in_adapter_surface():
     import pathlib
 
-    root = pathlib.Path(__file__).resolve().parents[1] / "asis" / "integrations" / "core"
+    root = (
+        pathlib.Path(__file__).resolve().parents[1] / "asis" / "integrations" / "core"
+    )
     forbidden = ("from core.communication", "from core.", "import core.")
     for path in root.glob("*.py"):
         text = path.read_text()
         for marker in forbidden:
-            assert marker not in text, f"{path.name} must not import CORE-HOST ({marker})"
+            assert (
+                marker not in text
+            ), f"{path.name} must not import CORE-HOST ({marker})"
 
 
 def test_mock_standalone_path():

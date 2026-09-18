@@ -104,7 +104,9 @@ def validate_settings(settings: Settings) -> Settings:
             f"Invalid configuration ai.temperature: expected a number "
             f"between 0 and {_TEMPERATURE_MAX}, received {temp!r}."
         )
-    _require_positive_int("ai", "max_context_messages", settings.ai.max_context_messages)
+    _require_positive_int(
+        "ai", "max_context_messages", settings.ai.max_context_messages
+    )
     _require_positive_int("ai", "context_char_limit", settings.ai.context_char_limit)
     native_tools = settings.ai.native_tools
     if (
@@ -171,7 +173,11 @@ def validate_settings(settings: Settings) -> Settings:
         ("max_url_length", 100, 8_000),
     ):
         value = getattr(settings.web, field_name)
-        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not low <= value <= high
+        ):
             raise ConfigurationError(
                 f"Invalid configuration web.{field_name}: expected an "
                 f"integer between {low} and {high}, received {value!r}."
@@ -256,7 +262,11 @@ def validate_settings(settings: Settings) -> Settings:
         ("precision", 0, 30),
     ):
         value = getattr(settings.calculator, field_name)
-        if isinstance(value, bool) or not isinstance(value, int) or not low <= value <= high:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not low <= value <= high
+        ):
             raise ConfigurationError(
                 f"Invalid configuration calculator.{field_name}: expected an "
                 f"integer between {low} and {high}, received {value!r}."
@@ -379,7 +389,11 @@ def validate_settings(settings: Settings) -> Settings:
         )
     for field_name in ("connect_timeout", "request_timeout"):
         value = getattr(settings.core, field_name)
-        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 600:
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, int)
+            or not 1 <= value <= 600
+        ):
             raise ConfigurationError(
                 f"Invalid configuration core.{field_name}: expected an "
                 f"integer between 1 and 600, received {value!r}."

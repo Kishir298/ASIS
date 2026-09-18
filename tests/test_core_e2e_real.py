@@ -9,6 +9,7 @@ operation survives CORE loss.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import sys
@@ -55,10 +56,8 @@ def wire(tmp_path):
 
     adapter = RealCoreAdapter(client_factory=factory, device_id="mac-01")
     yield host, adapter
-    try:
+    with contextlib.suppress(Exception):
         adapter.disconnect()
-    except Exception:
-        pass
     host.stop()
 
 
@@ -88,7 +87,9 @@ def test_real_tool_through_real_router(wire, tmp_path):
 
     host, adapter = wire
     manager = CoreConnectionManager(
-        adapter, enabled=True, credential_provider=lambda: "secret-mac-01",
+        adapter,
+        enabled=True,
+        credential_provider=lambda: "secret-mac-01",
         reconnect_enabled=False,
     )
     registry = ToolRegistry()
@@ -143,9 +144,7 @@ def test_core_loss_keeps_local_operation(wire):
 
 
 def test_no_core_host_modules_imported():
-    assert not any(
-        name == "core" or name.startswith("core.") for name in sys.modules
-    )
+    assert not any(name == "core" or name.startswith("core.") for name in sys.modules)
 
 
 @requires_client_repo

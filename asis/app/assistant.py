@@ -17,6 +17,7 @@ continue); inference failures preserve conversation state.
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 from asis.ai.context import ContextAssembler
@@ -72,21 +73,15 @@ def build_default_tool_router(
     registry = ToolRegistry()
     registry.register(EchoTool())
     registry.register(CurrentTimeTool())
-    try:
+    # Web tools are optional; never break the default router.
+    with contextlib.suppress(Exception):
         register_web_tools(registry)
-    except Exception:
-        # Web tools are optional; never break the default router.
-        pass
-    try:
+    # Translation tools are optional; never break the default router.
+    with contextlib.suppress(Exception):
         register_translation_tools(registry)
-    except Exception:
-        # Translation tools are optional; never break the default router.
-        pass
-    try:
+    # Calculator tools are optional; never break the default router.
+    with contextlib.suppress(Exception):
         register_calculator_tools(registry)
-    except Exception:
-        # Calculator tools are optional; never break the default router.
-        pass
     return ToolRouter(registry=registry, executor=build_executor(executor))
 
 
@@ -105,18 +100,12 @@ def build_coding_tool_router(
     registry = ToolRegistry()
     registry.register(EchoTool())
     registry.register(CurrentTimeTool())
-    try:
+    with contextlib.suppress(Exception):
         register_web_tools(registry)
-    except Exception:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         register_translation_tools(registry)
-    except Exception:
-        pass
-    try:
+    with contextlib.suppress(Exception):
         register_calculator_tools(registry)
-    except Exception:
-        pass
     for tool in build_coding_registry(workspace).list_tools():
         registry.register(tool)
     return ToolRouter(registry=registry, executor=build_executor(executor))
@@ -203,11 +192,9 @@ class AssistantApp:
             from asis.tools.provided import register_core_tools
         except Exception:
             return
-        try:
+        # Already registered (or registry rejected) — never fatal.
+        with contextlib.suppress(Exception):
             register_core_tools(router.registry, self.core)
-        except Exception:
-            # Already registered (or registry rejected) — never fatal.
-            pass
 
     def _ensure_web_tools(self, router: ToolRouter) -> None:
         """Register shared web tools on a router once (duplicate-safe)."""
@@ -217,11 +204,9 @@ class AssistantApp:
             from asis.tools.provided import register_web_tools
         except Exception:
             return
-        try:
+        # Already registered (or registry rejected) — never fatal.
+        with contextlib.suppress(Exception):
             register_web_tools(router.registry)
-        except Exception:
-            # Already registered (or registry rejected) — never fatal.
-            pass
 
     def _ensure_translation_tools(self, router: ToolRouter) -> None:
         """Register shared translation tools once (duplicate-safe)."""
@@ -231,11 +216,9 @@ class AssistantApp:
             from asis.tools.provided import register_translation_tools
         except Exception:
             return
-        try:
+        # Already registered (or registry rejected) — never fatal.
+        with contextlib.suppress(Exception):
             register_translation_tools(router.registry)
-        except Exception:
-            # Already registered (or registry rejected) — never fatal.
-            pass
 
     def _ensure_calculator_tools(self, router: ToolRouter) -> None:
         """Register shared calculator tools once (duplicate-safe)."""
@@ -245,11 +228,9 @@ class AssistantApp:
             from asis.tools.provided import register_calculator_tools
         except Exception:
             return
-        try:
+        # Already registered (or registry rejected) — never fatal.
+        with contextlib.suppress(Exception):
             register_calculator_tools(router.registry)
-        except Exception:
-            # Already registered (or registry rejected) — never fatal.
-            pass
 
     @staticmethod
     def _coerce_mode(mode: AssistantMode | str | None) -> AssistantMode:

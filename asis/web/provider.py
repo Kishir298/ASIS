@@ -12,6 +12,7 @@ LLM as information only and must never be interpreted as instructions.
 
 from __future__ import annotations
 
+import contextlib
 from abc import ABC, abstractmethod
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, unquote, urlparse
@@ -260,20 +261,16 @@ class DuckDuckGoWebProvider(WebProvider):
                         raise WebProviderError(exc.code, exc.message) from None
                     redirects_followed += 1
                     current = validated.url
-                    try:
+                    with contextlib.suppress(Exception):
                         response.close()
-                    except Exception:
-                        pass
                     continue
                 return self._read_response(
                     response, original_url=url.strip(), max_chars=max_chars
                 )
         finally:
             if self._session is None:
-                try:
+                with contextlib.suppress(Exception):
                     client.close()
-                except Exception:
-                    pass
 
     def _read_response(
         self, response: requests.Response, *, original_url: str, max_chars: int
@@ -282,10 +279,8 @@ class DuckDuckGoWebProvider(WebProvider):
         final_url = getattr(response, "url", original_url)
         content_type = response.headers.get("Content-Type", "")
         if status >= 400:
-            try:
+            with contextlib.suppress(Exception):
                 response.close()
-            except Exception:
-                pass
             raise WebProviderError(
                 "WEB_HTTP_ERROR", f"WEB_HTTP_ERROR: page failed (status {status})."
             )
@@ -310,10 +305,8 @@ class DuckDuckGoWebProvider(WebProvider):
                 "WEB_PROVIDER_ERROR", "WEB_PROVIDER_ERROR: page read failed."
             ) from None
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 response.close()
-            except Exception:
-                pass
         raw = b"".join(chunks)
         encoding = getattr(response, "encoding", None) or "utf-8"
         try:

@@ -93,9 +93,7 @@ def test_service_and_agent_validation():
     register_core_tools(registry, _online_mock())
     router = ToolRouter(registry, ToolExecutor(authorizer=lambda tool: True))
     assert router.execute("core_service_request").success is False
-    ok = router.execute(
-        "core_service_request", service="health", operation="status"
-    )
+    ok = router.execute("core_service_request", service="health", operation="status")
     # Mock has no service handlers -> honest failure, still structured.
     assert ok.success is False
     assert "Mock C.O.R.E." in (ok.error or "")
@@ -144,7 +142,9 @@ def test_no_credentials_in_tool_results():
         ("core_status", {}),
     ):
         result = router.execute(name, **kwargs)
-        blob = json.dumps({"ok": result.success, "data": result.data, "err": result.error})
+        blob = json.dumps(
+            {"ok": result.success, "data": result.data, "err": result.error}
+        )
         for secret in ("session_token", "credential", "connection_id"):
             assert secret not in blob, (name, secret)
 
@@ -154,7 +154,9 @@ def test_data_request_validates_args():
     register_core_tools(registry, _online_mock())
     router = ToolRouter(registry, ToolExecutor(authorizer=lambda tool: True))
     assert router.execute("core_data_request").success is False
-    assert router.execute("core_data_request", request_type="record_list").success is True
+    assert (
+        router.execute("core_data_request", request_type="record_list").success is True
+    )
     bad = router.execute("core_data_request", request_type="x", params="nope")
     assert bad.success is False
     assert "params" in (bad.error or "")
