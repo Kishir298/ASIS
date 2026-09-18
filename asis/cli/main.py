@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from asis.ai import AIManager
-from asis.ai.providers import MockAIProvider, OllamaProvider
+from asis.ai.providers import MockAIProvider
 from asis.app.assistant import AssistantApp
 from asis.app.modes import AssistantMode, parse_mode
 from asis.configuration import settings
@@ -55,6 +55,8 @@ def _provider(provider_name: str, model: str):
     if provider_name == "mock":
         return MockAIProvider(model=model)
     if provider_name == "ollama":
+        from asis.ai.providers import OllamaProvider
+
         return OllamaProvider(
             model=model,
             host=settings.ai.endpoint,

@@ -14,7 +14,7 @@ from asis.events.events import Event, EventType
 from asis.logging.logger import get_logger
 
 from .models import AIMessage, AIResponse
-from .providers import AIProvider, MockAIProvider, OllamaProvider
+from .providers import AIProvider, MockAIProvider
 
 
 def create_provider(provider_name: str | None = None) -> AIProvider:
@@ -27,6 +27,8 @@ def create_provider(provider_name: str | None = None) -> AIProvider:
         )
 
     if name == "ollama":
+        from .providers import OllamaProvider
+
         return OllamaProvider(
             model=settings.ai.model,
             host=settings.ai.endpoint,
