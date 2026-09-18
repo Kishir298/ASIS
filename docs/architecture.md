@@ -103,6 +103,25 @@ phrase (default `asis shutdown`) in the CLI/voice REPLs, by
 `inference` and `voice`) lets one subsystem cancel another's blocking
 work via `CancellationError`.
 
+## Boot / Ollama lifecycle
+
+`asis` runs a blocking boot sequence (`asis/app/boot.py`) before any
+prompt: configuration → identity → personality → memory → tools →
+Ollama reachable → silent model readiness probe (`hello` sent directly
+through the existing provider instance — single USER message, no
+session/context/tools/memory, `think=False`, small `num_predict`) →
+`A.S.I.S. ready.` → `You >`. The probe text and reply are never printed
+or persisted; failure prints `[FAIL]` and exits without entering
+interactive mode. ESC cancels the in-flight turn once interactive;
+`CTRL+C`/exit/EOF/failure runs centralized cleanup in `entry()`.
+
+Ollama servers are ownership-safe (`asis/ai/ollama_lifecycle.py`):
+already-running servers are external (`owned=False`) and never stopped;
+only a process actually started by A.S.I.S. (`ASIS_OLLAMA_MANAGED=auto/on`,
+default `auto`) is owned and terminated on every exit path with a bounded
+graceful-then-force stop (`ASIS_OLLAMA_SHUTDOWN_TIMEOUT`, default 10s).
+No kill-by-name (`taskkill`/`pkill`) exists anywhere.
+
 ## Identity
 
 `asis/identity/`: frozen `Identity(name, title, personality,

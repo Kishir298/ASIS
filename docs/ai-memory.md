@@ -8,7 +8,7 @@ Abstract contract `AIProvider`: `name`, `model`, `chat(messages)`,
 | Provider | Status | Details |
 |---|---|---|
 | `mock` | Implemented (tests/dev) | `MockAIProvider`: scripted responses, `fail`/`delay` knobs, offline; optional scripted `tool_sequences` enable native-call tests |
-| `ollama` | Implemented (needs `requests` + a local Ollama server) | Local server: model/host/timeout/**temperature**/**retries** from settings; `temperature` sent as chat `options` only when set; `available()` probes `/api/tags` with a capped probe timeout (fast offline/down detection); native function calling via `/api/chat` `tools` (`supports_native_tools=True`, model-dependent). Down server → deterministic `InferenceError` (no cloud fallback, no auto-download); use `ASIS_AI_PROVIDER=mock` for fully offline runs without Ollama |
+| `ollama` | Implemented (needs `requests` + a local Ollama server) | Local server: model/host/timeout/**temperature**/**retries** from settings; `temperature` sent as chat `options` only when set; `available()` probes `/api/tags` with a capped probe timeout (fast offline/down detection); native function calling via `/api/chat` `tools` (`supports_native_tools=True`, model-dependent). Lifecycle: already-running servers are external and never stopped; `ASIS_OLLAMA_MANAGED=auto` (default) starts an owned `ollama serve` only when down (`asis/ai/ollama_lifecycle.py`). Boot sends one silent `hello` probe through the same provider instance (`think=False`, small `num_predict`, no tools/context) before `You >` (`asis/app/boot.py`). Down server → deterministic `InferenceError` (no cloud fallback, no auto-download); use `ASIS_AI_PROVIDER=mock` for fully offline runs without Ollama |
 
 No Hugging Face or cloud providers exist — anything else is future.
 
