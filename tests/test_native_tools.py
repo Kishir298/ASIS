@@ -695,6 +695,10 @@ def test_filter_unknown_hint_and_coding_keep_full_set():
     assert select_tool_definitions(full, "nonsense-hint") == full
 
 
+def test_filter_none_hint_returns_explicit_empty():
+    assert select_tool_definitions(_default_definitions(), "none") == []
+
+
 def test_filtered_out_tool_call_is_rejected_without_execution(memory_manager):
     provider = MockAIProvider(
         responses=("", "done."),

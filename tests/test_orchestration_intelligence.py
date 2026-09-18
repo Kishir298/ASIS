@@ -397,3 +397,88 @@ def test_memory_first_ordering_on_recall(memory_manager):
     system_text = seen["system"]
     assert system_text.index("RELEVANT MEMORIES") < system_text.index("MODE:")
     assert "TestUser" in system_text
+
+
+# -- generic explanation routing (zero-tool verdict) ---------------------
+
+
+def test_explanation_questions_get_none_hint():
+    for text in (
+        "explain recursion",
+        "tell me about black holes",
+        "why is the sky blue",
+        "how are you",
+        "what is recursion",
+        "what are black holes",
+        "describe the process of photosynthesis in detail",
+    ):
+        plan = build_plan(text)
+        assert plan.intent is Intent.QUESTION, text
+        assert plan.tool_hint == "none", text
+        # Memory/context behavior unchanged: still a question.
+        assert plan.memory_needed is True
+
+
+def test_short_greeting_shaped_input_needs_no_tools_either():
+    # Two-word "describe photosynthesis" is GENERAL_CHAT via the short-input
+    # rule — a different intent, but the same zero-tool outcome (skip gate).
+    plan = build_plan("describe photosynthesis")
+    assert plan.intent is Intent.GENERAL_CHAT
+    assert plan.tool_hint is None
+
+
+def test_tool_needing_questions_keep_full_set():
+    for text in (
+        "core status?",
+        "What is the repo state?",
+        "explain how git works",
+        "What should I do today?",
+        "what can you do?",
+        "remember the sky is blue",
+        "delete everything",
+        "list devices",
+        # Natural math wording with no digit-adjacent keyword must never
+        # lose tools (regression: "square root" once misfired to none).
+        "what is the square root of 144",
+        "what is the cube root of 27",
+        "solve this equation for me",
+    ):
+        assert build_plan(text).tool_hint is None, text
+
+
+def test_explanation_turn_sends_zero_definitions(memory_manager):
+    seen: dict = {}
+
+    class Counting(MockAIProvider):
+        def chat_with_tools(self, messages, tools):
+            seen["tools"] = list(tools)
+            return super().chat_with_tools(messages, tools)
+
+    provider = Counting(
+        responses=("Photosynthesis converts light.",),
+        tool_sequences=[[{"name": "echo", "arguments": {"text": "x"}}]],
+    )
+    app = AssistantApp(
+        identity=build_identity(),
+        ai=AIManager(provider=provider),
+        memory=memory_manager,
+    )
+    assert app.chat("explain photosynthesis") == "Photosynthesis converts light."
+    assert "tools" not in seen
+
+
+def test_explanation_turn_ignores_scripted_tool_calls(memory_manager):
+    # Even if a provider would propose a tool, an explanation turn never
+    # enters the native loop: nothing proposed, nothing executed.
+    provider = MockAIProvider(
+        responses=("Recursion is self-reference.",),
+        tool_sequences=[[{"name": "echo", "arguments": {"text": "x"}}]],
+    )
+    app = AssistantApp(
+        identity=build_identity(),
+        ai=AIManager(provider=provider),
+        memory=memory_manager,
+    )
+    assert app.chat("explain recursion") == "Recursion is self-reference."
+    blob = " ".join(m.content for m in app.session.messages)
+    assert "echo result" not in blob
