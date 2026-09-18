@@ -76,14 +76,26 @@ its schema → `ToolRouter` → `PermissionManager` → `ToolExecutor`, at
 most `ASIS_TOOL_MAX_CALLS_PER_TURN` validated calls, then a final plain
 generation) → heuristic fallback (`parse_tool_request`, unchanged
 single cycle). Intent-aware tool selection (`select_tool_definitions`,
-deterministic orchestrator hint): `CALCULATION` sends only `calculate`
-(~676B vs ~2020B full general set), `TOOL_REQUEST` time/echo/translate/
-web sends only the matching tools, `CODING` keeps the full coding set,
-generic `QUESTION`/`TASK` and unknown hints keep the full set so the
-model is never starved; calls outside the filtered set are rejected as
-`unknown_tool` before permission/execution. Both paths converge on the
-same `ToolRequest` and the same permission boundary; the model only
-requests, A.S.I.S. authorizes.
+deterministic orchestrator hint):
+
+```text
+GENERAL_CHAT (hi, say exactly Hi)  → 0 tools (skip, plain generation)
+explanation QUESTION                → 0 tools ("none" verdict)
+  (explain/tell me about/describe/what is|are/why/how-does-it-work,
+   small-talk — and zero tool-signal stems)
+CALCULATION                         → {calculate} (~678B)
+TOOL_REQUEST time|echo|translate    → single matching tool
+TOOL_REQUEST web                    → {web_search, web_fetch} (~612B)
+CODING                              → full coding set (mode router)
+CORE_OPERATION / TRANSLATION        → deterministic bypass (no model call)
+ambiguous QUESTION / any TASK /     → full general set (~2020B)
+VOICE / MEMORY / DOCUMENT / unknown    (conservative: never starve)
+```
+
+Calls outside the filtered set are rejected as `unknown_tool` before
+permission/execution. Both paths converge on the same `ToolRequest` and
+the same permission boundary; filtering is optimization only — the
+model only requests, A.S.I.S. authorizes.
 `ASIS_AI_NATIVE_TOOLS` (`auto`/`true`/`false`, default `auto`) controls
 the attempt; small local models that ignore `tools` simply fall back.
 Limitations: multi-step depth is bounded by configuration, and native
