@@ -241,9 +241,19 @@ class MemoryManager:
     def build_memory_context(self) -> str:
         """Build the long-term memory section for the system prompt.
 
-        Legacy full-dump path kept for backwards compatibility. Prefer
-        :meth:`search_context` for query-scoped retrieval during inference.
+        DEPRECATED legacy full-dump path kept for backwards compatibility.
+        Prefer :meth:`search_context` for query-scoped retrieval during
+        inference: dumping every stored memory into every request breaks
+        relevance ranking, limits, and token bounds. Emits a
+        DeprecationWarning on use.
         """
+        import warnings
+
+        warnings.warn(
+            "build_memory_context is deprecated; use search_context instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         by_category = {
             category: self.storage.list_all(category=category)
             for category in MemoryCategory

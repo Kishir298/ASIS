@@ -85,3 +85,26 @@ def test_importance_is_bounded(memory_manager):
 def test_memory_rejects_blank_content(memory_manager):
     with pytest.raises(ValueError):
         memory_manager.remember("   ")
+
+
+def test_legacy_full_dump_warns_but_still_works(memory_manager):
+    import warnings
+
+    memory_manager.remember("User likes tea.")
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        blob = memory_manager.build_memory_context()
+    assert "User likes tea." in blob
+    assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+
+def test_memory_search_wrapper_warns(memory_manager):
+    import warnings
+
+    from asis.memory import MemorySearch
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        searcher = MemorySearch(memory_manager.storage)
+    assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+    assert searcher.storage is memory_manager.storage
