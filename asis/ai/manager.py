@@ -27,7 +27,7 @@ def create_provider(provider_name: str | None = None) -> AIProvider:
         )
 
     if name == "ollama":
-        from .providers import OllamaProvider
+        from .providers import OllamaProvider, resolve_think
 
         return OllamaProvider(
             model=settings.ai.model,
@@ -35,6 +35,9 @@ def create_provider(provider_name: str | None = None) -> AIProvider:
             timeout=settings.ai.request_timeout,
             temperature=settings.ai.temperature,
             retries=settings.network.retries,
+            think=resolve_think(settings.ai.think, settings.ai.model),
+            num_predict=settings.ai.num_predict or None,
+            keep_alive=settings.ai.keep_alive or None,
         )
 
     raise InferenceError(f"Unknown AI provider: {name}")

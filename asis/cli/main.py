@@ -55,7 +55,7 @@ def _provider(provider_name: str, model: str):
     if provider_name == "mock":
         return MockAIProvider(model=model)
     if provider_name == "ollama":
-        from asis.ai.providers import OllamaProvider
+        from asis.ai.providers import OllamaProvider, resolve_think
 
         return OllamaProvider(
             model=model,
@@ -63,6 +63,9 @@ def _provider(provider_name: str, model: str):
             timeout=settings.ai.request_timeout,
             temperature=settings.ai.temperature,
             retries=settings.network.retries,
+            think=resolve_think(settings.ai.think, model),
+            num_predict=settings.ai.num_predict or None,
+            keep_alive=settings.ai.keep_alive or None,
         )
     raise ValueError(f"Unsupported AI provider: {provider_name}")
 

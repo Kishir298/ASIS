@@ -36,6 +36,9 @@ class AISettings:
     max_context_messages: int
     context_char_limit: int
     native_tools: str
+    think: str
+    num_predict: int
+    keep_alive: str
 
 
 @dataclass(frozen=True)
@@ -273,6 +276,9 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
                     "ASIS_AI_CONTEXT_CHAR_LIMIT", d.AI_CONTEXT_CHAR_LIMIT
                 ),
                 native_tools=get_s("ASIS_AI_NATIVE_TOOLS", d.AI_NATIVE_TOOLS),
+                think=get_s("ASIS_AI_THINK", d.AI_THINK),
+                num_predict=get_i("ASIS_AI_NUM_PREDICT", d.AI_NUM_PREDICT),
+                keep_alive=get_s("ASIS_AI_KEEP_ALIVE", d.AI_KEEP_ALIVE),
             ),
             conversation=ConversationSettings(
                 max_history=get_i(

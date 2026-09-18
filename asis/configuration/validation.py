@@ -115,6 +115,22 @@ def validate_settings(settings: Settings) -> Settings:
             "Invalid configuration ai.native_tools: expected one of "
             f"'auto', 'true', 'false', received {native_tools!r}."
         )
+    think = settings.ai.think
+    if (
+        not isinstance(think, str)
+        or think.strip().lower() not in ("auto", "true", "false")
+    ):
+        raise ConfigurationError(
+            "Invalid configuration ai.think: expected one of "
+            f"'auto', 'true', 'false', received {think!r}."
+        )
+    _require_non_negative_int("ai", "num_predict", settings.ai.num_predict)
+    if not isinstance(settings.ai.keep_alive, str):
+        raise ConfigurationError(
+            "Invalid configuration ai.keep_alive: expected a string "
+            f"(e.g. '30m', '' for server default), received "
+            f"{settings.ai.keep_alive!r}."
+        )
 
     # Conversation
     _require_positive_int(

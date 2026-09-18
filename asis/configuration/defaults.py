@@ -31,6 +31,14 @@ AI_CONTEXT_CHAR_LIMIT = 12_000
 # heuristics), "true" (native required when the provider supports it),
 # "false" (heuristics only).
 AI_NATIVE_TOOLS = "auto"
+# Model thinking (qwen3-class): "auto" disables thinking for known
+# thinking-model families, "true"/"false" force it. Verified on
+# Ollama 0.34.1 + qwen3:14b: false skips generation (2.5s vs 79s).
+AI_THINK = "auto"
+# Max tokens to predict per request (0 = server default/unset).
+AI_NUM_PREDICT = 0
+# Keep the model loaded between turns ("" = server default).
+AI_KEEP_ALIVE = "30m"
 
 # Conversation
 CONVERSATION_MAX_HISTORY = 20

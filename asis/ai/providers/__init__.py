@@ -14,18 +14,19 @@ from typing import Any
 from .base import AIProvider
 from .mock import MockAIProvider
 
-__all__ = ["AIProvider", "MockAIProvider", "OllamaProvider"]
+__all__ = ["AIProvider", "MockAIProvider", "OllamaProvider", "resolve_think"]
 
 
 def __getattr__(name: str) -> Any:
-    if name == "OllamaProvider":
+    if name in ("OllamaProvider", "resolve_think"):
         try:
-            from .ollama import OllamaProvider
+            from . import ollama as _ollama
         except ImportError as exc:
             raise ImportError(
                 "OllamaProvider requires the 'requests' package "
                 "(pip install -e '.[ai]')."
             ) from exc
-        globals()[name] = OllamaProvider
-        return OllamaProvider
+        value = getattr(_ollama, name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

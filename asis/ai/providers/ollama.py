@@ -113,6 +113,28 @@ def _split_prefix_tail(text: str, closing: bool = False) -> int:
     return len(text)
 
 
+_THINKING_MODEL_HINTS = ("qwen3", "deepseek-r1", "deepseek-r1:", "r1-", "gpt-oss")
+
+
+def resolve_think(mode: str, model: str) -> bool | None:
+    """Resolve the ``ASIS_AI_THINK`` setting to an Ollama ``think`` value.
+
+    ``true``/``false`` force the flag; ``auto`` (default) disables thinking
+    only for known thinking-model families and leaves the parameter unset
+    otherwise (older servers ignore unknown fields, but explicit minimal
+    payloads stay safest). Returns None when the flag must be omitted.
+    """
+    normalized = (mode or "auto").strip().lower()
+    if normalized in ("true", "1", "yes", "on", "enabled"):
+        return True
+    if normalized in ("false", "0", "no", "off", "disabled"):
+        return False
+    lowered_model = (model or "").lower()
+    if any(hint in lowered_model for hint in _THINKING_MODEL_HINTS):
+        return False
+    return None
+
+
 class OllamaProvider(AIProvider):
     """AI provider backed by a local Ollama server."""
 
@@ -124,6 +146,9 @@ class OllamaProvider(AIProvider):
         temperature: float | None = None,
         request_timeout: float | None = None,
         retries: int = 0,
+        think: bool | None = None,
+        num_predict: int | None = None,
+        keep_alive: str | None = None,
     ) -> None:
         self._model = model
         self.host = host.rstrip("/")
@@ -131,6 +156,9 @@ class OllamaProvider(AIProvider):
         self.timeout = timeout if request_timeout is None else request_timeout
         self.temperature = temperature
         self.retries = max(0, int(retries))
+        self.think = think
+        self.num_predict = num_predict
+        self.keep_alive = (keep_alive or "").strip() or None
 
     @property
     def name(self) -> str:
@@ -181,6 +209,13 @@ class OllamaProvider(AIProvider):
         }
         if self.temperature is not None:
             payload["options"] = {"temperature": self.temperature}
+        if self.num_predict:
+            payload.setdefault("options", {})["num_predict"] = self.num_predict
+        if self.think is not None:
+            # Top-level only: `think` inside `options` is silently ignored.
+            payload["think"] = self.think
+        if self.keep_alive:
+            payload["keep_alive"] = self.keep_alive
         if tools:
             payload["tools"] = list(tools)
         return payload
