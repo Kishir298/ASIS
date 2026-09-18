@@ -1,8 +1,10 @@
-"""Terminal typing renderer (presentation layer only).
+"""Terminal renderer: true streaming + legacy typing animation.
 
-The LLM response is fully generated before rendering begins; this class
-only animates already-final text.  The provider/engine never knows about
-the terminal.
+True streaming path: Ollama chunk -> provider -> engine -> ``on_chunk`` ->
+``begin_stream/write_chunk/end_stream`` -> terminal without waiting for
+completion. Legacy ``render()`` animates already-final text (kept for
+voice turns, errors and non-streaming callers). The provider/engine never
+knows about the terminal.
 """
 
 from __future__ import annotations
@@ -24,12 +26,48 @@ class TypingRenderer:
         self.prefix = prefix
         self.char_delay = max(0.0, float(char_delay))
         self.stream = stream if stream is not None else sys.stdout
+        self._lock = threading.RLock()
+        self._streaming = False
 
     def _tty(self) -> bool:
         try:
             return bool(self.stream.isatty())
         except Exception:
             return False
+
+    def begin_stream(self) -> None:
+        """Write the response prefix for a new streamed turn."""
+        with self._lock:
+            try:
+                self.stream.write(self.prefix)
+                self.stream.flush()
+            except Exception:
+                pass
+            self._streaming = True
+
+    def write_chunk(self, chunk: str) -> None:
+        """Write one streamed chunk immediately (thread-safe, best-effort)."""
+        if not chunk:
+            return
+        with self._lock:
+            try:
+                self.stream.write(chunk)
+                self.stream.flush()
+            except Exception:
+                pass
+
+    def end_stream(self, interrupted: bool = False) -> None:
+        """Terminate the streamed line (newline, or [interrupted] marker)."""
+        with self._lock:
+            try:
+                if interrupted:
+                    self.stream.write("  [interrupted]\n")
+                else:
+                    self.stream.write("\n")
+                self.stream.flush()
+            except Exception:
+                pass
+            self._streaming = False
 
     def render(
         self,

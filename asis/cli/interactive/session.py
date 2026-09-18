@@ -63,6 +63,13 @@ class InteractiveSession:
         """Text-mode turn through the shared AssistantApp (mockable)."""
         return self.app.chat(message)
 
+    def chat_text_streamed(self, message: str, on_chunk=None) -> str:
+        """Text-mode turn with live chunk callback when supported."""
+        chat_streamed = getattr(self.app, "chat_streamed", None)
+        if callable(chat_streamed):
+            return chat_streamed(message, on_chunk=on_chunk)
+        return self.app.chat(message)
+
     def voice_turn(self) -> dict[str, Any]:
         """One voice turn: STT -> app.chat -> TTS (same final text both places).
 

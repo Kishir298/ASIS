@@ -105,6 +105,19 @@ def run_interactive(
                 return getattr(app, "interrupts", None)
         return interrupts
 
+    def _reset_turn_state() -> None:
+        """Start a fresh prompt: clear ESC flag and reset cancel tokens.
+
+        One ESC poisons only the in-flight turn. Without this reset the
+        next inference would immediately observe a stale cancel and abort.
+        """
+        stop_event.clear()
+        interrupts = _ensure_interrupts()
+        if interrupts is not None:
+            for scope in ("inference", "voice", "tools"):
+                with contextlib.suppress(Exception):
+                    interrupts.register(scope)
+
     def _stop_audio() -> None:
         if pipeline is not None:
             with contextlib.suppress(Exception):
@@ -178,6 +191,50 @@ def run_interactive(
         except Exception:
             pass
 
+    def _run_streamed_chat(message: str):
+        """Run one text turn with live chunk display.
+
+        Returns (status, response) mirroring _run_cancellable, but chunks
+        appear as they arrive. Falls back to legacy render when nothing
+        streamed (e.g. native direct answers, scripted mocks).
+        """
+        streamed: list[str] = []
+        render.begin_stream()
+
+        def _on_chunk(chunk: str) -> None:
+            if stop_event.is_set() or shutdown_event.is_set():
+                return
+            if chunk:
+                streamed.append(chunk)
+                render.write_chunk(chunk)
+
+        try:
+            status, response = _run_cancellable(
+                lambda _m=message: session.chat_text_streamed(_m, _on_chunk)
+            )
+        except Exception as exc:
+            render.end_stream(interrupted=False)
+            return "error", f"Sorry, that failed: {exc}"
+        if status == "shutdown":
+            render.end_stream(interrupted=True)
+            return status, None
+        if status == "cancelled":
+            render.end_stream(interrupted=True)
+            return status, None
+        if status == "error":
+            render.end_stream(interrupted=False)
+            return status, response
+        # status ok
+        if streamed:
+            render.end_stream(interrupted=False)
+        else:
+            # Nothing streamed (tool direct answer / empty chunks):
+            # close prefix line then legacy-render full text.
+            render.end_stream(interrupted=False)
+            render.render(response or "", stop_event=stop_event)
+            return "rendered", response
+        return status, response
+
     watcher = KeyWatcher(
         on_esc=_on_esc, on_shutdown=_on_shutdown, shutdown_event=shutdown_event
     )
@@ -203,7 +260,7 @@ def run_interactive(
                 return 0
             if max_turns and turns >= max_turns:
                 return 0
-            stop_event.clear()
+            _reset_turn_state()
             try:
                 if session.interaction_mode == "voice":
                     try:
@@ -249,23 +306,18 @@ def run_interactive(
                             turns += 1
                             continue
                         try:
-                            status, response = _run_cancellable(
-                                lambda _m=typed: session.chat_text(_m)
-                            )
+                            status, response = _run_streamed_chat(typed)
                         except Exception as exc:
                             status, response = "error", f"Sorry, that failed: {exc}"
                         if status == "shutdown":
                             _say_goodbye()
                             return 0
                         if status == "cancelled":
-                            try:
-                                out.write("A.S.I.S. > [interrupted]\n")
-                                out.flush()
-                            except Exception:
-                                pass
                             turns += 1
                             continue
-                        render.render(response or "", stop_event=stop_event)
+                        if status == "rendered":
+                            turns += 1
+                            continue
                         turns += 1
                         continue
                     try:
@@ -345,20 +397,16 @@ def run_interactive(
                     turns += 1
                     continue
                 try:
-                    status, response = _run_cancellable(
-                        lambda _m=message: session.chat_text(_m)
-                    )
+                    status, response = _run_streamed_chat(message)
                 except Exception as exc:
                     status, response = "error", f"Sorry, that failed: {exc}"
                 if status == "shutdown":
                     _say_goodbye()
                     return 0
                 if status == "cancelled":
-                    try:
-                        out.write("A.S.I.S. > [interrupted]\n")
-                        out.flush()
-                    except Exception:
-                        pass
+                    turns += 1
+                    continue
+                if status == "rendered":
                     turns += 1
                     continue
                 if status == "error":
@@ -369,7 +417,7 @@ def run_interactive(
                         pass
                     turns += 1
                     continue
-                render.render(response or "", stop_event=stop_event)
+                # status ok with live-streamed output already on screen.
                 turns += 1
             except KeyboardInterrupt:
                 _say_goodbye()
