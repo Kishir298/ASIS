@@ -103,6 +103,39 @@ def tool_definitions_for(registry: Any) -> list[ToolDefinition]:
     return definitions
 
 
+# Intent-aware tool selection: hint value (from the deterministic
+# orchestrator plan) -> tool names exposed to the model. Hints with no
+# entry, and the "coding-tools" sentinel, keep the full active set so an
+# open-ended or misclassified turn never starves the model. Unknown names
+# in a hint set are ignored; an empty selection also falls back to the
+# full set (fail-open toward capability, permissions still enforced at
+# execution through ToolRouter/PermissionManager).
+_TOOL_HINT_NAMES: dict[str, frozenset] = {
+    "calculate": frozenset({"calculate"}),
+    "web": frozenset({"web_search", "web_fetch"}),
+    "time": frozenset({"current_time"}),
+    "echo": frozenset({"echo"}),
+    "translate": frozenset({"translate_text"}),
+}
+
+
+def select_tool_definitions(
+    definitions: list[ToolDefinition], tool_hint: str | None
+) -> list[ToolDefinition]:
+    """Narrow definitions to the orchestrator hint (deterministic).
+
+    ``None``, ``"coding-tools"``, unknown hints, and hints matching
+    nothing in the active registry all return the full list unchanged.
+    """
+    if not tool_hint or tool_hint == "coding-tools":
+        return list(definitions)
+    names = _TOOL_HINT_NAMES.get(tool_hint)
+    if not names:
+        return list(definitions)
+    selected = [item for item in definitions if item.name in names]
+    return selected or list(definitions)
+
+
 def ollama_tools(definitions: list[ToolDefinition]) -> list[dict[str, Any]]:
     """Render definitions in the Ollama /api/chat tools wire format."""
     return [

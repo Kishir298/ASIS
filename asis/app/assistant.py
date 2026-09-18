@@ -407,7 +407,9 @@ class AssistantApp:
         self.session.add_assistant(text)
         return text
 
-    def _run_native_tool_loop(self, user_text: str, on_chunk=None) -> str | None:
+    def _run_native_tool_loop(
+        self, user_text: str, on_chunk=None, tool_hint: str | None = None
+    ) -> str | None:
         """Bounded native function-calling turn; None → heuristic fallback.
 
         The model receives tool definitions derived from the active-mode
@@ -426,7 +428,7 @@ class AssistantApp:
             provider, "supports_native_tools", False
         ):
             return None
-        from asis.ai.tool_schemas import tool_definitions_for
+        from asis.ai.tool_schemas import select_tool_definitions, tool_definitions_for
 
         try:
             definitions = tool_definitions_for(self.tools_router.registry)
@@ -435,6 +437,11 @@ class AssistantApp:
                 "Tool schema generation failed; using heuristic fallback."
             )
             return None
+        # Intent-aware narrowing: expose only relevant tools to the model
+        # (e.g. calculator turns send just `calculate`). Unknown hints and
+        # hints matching nothing keep the full set so the model is never
+        # starved; permissions are still enforced at execution.
+        definitions = select_tool_definitions(definitions, tool_hint)
         if not definitions:
             return None
         limit = max_tool_calls()
@@ -454,10 +461,34 @@ class AssistantApp:
                 return response.content
             return None
         calls_made = 0
+        allowed = {item.name for item in definitions}
         while response.tool_calls and calls_made < limit:
             requests, errors = normalize_native_calls(
                 response.tool_calls, self.tools_router.registry
             )
+            # Enforce the filtered set: the model only saw `definitions`,
+            # so calls outside it are rejected before permission/execution.
+            if len(allowed) < len(
+                list(self.tools_router.registry.list_names())
+            ):
+                from .native_tools import NativeToolError
+
+                kept: list = []
+                for request in requests:
+                    if request.tool_name in allowed:
+                        kept.append(request)
+                    else:
+                        errors.append(
+                            NativeToolError(
+                                kind="unknown_tool",
+                                message=(
+                                    "Unknown tool: "
+                                    f"{request.tool_name!r}."
+                                ),
+                                call_name=request.tool_name,
+                            )
+                        )
+                requests = kept
             if (response.content or "").strip():
                 self.session.add_assistant(response.content)
             for error in errors:
@@ -557,7 +588,9 @@ class AssistantApp:
             if plan.tool_hint is None and plan.intent in _NATIVE_SKIP_INTENTS:
                 native_reply = None
             else:
-                native_reply = self._run_native_tool_loop(text, on_chunk=on_chunk)
+                native_reply = self._run_native_tool_loop(
+                    text, on_chunk=on_chunk, tool_hint=plan.tool_hint
+                )
             if native_reply is not None:
                 return native_reply
             if on_chunk is None:

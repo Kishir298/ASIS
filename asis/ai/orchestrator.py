@@ -74,6 +74,12 @@ _WEB_HINT = re.compile(
     r"^(search|fetch)\b)",
     re.IGNORECASE,
 )
+_TIME_HINT = re.compile(
+    r"\b(what(\s+is)? (the )?(time|date|day)|current time|time now)\b",
+    re.IGNORECASE,
+)
+_ECHO_HINT = re.compile(r"^echo\s*:|\becho\b", re.IGNORECASE)
+_TRANSLATE_HINT = re.compile(r"translat(e|ion)\b|translate( this| to)?", re.IGNORECASE)
 _SAY_REPEAT = re.compile(
     r"^\s*(say(\s+exactly)?|repeat(\s+back)?|echo back)\b",
     re.IGNORECASE,
@@ -109,6 +115,26 @@ class OrchestratorPlan:
     response_constraints: tuple[str, ...] = field(default_factory=tuple)
     memory_limit: int = 5
     include_capabilities: bool = False
+
+
+def tool_hint_for_request(text: str) -> str | None:
+    """Map a TOOL_REQUEST message to a granular tool hint (deterministic).
+
+    Returns one of ``time|echo|translate|web`` or None when the request
+    is generic. Rule-based only — never launches another LLM.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    if _TIME_HINT.search(raw):
+        return "time"
+    if _TRANSLATE_HINT.search(raw):
+        return "translate"
+    if _WEB_HINT.search(raw):
+        return "web"
+    if _ECHO_HINT.search(raw):
+        return "echo"
+    return None
 
 
 def classify_intent(
@@ -229,6 +255,7 @@ def build_plan(
     if intent is Intent.TOOL_REQUEST:
         return OrchestratorPlan(
             intent=intent,
+            tool_hint=tool_hint_for_request(raw),
             include_capabilities=True,
         )
     if intent in (Intent.QUESTION, Intent.TASK):
