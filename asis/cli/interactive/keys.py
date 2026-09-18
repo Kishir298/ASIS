@@ -13,10 +13,25 @@ from collections.abc import Callable
 
 
 class KeyWatcher:
-    """Watches for ESC in the background; CTRL+C flows via KeyboardInterrupt."""
+    """Watches for ESC (interrupt) and CTRL+C (shutdown) in the background.
 
-    def __init__(self, on_esc: Callable[[], None] | None = None) -> None:
+    ESC invokes ``on_esc`` cooperatively. CTRL+C sets ``shutdown_event``
+    (and invokes ``on_shutdown``) so the main loop can exit cleanly via a
+    thread-safe mechanism — a background thread cannot raise
+    ``KeyboardInterrupt`` in the main thread.
+    """
+
+    def __init__(
+        self,
+        on_esc: Callable[[], None] | None = None,
+        on_shutdown: Callable[[], None] | None = None,
+        shutdown_event: threading.Event | None = None,
+    ) -> None:
         self._on_esc = on_esc
+        self._on_shutdown = on_shutdown
+        self.shutdown_event = (
+            shutdown_event if shutdown_event is not None else threading.Event()
+        )
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.active = False
@@ -31,14 +46,30 @@ class KeyWatcher:
         except Exception:
             return False
         self._stop.clear()
+        self.shutdown_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
         self.active = True
         return True
 
-    def stop(self) -> None:
+    def stop(self, timeout: float = 1.0) -> None:
         self._stop.set()
         self.active = False
+        thread, self._thread = self._thread, None
+        if thread is not None and thread.is_alive():
+            with contextlib.suppress(Exception):
+                thread.join(timeout=timeout)
+
+    @property
+    def shutdown_requested(self) -> bool:
+        return self.shutdown_event.is_set()
+
+    def request_shutdown(self) -> None:
+        """Signal shutdown from any thread (CTRL+C path)."""
+        self.shutdown_event.set()
+        if self._on_shutdown is not None:
+            with contextlib.suppress(Exception):
+                self._on_shutdown()
 
     def _emit_esc(self) -> None:
         if self._on_esc is not None:
@@ -66,7 +97,8 @@ class KeyWatcher:
                 if ch == "\x1b":  # ESC
                     self._emit_esc()
                 elif ch == "\x03":  # CTRL+C
-                    raise KeyboardInterrupt
+                    self.request_shutdown()
+                    return
             self._stop.wait(0.05)
 
     def _run_posix(self) -> None:
@@ -86,7 +118,9 @@ class KeyWatcher:
                 if ch == "\x1b":
                     self._emit_esc()
                 elif ch == "\x03":
-                    raise KeyboardInterrupt
+                    self.request_shutdown()
+                    return
         finally:
+            # Always restore terminal state, even on exception/CTRL+C/ESC.
             with contextlib.suppress(Exception):
                 termios.tcsetattr(fd, termios.TCSADRAIN, old)

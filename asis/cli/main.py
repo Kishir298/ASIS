@@ -309,12 +309,12 @@ def _normalize_argv(raw: Sequence[str] | None) -> list[str]:
     invocations (including ``python -m asis``) are untouched.
     """
     items = list(raw) if raw is not None else sys.argv[1:]
-    if items and items[0].lower().endswith((".exe", "asis", "asis.py", "__main__.py")):
-        first = items[0].replace("\\", "/").lower()
-        if first.endswith(("asis.exe", "/asis", "asis.py", "__main__.py")) or (
-            first == "asis"
-        ):
-            items = items[1:]
+    if not items:
+        return items
+    first = items[0].replace("\\", "/").lower()
+    base = first.rsplit("/", 1)[-1]
+    if base in ("asis", "asis.exe", "asis.py", "__main__.py"):
+        return items[1:]
     return items
 
 
@@ -346,7 +346,9 @@ def apply_cli_log_level(args) -> None:
         file_level = console_level
     else:
         console_level = logging.WARNING
-        file_level = getattr(logging, str(settings.runtime.log_level).upper(), logging.INFO)
+        file_level = getattr(
+            logging, str(settings.runtime.log_level).upper(), logging.INFO
+        )
         if not isinstance(file_level, int):
             file_level = logging.INFO
 

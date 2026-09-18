@@ -11,6 +11,27 @@ from pathlib import Path
 SUPPORTED_SUFFIXES = frozenset({".txt", ".md", ".pdf", ".docx", ".csv", ".json"})
 
 MAX_CHARS_PER_FILE = 20_000
+# Resource bounds: reject absurd inputs before reading them fully so one
+# attachment cannot exhaust memory. Reads are truncated well below this.
+MAX_FILE_BYTES = 10_000_000
+MAX_READ_BYTES = 2_000_000
+MAX_DOCX_XML_BYTES = 2_000_000
+MAX_DOCX_ENTRIES = 64
+
+
+def _check_size(path: Path) -> None:
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return
+    if size > MAX_FILE_BYTES:
+        raise ValueError(f"file too large ({size} bytes, max {MAX_FILE_BYTES}).")
+
+
+def _read_text_bounded(path: Path) -> str:
+    with path.open("rb") as fh:
+        data = fh.read(MAX_READ_BYTES + 1)
+    return data.decode("utf-8", errors="replace")
 
 
 def _clean(text: str) -> str:
@@ -21,11 +42,11 @@ def _clean(text: str) -> str:
 
 
 def _parse_txt(path: Path) -> str:
-    return _clean(path.read_text(encoding="utf-8", errors="replace"))
+    return _clean(_read_text_bounded(path))
 
 
 def _parse_json(path: Path) -> str:
-    raw = path.read_text(encoding="utf-8", errors="replace")
+    raw = _read_text_bounded(path)
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
@@ -49,7 +70,14 @@ def _parse_pdf(path: Path) -> str:
         from pypdf import PdfReader  # type: ignore
 
         reader = PdfReader(str(path))
-        parts = [(page.extract_text() or "") for page in reader.pages]
+        parts: list[str] = []
+        total = 0
+        for page in reader.pages:
+            chunk = page.extract_text() or ""
+            parts.append(chunk)
+            total += len(chunk)
+            if total > MAX_READ_BYTES:
+                break
         text = "\n".join(parts)
         if text.strip():
             return _clean(text)
@@ -58,7 +86,8 @@ def _parse_pdf(path: Path) -> str:
     try:
         import re as _re
 
-        data = path.read_bytes()
+        with path.open("rb") as fh:
+            data = fh.read(MAX_READ_BYTES + 1)
         # Best-effort: printable runs inside the binary stream.
         runs = _re.findall(rb"[ -~]{8,}", data)
         text = "\n".join(r.decode("ascii", errors="ignore") for r in runs)
@@ -77,7 +106,14 @@ def _parse_docx(path: Path) -> str:
         pass
     try:
         with zipfile.ZipFile(path) as zf:
-            xml = zf.read("word/document.xml").decode("utf-8", errors="replace")
+            names = zf.namelist()
+            if len(names) > MAX_DOCX_ENTRIES:
+                return ""
+            info = zf.getinfo("word/document.xml")
+            if info.file_size > MAX_DOCX_XML_BYTES:
+                return ""
+            with zf.open("word/document.xml") as fh:
+                xml = fh.read(MAX_DOCX_XML_BYTES + 1).decode("utf-8", errors="replace")
         xml = re.sub(r"<w:p[^>]*>", "\n", xml)
         xml = re.sub(r"<[^>]+>", "", xml)
         import html as _html
@@ -93,9 +129,11 @@ def parse_file(path: str | Path) -> str:
     Raises FileNotFoundError / ValueError (unsupported suffix).
     Never touches the network.
     """
-    resolved = Path(path).expanduser()
+    cleaned = str(path).strip().strip("\"'")
+    resolved = Path(cleaned).expanduser()
     if not resolved.is_file():
         raise FileNotFoundError(f"file not found: {path}")
+    _check_size(resolved)
     suffix = resolved.suffix.lower()
     if suffix not in SUPPORTED_SUFFIXES:
         raise ValueError(f"unsupported file type: {suffix or '(none)'}")

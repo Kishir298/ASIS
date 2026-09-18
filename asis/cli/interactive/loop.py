@@ -78,15 +78,34 @@ def run_interactive(
     render = renderer if renderer is not None else TypingRenderer(stream=out)
     session = InteractiveSession(app, pipeline=pipeline, doc_store=doc_store)
     stop_event = threading.Event()
+    shutdown_event = threading.Event()
     poll_typed = voice_poll if voice_poll is not None else _default_voice_poll
 
-    def _on_esc() -> None:
-        stop_event.set()
+    def _ensure_interrupts():
         interrupts = getattr(app, "interrupts", None)
-        if interrupts is not None:
-            for scope in ("inference", "voice", "tools"):
+        if interrupts is None:
+            try:
+                from asis.system.interrupt import InterruptCoordinator
+
+                interrupts = InterruptCoordinator()
                 with contextlib.suppress(Exception):
-                    interrupts.cancel(scope)
+                    app.interrupts = interrupts
+                    engine = getattr(app, "engine", None)
+                    if (
+                        engine is not None
+                        and getattr(engine, "interrupts", None) is None
+                    ):
+                        with contextlib.suppress(Exception):
+                            engine.interrupts = interrupts
+                    pl = pipeline
+                    if pl is not None and getattr(pl, "interrupts", None) is None:
+                        with contextlib.suppress(Exception):
+                            pl.interrupts = interrupts
+            except Exception:
+                return getattr(app, "interrupts", None)
+        return interrupts
+
+    def _stop_audio() -> None:
         if pipeline is not None:
             with contextlib.suppress(Exception):
                 tts = getattr(pipeline, "tts", None)
@@ -95,6 +114,63 @@ def run_interactive(
             with contextlib.suppress(Exception):
                 pipeline.audio_output.stop()
 
+    def _cancel_scopes() -> None:
+        interrupts = _ensure_interrupts()
+        if interrupts is not None:
+            with contextlib.suppress(Exception):
+                interrupts.cancel_all()
+            for scope in ("inference", "voice", "tools"):
+                with contextlib.suppress(Exception):
+                    interrupts.cancel(scope)
+
+    def _on_esc() -> None:
+        stop_event.set()
+        _cancel_scopes()
+        _stop_audio()
+
+    def _on_shutdown() -> None:
+        _cancel_scopes()
+        _stop_audio()
+
+    def _run_cancellable(fn):
+        """Run ``fn`` so ESC/SHUTDOWN returns the UI promptly.
+
+        Blocking provider HTTP (e.g. Ollama ``requests.post``) cannot be
+        safely killed mid-socket; it remains bounded by the configured
+        request timeout. This waiter therefore abandons a still-running
+        worker after cancellation and hands the prompt back immediately;
+        the orphan is a daemon thread whose late result is discarded and
+        never touches conversation/tool/terminal state.
+        Returns (status, value): status in {"ok","error","cancelled","shutdown"}.
+        """
+        box: dict = {}
+
+        def _target() -> None:
+            try:
+                box["value"] = fn()
+            except BaseException as exc:  # noqa: BLE001 - transported to caller
+                box["error"] = exc
+
+        worker = threading.Thread(target=_target, daemon=True)
+        worker.start()
+        while worker.is_alive():
+            if shutdown_event.is_set():
+                _cancel_scopes()
+                _stop_audio()
+                return "shutdown", None
+            if stop_event.is_set():
+                _cancel_scopes()
+                _stop_audio()
+                return "cancelled", None
+            worker.join(timeout=0.05)
+        if shutdown_event.is_set():
+            return "shutdown", None
+        if stop_event.is_set():
+            return "cancelled", None
+        if "error" in box:
+            raise box["error"]
+        return "ok", box.get("value")
+
     def _say_goodbye() -> None:
         try:
             out.write("Shutting down.\n")
@@ -102,7 +178,9 @@ def run_interactive(
         except Exception:
             pass
 
-    watcher = KeyWatcher(on_esc=_on_esc)
+    watcher = KeyWatcher(
+        on_esc=_on_esc, on_shutdown=_on_shutdown, shutdown_event=shutdown_event
+    )
 
     def _cleanup() -> None:
         with contextlib.suppress(Exception):
@@ -120,6 +198,9 @@ def run_interactive(
     turns = 0
     try:
         while True:
+            if shutdown_event.is_set():
+                _say_goodbye()
+                return 0
             if max_turns and turns >= max_turns:
                 return 0
             stop_event.clear()
@@ -168,20 +249,55 @@ def run_interactive(
                             turns += 1
                             continue
                         try:
-                            response = session.chat_text(typed)
+                            status, response = _run_cancellable(
+                                lambda _m=typed: session.chat_text(_m)
+                            )
                         except Exception as exc:
-                            response = f"Sorry, that failed: {exc}"
+                            status, response = "error", f"Sorry, that failed: {exc}"
+                        if status == "shutdown":
+                            _say_goodbye()
+                            return 0
+                        if status == "cancelled":
+                            try:
+                                out.write("A.S.I.S. > [interrupted]\n")
+                                out.flush()
+                            except Exception:
+                                pass
+                            turns += 1
+                            continue
                         render.render(response or "", stop_event=stop_event)
                         turns += 1
                         continue
                     try:
-                        turn = session.voice_turn()
+                        status, turn = _run_cancellable(session.voice_turn)
                     except RuntimeError as exc:
                         try:
                             out.write(f"A.S.I.S. > {exc}\n")
                             out.flush()
                         except Exception:
                             pass
+                        turns += 1
+                        continue
+                    except Exception as exc:
+                        try:
+                            out.write(f"A.S.I.S. > Sorry, that failed: {exc}\n")
+                            out.flush()
+                        except Exception:
+                            pass
+                        turns += 1
+                        continue
+                    if status == "shutdown":
+                        _say_goodbye()
+                        return 0
+                    if status == "cancelled":
+                        try:
+                            out.write("A.S.I.S. > [interrupted]\n")
+                            out.flush()
+                        except Exception:
+                            pass
+                        turns += 1
+                        continue
+                    if turn is None:
                         turns += 1
                         continue
                     transcript = (turn.get("transcript") or "").strip()
@@ -200,9 +316,15 @@ def run_interactive(
                     render.render(response, stop_event=stop_event)
                     turns += 1
                     continue
+                if shutdown_event.is_set():
+                    _say_goodbye()
+                    return 0
                 try:
                     raw = ask(prompt)
                 except EOFError:
+                    _say_goodbye()
+                    return 0
+                if shutdown_event.is_set():
                     _say_goodbye()
                     return 0
                 message = (raw or "").strip()
@@ -223,10 +345,25 @@ def run_interactive(
                     turns += 1
                     continue
                 try:
-                    response = session.chat_text(message)
+                    status, response = _run_cancellable(
+                        lambda _m=message: session.chat_text(_m)
+                    )
                 except Exception as exc:
+                    status, response = "error", f"Sorry, that failed: {exc}"
+                if status == "shutdown":
+                    _say_goodbye()
+                    return 0
+                if status == "cancelled":
                     try:
-                        out.write(f"A.S.I.S. > Sorry, that failed: {exc}\n")
+                        out.write("A.S.I.S. > [interrupted]\n")
+                        out.flush()
+                    except Exception:
+                        pass
+                    turns += 1
+                    continue
+                if status == "error":
+                    try:
+                        out.write(f"A.S.I.S. > {response}\n")
                         out.flush()
                     except Exception:
                         pass
