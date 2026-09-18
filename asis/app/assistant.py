@@ -585,7 +585,12 @@ class AssistantApp:
             plan.memory_query if plan.memory_needed else ""
         )
         try:
-            if plan.tool_hint is None and plan.intent in _NATIVE_SKIP_INTENTS:
+            if plan.tool_hint == "none" or (
+                plan.tool_hint is None and plan.intent in _NATIVE_SKIP_INTENTS
+            ):
+                # Explanation-only (or small-talk) turn: zero tool
+                # definitions, straight to plain generation — same fast
+                # path as GENERAL_CHAT, memory/context behavior unchanged.
                 native_reply = None
             else:
                 native_reply = self._run_native_tool_loop(

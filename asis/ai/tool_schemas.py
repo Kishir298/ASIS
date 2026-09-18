@@ -104,7 +104,8 @@ def tool_definitions_for(registry: Any) -> list[ToolDefinition]:
 
 
 # Intent-aware tool selection: hint value (from the deterministic
-# orchestrator plan) -> tool names exposed to the model. Hints with no
+# orchestrator plan) -> tool names exposed to the model. The "none"
+# verdict (explanation-only requests) exposes zero tools. Hints with no
 # entry, and the "coding-tools" sentinel, keep the full active set so an
 # open-ended or misclassified turn never starves the model. Unknown names
 # in a hint set are ignored; an empty selection also falls back to the
@@ -124,9 +125,14 @@ def select_tool_definitions(
 ) -> list[ToolDefinition]:
     """Narrow definitions to the orchestrator hint (deterministic).
 
-    ``None``, ``"coding-tools"``, unknown hints, and hints matching
-    nothing in the active registry all return the full list unchanged.
+    ``"none"`` (explanation-only requests) returns an explicit empty list
+    so the turn skips native calling and goes straight to plain
+    generation. ``None``, ``"coding-tools"``, unknown hints, and hints
+    matching nothing in the active registry all return the full list
+    unchanged.
     """
+    if tool_hint == "none":
+        return []
     if not tool_hint or tool_hint == "coding-tools":
         return list(definitions)
     names = _TOOL_HINT_NAMES.get(tool_hint)

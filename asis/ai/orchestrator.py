@@ -90,6 +90,30 @@ _MATH_WORDS = re.compile(
     re.IGNORECASE,
 )
 _TRANSLATE_VERB = re.compile(r"^\s*translat(e|ion)\b", re.IGNORECASE)
+# Explanation-only questions: conceptual/small-talk shapes that never need
+# tools (matched only when NO tool signal is present — see _TOOL_SIGNAL).
+_EXPLANATION = re.compile(
+    r"^\s*(explain\b|tell me about\b|describe\b|what is\b|what are\b|"
+    r"what does\b.{0,40}\bmean\b|why\b|how does\b.{0,40}\bwork\b|"
+    r"help me understand\b|how are you\b)",
+    re.IGNORECASE,
+)
+# Tool-signal stems (broad on purpose): any match forces the full tool set.
+# False negatives (= full set sent) are safe; false positives (= tools
+# withheld) must be impossible for genuinely tool-needing requests.
+# Single words are \-anchored so prose like "photosynthesis" or "today"
+# never matches; math/secret phrases stay unanchored substrings.
+_TOOL_SIGNAL = re.compile(
+    r"(\b(time|date|day|echo|search|fetch|web|google|core|file|git|test|"
+    r"pytest|run|code|bug|error|repo|workspace|commit|read|write|list|"
+    r"show|devic|delete|remove|wipe|create|make|build|fix|solve|number|"
+    r"digit|math|algebra|geometry|matrix|equation|formula|root|log|sin|"
+    r"cos|tan|percent|power|plus|minus|times|document|remember|recall|"
+    r"forget|token|secret|password)\b|translat|calculat|comput|execut|"
+    r"implement|generat|attach|upload|summariz|divid|multipl|look up|"
+    r"current time|square root|cube root|api[_-]?key|sk-)",
+    re.IGNORECASE,
+)
 _QUESTION = re.compile(r"\?\s*$")
 _QUESTION_WORD = re.compile(
     r"^\s*(what|who|whom|whose|which|when|where|why|how|is|are|was|were|"
@@ -259,11 +283,23 @@ def build_plan(
             include_capabilities=True,
         )
     if intent in (Intent.QUESTION, Intent.TASK):
+        # Explanation-only questions get an explicit zero-tool verdict:
+        # conceptual/small-talk shape AND zero tool-signal stems. TASKs
+        # (actionable verbs) and signal-bearing QUESTIONs keep the full
+        # set — the model must never lose a tool it might need.
+        hint: str | None = None
+        if (
+            intent is Intent.QUESTION
+            and _EXPLANATION.match(raw)
+            and not _TOOL_SIGNAL.search(raw)
+        ):
+            hint = "none"
         return OrchestratorPlan(
             intent=intent,
             memory_needed=True,
             memory_query=raw,
             doc_needed=has_docs,
+            tool_hint=hint,
             memory_limit=limit,
         )
     if intent is Intent.VOICE_INTERACTION:
