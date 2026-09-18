@@ -464,6 +464,28 @@ def entry(argv: Sequence[str] | None = None) -> int:
     ai = AIManager(provider=provider, event_bus=event_bus)
     memory = build_memory(args.memory_db)
 
+    # Ollama lifecycle ownership: connect when already running (never
+    # owned), optionally start an owned `ollama serve` when down.
+    # Only the exact process started here may be stopped on shutdown.
+    from asis.ai.ollama_lifecycle import (
+        OllamaLifecycleError,
+        OllamaOwnership,
+        ensure_ollama,
+        stop_owned_ollama,
+    )
+
+    ollama_ownership = OllamaOwnership(owned=False)
+    if args.provider == "ollama":
+        try:
+            ollama_ownership = ensure_ollama(
+                settings.ai.endpoint,
+                managed=settings.ollama.managed,
+                serve_timeout=settings.ollama.serve_timeout,
+            )
+        except OllamaLifecycleError as exc:
+            print(f"[FAIL] Ollama unavailable: {exc}")
+            return 1
+
     # Optional CORE uplink: one manager, one adapter, one connection for
     # this process. Disabled/unreachable -> standalone; local chat, memory,
     # tools, A.S.C.S. and voice paths are unaffected.
@@ -474,6 +496,21 @@ def entry(argv: Sequence[str] | None = None) -> int:
     if core_manager is not None:
         core_ctx = RuntimeContext()
         core_manager.start(core_ctx)
+
+    pipeline = None
+
+    def _shutdown_owned_ollama() -> None:
+        with contextlib.suppress(Exception):
+            stop_owned_ollama(
+                ollama_ownership,
+                shutdown_timeout=settings.ollama.shutdown_timeout,
+            )
+
+    def _shutdown_core() -> None:
+        if core_manager is not None and core_ctx is not None:
+            with contextlib.suppress(Exception):
+                core_manager.stop(core_ctx)
+
     try:
         app = build_assistant(
             identity,
@@ -484,8 +521,27 @@ def entry(argv: Sequence[str] | None = None) -> int:
             core=core_manager,
         )
 
+        # Boot sequence + silent model readiness probe. Real inference
+        # only; failure never enters interactive mode. Owned Ollama is
+        # cleaned up on boot failure via the outer finally.
+        from asis.app.boot import BootError, run_boot_sequence
+
+        try:
+            run_boot_sequence(
+                identity, memory, app, provider, ollama_ownership
+            )
+        except BootError as exc:
+            print(f"[FAIL] Boot failed: {exc}")
+            return 1
+        except KeyboardInterrupt:
+            print("\nBoot cancelled.")
+            return 130
+
         if args.message is not None:
-            print(handle_message(identity, ai, memory, args.message, assistant=app))
+            try:
+                print(handle_message(identity, ai, memory, args.message, assistant=app))
+            except KeyboardInterrupt:
+                return 130
             return 0
 
         # Persistent interactive terminal (TEXT/VOICE, docs, typing effect).
@@ -498,23 +554,28 @@ def entry(argv: Sequence[str] | None = None) -> int:
             if pipeline is not None:
                 with contextlib.suppress(Exception):
                     pipeline.stop()
-            if core_manager is not None and core_ctx is not None:
-                with contextlib.suppress(Exception):
-                    core_manager.stop(core_ctx)
+            _shutdown_core()
 
         try:
             return run_interactive(
                 app, pipeline=pipeline, doc_store=DocumentStore(), cleanup=_cleanup
             )
+        except KeyboardInterrupt:
+            return 130
         finally:
             # run_interactive already ran _cleanup; guard double-stop above.
             pass
+    except KeyboardInterrupt:
+        return 130
     finally:
-        # Bounded shutdown: stop new CORE operations, disconnect the
-        # device client, and clear the ephemeral session state.
-        if core_manager is not None and core_ctx is not None:
+        # Centralized shutdown (every exit path): pipeline, CORE, then
+        # ONLY an A.S.I.S.-owned Ollama process (external servers untouched).
+        if pipeline is not None:
             with contextlib.suppress(Exception):
-                core_manager.stop(core_ctx)
+                pipeline.stop()
+        _shutdown_core()
+        _shutdown_owned_ollama()
+    return 0
     return 0
 
 
