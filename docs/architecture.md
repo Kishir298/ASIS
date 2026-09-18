@@ -122,6 +122,12 @@ default `auto`) is owned and terminated on every exit path with a bounded
 graceful-then-force stop (`ASIS_OLLAMA_SHUTDOWN_TIMEOUT`, default 10s).
 No kill-by-name (`taskkill`/`pkill`) exists anywhere.
 
+Known scope limits: the `voice`/`translate`/`calculate` subcommand
+runners predate this lifecycle and still manage their own startup
+(main `asis` REPL + `--message` are covered); ESC cancels turns once
+interactive — during the synchronous boot probe use `CTRL+C` (bounded
+by the provider timeout, owned Ollama still cleaned up).
+
 ## Identity
 
 `asis/identity/`: frozen `Identity(name, title, personality,
