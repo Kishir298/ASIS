@@ -407,19 +407,11 @@ class AssistantApp:
         self.session.add_assistant(text)
         return text
 
-    def _run_native_tool_loop(
-        self, user_text: str, on_chunk=None, tool_hint: str | None = None
-    ) -> str | None:
-        """Bounded native function-calling turn; None → heuristic fallback.
+    def _native_tool_definitions(self, tool_hint: str | None):
+        """Gate + build the tool definitions for a native turn.
 
-        The model receives tool definitions derived from the active-mode
-        registry and may request structured calls. Every call is
-        normalized to a ToolRequest and executed through the SAME
-        ToolRouter/permission path as heuristic intents. At most
-        ``max_calls_per_turn`` validated calls run; the turn always ends
-        with a plain final generation. Any native failure (unsupported
-        provider, transport error, no usable calls) returns None so the
-        caller falls back to the heuristic path.
+        Returns None when native calling is unavailable (caller falls back
+        to heuristics).
         """
         if not native_tools_enabled():
             return None
@@ -442,6 +434,61 @@ class AssistantApp:
         # hints matching nothing keep the full set so the model is never
         # starved; permissions are still enforced at execution.
         definitions = select_tool_definitions(definitions, tool_hint)
+        if not definitions:
+            return None
+        return definitions
+
+    def _filter_allowed_calls(self, requests, errors, allowed):
+        """Drop calls outside the model-visible definition set."""
+        if len(allowed) < len(list(self.tools_router.registry.list_names())):
+            from .native_tools import NativeToolError
+
+            kept: list = []
+            for request in requests:
+                if request.tool_name in allowed:
+                    kept.append(request)
+                else:
+                    errors.append(
+                        NativeToolError(
+                            kind="unknown_tool",
+                            message=(
+                                "Unknown tool: "
+                                f"{request.tool_name!r}."
+                            ),
+                            call_name=request.tool_name,
+                        )
+                    )
+            return kept
+        return requests
+
+    def _finalize_native_turn(self, on_chunk=None) -> str:
+        """End a native turn with a plain final generation."""
+        try:
+            if on_chunk is None:
+                final = self.engine.generate(self.session.messages)
+                text = final.content
+            else:
+                text = self._generate_text(self.session.messages, on_chunk=on_chunk)
+        finally:
+            self._pending_memory_query = ""
+        self.session.add_assistant(text)
+        return text
+
+    def _run_native_tool_loop(
+        self, user_text: str, on_chunk=None, tool_hint: str | None = None
+    ) -> str | None:
+        """Bounded native function-calling turn; None → heuristic fallback.
+
+        The model receives tool definitions derived from the active-mode
+        registry and may request structured calls. Every call is
+        normalized to a ToolRequest and executed through the SAME
+        ToolRouter/permission path as heuristic intents. At most
+        ``max_calls_per_turn`` validated calls run; the turn always ends
+        with a plain final generation. Any native failure (unsupported
+        provider, transport error, no usable calls) returns None so the
+        caller falls back to the heuristic path.
+        """
+        definitions = self._native_tool_definitions(tool_hint)
         if not definitions:
             return None
         limit = max_tool_calls()
@@ -468,27 +515,7 @@ class AssistantApp:
             )
             # Enforce the filtered set: the model only saw `definitions`,
             # so calls outside it are rejected before permission/execution.
-            if len(allowed) < len(
-                list(self.tools_router.registry.list_names())
-            ):
-                from .native_tools import NativeToolError
-
-                kept: list = []
-                for request in requests:
-                    if request.tool_name in allowed:
-                        kept.append(request)
-                    else:
-                        errors.append(
-                            NativeToolError(
-                                kind="unknown_tool",
-                                message=(
-                                    "Unknown tool: "
-                                    f"{request.tool_name!r}."
-                                ),
-                                call_name=request.tool_name,
-                            )
-                        )
-                requests = kept
+            requests = self._filter_allowed_calls(requests, errors, allowed)
             if (response.content or "").strip():
                 self.session.add_assistant(response.content)
             for error in errors:
@@ -519,16 +546,7 @@ class AssistantApp:
                 return response.content
         # Fell out of the loop (call bound reached, calls rejected, or
         # continuation failed/empty): finalize with a plain generation.
-        try:
-            if on_chunk is None:
-                final = self.engine.generate(self.session.messages)
-                text = final.content
-            else:
-                text = self._generate_text(self.session.messages, on_chunk=on_chunk)
-        finally:
-            self._pending_memory_query = ""
-        self.session.add_assistant(text)
-        return text
+        return self._finalize_native_turn(on_chunk)
 
     def _run_translation_turn(self, text: str) -> str:
         """Translate directly through the shared router (no LLM needed)."""
