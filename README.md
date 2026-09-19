@@ -81,6 +81,24 @@ tests run without them. Scriptable mocks live in
 
 ## Install
 
+> **Fastest path (recommended):** one command does it all — venv (via
+> `setup_venv.py`, uv-based), light dependencies, Ollama server start,
+> model check, then the interactive REPL:
+>
+> ```bash
+> npm run ASIS
+> ```
+>
+> Useful variants: `npm run asis:voice` (voice loop; falls back to mock
+> engines without the voice extra), `npm run asis:check` (fast boot
+> probe), `npm run asis:test` (full suite), and `npm run ASIS --
+> --message "hi"` (forward any flags after `--`). The launcher never
+> auto-installs the heavy voice stack — for real audio run
+> `uv pip install -r requirements/voice.txt` first. A launcher-owned
+> `ollama serve` is stopped on exit; a pre-existing server is left alone.
+
+Manual setup:
+
 ```bash
 pip install -e .            # base
 pip install -e ".[voice]"   # voice extras (microphone, STT, TTS, VAD)
@@ -167,6 +185,7 @@ Do not mark PASS until physically performed.
 
 ```bash
 python3 -m pytest -q        # canonical suite (tests/)
+npm run asis:test           # same suite via the one-command launcher
 ```
 
 ## CLI
