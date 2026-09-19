@@ -111,6 +111,54 @@ def build_coding_tool_router(
     return ToolRouter(registry=registry, executor=build_executor(executor))
 
 
+def _build_memory_section(query, memory, max_items, logger) -> str:
+    """Memory context block for the prompt (fail-open, bounded)."""
+    if not query or not query.strip():
+        return ""
+    try:
+        search = getattr(memory, "search_context", None)
+        if callable(search):
+            return search(query, limit=max_items) or ""
+        return ""
+    except Exception as exc:
+        logger.warning("Memory retrieval failed, continuing: %s", exc)
+        return ""
+
+
+def _build_mode_section(mode) -> str:
+    """Mode instructions for the labeled MODE context block."""
+    try:
+        return get_profile(mode).instructions.strip()
+    except Exception:
+        return ""
+
+
+def _build_capabilities_section(tool_names: list) -> str:
+    """Bounded capabilities summary + active tool names (no schemas)."""
+    try:
+        from asis.identity.personality import CAPABILITY_SUMMARY
+    except Exception:
+        CAPABILITY_SUMMARY = ""
+    names = list(tool_names)
+    # Bound tool list so capabilities never bloat the prompt.
+    shown = ", ".join(names[:24])
+    if len(names) > 24:
+        shown += f" (+{len(names) - 24} more)"
+    caps = CAPABILITY_SUMMARY.strip()
+    tool_line = f"Tools: {shown}" if shown else ""
+    parts = [p for p in (caps, tool_line) if p]
+    text = "\n".join(parts)
+    return text[:2000]
+
+
+def _build_constraints_section(plan) -> str:
+    """Per-turn orchestrator constraints (empty outside a planned turn)."""
+    if plan is None:
+        return ""
+    lines = [c.strip() for c in (plan.response_constraints or ()) if c.strip()]
+    return "\n".join(f"- {line}" for line in lines[:8])
+
+
 class AssistantApp:
     """Stateful chat application owning conversation, memory, mode and tools."""
 
@@ -293,52 +341,28 @@ class AssistantApp:
         return self._workspace
 
     def _memory_context(self) -> str:
-        query = self._pending_memory_query
-        if not query or not query.strip():
-            return ""
-        try:
-            search = getattr(self.memory, "search_context", None)
-            if callable(search):
-                return search(query, limit=self._max_memory_items) or ""
-            return ""
-        except Exception as exc:
-            self.logger.warning("Memory retrieval failed, continuing: %s", exc)
-            return ""
+        return _build_memory_section(
+            self._pending_memory_query,
+            self.memory,
+            self._max_memory_items,
+            self.logger,
+        )
 
     def _mode_section(self) -> str:
         """Mode instructions for the labeled MODE context block."""
-        try:
-            return get_profile(self._mode).instructions.strip()
-        except Exception:
-            return ""
+        return _build_mode_section(self._mode)
 
     def _capabilities_section(self) -> str:
         """Bounded capabilities summary + active tool names (no schemas)."""
         try:
-            from asis.identity.personality import CAPABILITY_SUMMARY
-        except Exception:
-            CAPABILITY_SUMMARY = ""
-        try:
             names = sorted(self.tools_router.registry.list_names())
         except Exception:
             names = []
-        # Bound tool list so capabilities never bloat the prompt.
-        shown = ", ".join(names[:24])
-        if len(names) > 24:
-            shown += f" (+{len(names) - 24} more)"
-        caps = CAPABILITY_SUMMARY.strip()
-        tool_line = f"Tools: {shown}" if shown else ""
-        parts = [p for p in (caps, tool_line) if p]
-        text = "\n".join(parts)
-        return text[:2000]
+        return _build_capabilities_section(names)
 
     def _constraints_section(self) -> str:
         """Per-turn orchestrator constraints (empty outside a planned turn)."""
-        plan = self._last_plan
-        if plan is None:
-            return ""
-        lines = [c.strip() for c in (plan.response_constraints or ()) if c.strip()]
-        return "\n".join(f"- {line}" for line in lines[:8])
+        return _build_constraints_section(self._last_plan)
 
     def _assembler_context(self) -> str:
         sections = []
@@ -567,6 +591,63 @@ class AssistantApp:
         self.session.add_assistant(f"[translation error] {note}")
         return note
 
+    def _generate_plain_content(self, on_chunk=None):
+        """Plain generation without tools (resets the pending memory query)."""
+        try:
+            if on_chunk is None:
+                response = self.engine.generate(self.session.messages)
+                return response.content
+            return self._generate_text(self.session.messages, on_chunk=on_chunk)
+        finally:
+            self._pending_memory_query = ""
+
+    def _generate_turn_content(self, plan, text: str, on_chunk=None):
+        """Run native loop or plain generation; None only when skipped."""
+        try:
+            if plan.tool_hint == "none" or (
+                plan.tool_hint is None and plan.intent in _NATIVE_SKIP_INTENTS
+            ):
+                # Explanation-only (or small-talk) turn: zero tool
+                # definitions, straight to plain generation — same fast
+                # path as GENERAL_CHAT, memory/context behavior unchanged.
+                return (self._generate_plain_content(on_chunk), False)
+            native_reply = self._run_native_tool_loop(
+                text, on_chunk=on_chunk, tool_hint=plan.tool_hint
+            )
+            if native_reply is not None:
+                return (native_reply, True)
+            return (self._generate_plain_content(on_chunk), False)
+        finally:
+            self._pending_memory_query = ""
+
+    def _finish_tool_turn(self, content: str, text: str, on_chunk=None) -> str:
+        """Parse model output for tool calls; execute + finalize."""
+        coding = self._mode is AssistantMode.CODING
+        request = parse_tool_request(content, user_text=text, coding=coding)
+        if request is None:
+            self.session.add_assistant(content)
+            return content
+
+        result = self._execute_tool(request)
+        # Record the intermediate model action + explicit tool result so the
+        # history stays auditable; tool output is never user-authored.
+        self.session.add_assistant(content)
+        self.session.add_assistant(format_tool_result_for_context(result))
+
+        self._pending_memory_query = ""
+        try:
+            if on_chunk is None:
+                final = self.engine.generate(self.session.messages)
+                final_text = final.content
+            else:
+                final_text = self._generate_text(
+                    self.session.messages, on_chunk=on_chunk
+                )
+        finally:
+            self._pending_memory_query = ""
+        self.session.add_assistant(final_text)
+        return final_text
+
     def chat(self, message: str) -> str:
         """Process one user message through the full wired pipeline."""
         return self.chat_streamed(message)
@@ -602,55 +683,10 @@ class AssistantApp:
         self._pending_memory_query = (
             plan.memory_query if plan.memory_needed else ""
         )
-        try:
-            if plan.tool_hint == "none" or (
-                plan.tool_hint is None and plan.intent in _NATIVE_SKIP_INTENTS
-            ):
-                # Explanation-only (or small-talk) turn: zero tool
-                # definitions, straight to plain generation — same fast
-                # path as GENERAL_CHAT, memory/context behavior unchanged.
-                native_reply = None
-            else:
-                native_reply = self._run_native_tool_loop(
-                    text, on_chunk=on_chunk, tool_hint=plan.tool_hint
-                )
-            if native_reply is not None:
-                return native_reply
-            if on_chunk is None:
-                response = self.engine.generate(self.session.messages)
-                content = response.content
-            else:
-                content = self._generate_text(
-                    self.session.messages, on_chunk=on_chunk
-                )
-        finally:
-            self._pending_memory_query = ""
-
-        coding = self._mode is AssistantMode.CODING
-        request = parse_tool_request(content, user_text=text, coding=coding)
-        if request is None:
-            self.session.add_assistant(content)
+        content, from_native = self._generate_turn_content(plan, text, on_chunk=on_chunk)
+        if from_native:
             return content
-
-        result = self._execute_tool(request)
-        # Record the intermediate model action + explicit tool result so the
-        # history stays auditable; tool output is never user-authored.
-        self.session.add_assistant(content)
-        self.session.add_assistant(format_tool_result_for_context(result))
-
-        self._pending_memory_query = ""
-        try:
-            if on_chunk is None:
-                final = self.engine.generate(self.session.messages)
-                final_text = final.content
-            else:
-                final_text = self._generate_text(
-                    self.session.messages, on_chunk=on_chunk
-                )
-        finally:
-            self._pending_memory_query = ""
-        self.session.add_assistant(final_text)
-        return final_text
+        return self._finish_tool_turn(content, text, on_chunk=on_chunk)
 
     def _run_core_command(self, text: str) -> str | None:
         """Execute an explicit ``core:`` user command; None when absent.
