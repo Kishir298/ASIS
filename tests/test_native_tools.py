@@ -279,7 +279,7 @@ def test_ollama_chat_with_tools_sends_definitions(monkeypatch):
         seen.update(json or {})
         return _FakeResponse()
 
-    monkeypatch.setattr("asis.ai.providers.ollama.requests.post", _fake_post)
+    monkeypatch.setattr("requests.post", _fake_post)
     provider = OllamaProvider()
     response = provider.chat_with_tools(
         [_user("hi")],

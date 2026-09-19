@@ -19,11 +19,13 @@ EXIT_PHRASES = frozenset({"asis shutdown"})
 def _clear_screen(stream=None) -> None:
     out = stream if stream is not None else sys.stdout
     try:
-        if os.name == "nt":
-            os.system("cls")
-        else:
-            out.write("\033[2J\033[H")
-            out.flush()
+        # ANSI clear works on POSIX and on modern Windows consoles
+        # (Windows Terminal / conhost with virtual-terminal processing);
+        # skip silently when output is redirected.
+        if hasattr(out, "isatty") and not out.isatty():
+            return
+        out.write("\033[2J\033[H")
+        out.flush()
     except Exception:
         pass
 

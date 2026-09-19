@@ -249,6 +249,297 @@ class Settings:
     paths: PathSettings
 
 
+def _build_identity_settings(get_s, d) -> IdentitySettings:
+    return IdentitySettings(
+        name=get_s("ASIS_IDENTITY_NAME", d.APP_NAME),
+        title=get_s("ASIS_IDENTITY_TITLE", d.IDENTITY_TITLE),
+        shutdown_phrase=get_s("ASIS_SHUTDOWN_PHRASE", d.SHUTDOWN_PHRASE),
+    )
+
+
+def _build_ai_settings(get_s, get_i, get_f, d) -> AISettings:
+    return AISettings(
+        provider=get_s("ASIS_AI_PROVIDER", d.AI_PROVIDER),
+        model=get_s("ASIS_AI_MODEL", d.AI_MODEL),
+        endpoint=get_s("ASIS_AI_ENDPOINT", d.AI_ENDPOINT),
+        request_timeout=get_i("ASIS_AI_REQUEST_TIMEOUT", d.AI_REQUEST_TIMEOUT),
+        temperature=get_f("ASIS_AI_TEMPERATURE", d.AI_TEMPERATURE),
+        max_context_messages=get_i(
+            "ASIS_AI_MAX_CONTEXT_MESSAGES", d.AI_MAX_CONTEXT_MESSAGES
+        ),
+        context_char_limit=get_i(
+            "ASIS_AI_CONTEXT_CHAR_LIMIT", d.AI_CONTEXT_CHAR_LIMIT
+        ),
+        native_tools=get_s("ASIS_AI_NATIVE_TOOLS", d.AI_NATIVE_TOOLS),
+        think=get_s("ASIS_AI_THINK", d.AI_THINK),
+        num_predict=get_i("ASIS_AI_NUM_PREDICT", d.AI_NUM_PREDICT),
+        keep_alive=get_s("ASIS_AI_KEEP_ALIVE", d.AI_KEEP_ALIVE),
+    )
+
+
+def _build_conversation_settings(get_i, d) -> ConversationSettings:
+    return ConversationSettings(
+        max_history=get_i(
+            "ASIS_CONVERSATION_MAX_HISTORY", d.CONVERSATION_MAX_HISTORY
+        ),
+    )
+
+
+def _build_ollama_settings(get_s, environment, d) -> OllamaSettings:
+    return OllamaSettings(
+        managed=get_s("ASIS_OLLAMA_MANAGED", d.OLLAMA_MANAGED),
+        serve_timeout=environment.get_bounded_int(
+            "ASIS_OLLAMA_SERVE_TIMEOUT", d.OLLAMA_SERVE_TIMEOUT, 5, 300
+        ),
+        shutdown_timeout=environment.get_bounded_int(
+            "ASIS_OLLAMA_SHUTDOWN_TIMEOUT",
+            d.OLLAMA_SHUTDOWN_TIMEOUT,
+            1,
+            120,
+        ),
+    )
+
+
+def _build_core_settings(get_s, get_b, environment, d) -> CoreSettings:
+    return CoreSettings(
+        enabled=get_b("ASIS_CORE_ENABLED", d.CORE_ENABLED),
+        host=get_s("ASIS_CORE_HOST", d.CORE_HOST),
+        port=environment.get_port("ASIS_CORE_PORT", d.CORE_PORT),
+        device_file=get_s("ASIS_CORE_DEVICE_FILE", d.CORE_DEVICE_FILE),
+        ca_file=get_s("ASIS_CORE_CA_FILE", d.CORE_CA_FILE),
+        insecure=get_b("ASIS_CORE_INSECURE", d.CORE_INSECURE),
+        connect_timeout=environment.get_bounded_int(
+            "ASIS_CORE_CONNECT_TIMEOUT", d.CORE_CONNECT_TIMEOUT, 1, 600
+        ),
+        request_timeout=environment.get_bounded_int(
+            "ASIS_CORE_REQUEST_TIMEOUT", d.CORE_REQUEST_TIMEOUT, 1, 600
+        ),
+        reconnect_enabled=get_b(
+            "ASIS_CORE_RECONNECT_ENABLED", d.CORE_RECONNECT_ENABLED
+        ),
+        reconnect_delay=environment.get_bounded_int(
+            "ASIS_CORE_RECONNECT_DELAY", d.CORE_RECONNECT_DELAY, 0, 300
+        ),
+    )
+
+
+def _build_network_settings(get_i, d) -> NetworkSettings:
+    return NetworkSettings(
+        timeout=get_i("ASIS_NETWORK_TIMEOUT", d.NETWORK_TIMEOUT),
+        retries=get_i("ASIS_NETWORK_RETRIES", d.NETWORK_RETRIES),
+    )
+
+
+def _build_tool_settings(get_i, environment, d) -> ToolSettings:
+    return ToolSettings(
+        timeout=get_i("ASIS_TOOL_TIMEOUT", d.TOOL_TIMEOUT),
+        max_calls_per_turn=environment.get_bounded_int(
+            "ASIS_TOOL_MAX_CALLS_PER_TURN", d.TOOL_MAX_CALLS_PER_TURN, 1, 10
+        ),
+    )
+
+
+def _build_web_settings(get_s, get_b, environment, d) -> WebSettings:
+    return WebSettings(
+        enabled=get_b("ASIS_WEB_ENABLED", d.WEB_ENABLED),
+        search_provider=get_s(
+            "ASIS_WEB_SEARCH_PROVIDER", d.WEB_SEARCH_PROVIDER
+        ),
+        timeout=environment.get_bounded_int(
+            "ASIS_WEB_TIMEOUT", d.WEB_TIMEOUT, 1, 120
+        ),
+        max_results=environment.get_bounded_int(
+            "ASIS_WEB_MAX_RESULTS", d.WEB_MAX_RESULTS, 1, 10
+        ),
+        max_chars=environment.get_bounded_int(
+            "ASIS_WEB_MAX_CHARS", d.WEB_MAX_CHARS, 500, 50_000
+        ),
+        max_response_bytes=environment.get_bounded_int(
+            "ASIS_WEB_MAX_RESPONSE_BYTES",
+            d.WEB_MAX_RESPONSE_BYTES,
+            10_000,
+            5_000_000,
+        ),
+        max_redirects=environment.get_bounded_int(
+            "ASIS_WEB_MAX_REDIRECTS", d.WEB_MAX_REDIRECTS, 0, 5
+        ),
+        max_query_length=environment.get_bounded_int(
+            "ASIS_WEB_MAX_QUERY_LENGTH",
+            d.WEB_MAX_QUERY_LENGTH,
+            1,
+            2_000,
+        ),
+        max_url_length=environment.get_bounded_int(
+            "ASIS_WEB_MAX_URL_LENGTH", d.WEB_MAX_URL_LENGTH, 100, 8_000
+        ),
+    )
+
+
+def _build_translation_settings(get_s, get_b, environment, d) -> TranslationSettings:
+    return TranslationSettings(
+        enabled=get_b("ASIS_TRANSLATION_ENABLED", d.TRANSLATION_ENABLED),
+        provider=get_s("ASIS_TRANSLATION_PROVIDER", d.TRANSLATION_PROVIDER),
+        model=get_s("ASIS_TRANSLATION_MODEL", d.TRANSLATION_MODEL),
+        model_path=get_s(
+            "ASIS_TRANSLATION_MODEL_PATH", d.TRANSLATION_MODEL_PATH
+        ),
+        device=get_s("ASIS_TRANSLATION_DEVICE", d.TRANSLATION_DEVICE),
+        cache_enabled=get_b(
+            "ASIS_TRANSLATION_CACHE_ENABLED", d.TRANSLATION_CACHE_ENABLED
+        ),
+        cache_size=environment.get_bounded_int(
+            "ASIS_TRANSLATION_CACHE_SIZE", d.TRANSLATION_CACHE_SIZE, 1, 10_000
+        ),
+        default_source=get_s(
+            "ASIS_TRANSLATION_DEFAULT_SOURCE", d.TRANSLATION_DEFAULT_SOURCE
+        ),
+        default_target=get_s(
+            "ASIS_TRANSLATION_DEFAULT_TARGET", d.TRANSLATION_DEFAULT_TARGET
+        ),
+        max_chars=environment.get_bounded_int(
+            "ASIS_TRANSLATION_MAX_CHARS", d.TRANSLATION_MAX_CHARS, 1, 50_000
+        ),
+    )
+
+
+def _build_calculator_settings(get_s, get_b, environment, d) -> CalculatorSettings:
+    return CalculatorSettings(
+        enabled=get_b("ASIS_CALCULATOR_ENABLED", d.CALCULATOR_ENABLED),
+        max_expression_chars=environment.get_bounded_int(
+            "ASIS_CALCULATOR_MAX_EXPRESSION_CHARS",
+            d.CALCULATOR_MAX_EXPRESSION_CHARS,
+            100,
+            20_000,
+        ),
+        max_matrix_size=environment.get_bounded_int(
+            "ASIS_CALCULATOR_MAX_MATRIX_SIZE",
+            d.CALCULATOR_MAX_MATRIX_SIZE,
+            2,
+            50,
+        ),
+        timeout=environment.get_bounded_int(
+            "ASIS_CALCULATOR_TIMEOUT", d.CALCULATOR_TIMEOUT, 1, 300
+        ),
+        precision=environment.get_bounded_int(
+            "ASIS_CALCULATOR_PRECISION", d.CALCULATOR_PRECISION, 0, 30
+        ),
+        angle_mode=get_s("ASIS_CALCULATOR_ANGLE_MODE", d.CALCULATOR_ANGLE_MODE),
+    )
+
+
+def _build_security_settings(get_b, d) -> SecuritySettings:
+    return SecuritySettings(
+        require_confirmation_for_dangerous=get_b(
+            "ASIS_CONFIRM_DANGEROUS_TOOLS",
+            d.REQUIRE_CONFIRMATION_FOR_DANGEROUS,
+        )
+    )
+
+
+def _build_memory_settings(get_s, d) -> MemorySettings:
+    return MemorySettings(
+        provider=get_s("ASIS_MEMORY_PROVIDER", d.MEMORY_PROVIDER),
+        database_name=get_s(
+            "ASIS_MEMORY_DATABASE_NAME", d.MEMORY_DATABASE_NAME
+        ),
+    )
+
+
+def _build_voice_settings(get_s, get_i, get_f, d) -> VoiceSettings:
+    return VoiceSettings(
+        sample_rate=get_i("ASIS_VOICE_SAMPLE_RATE", d.VOICE_SAMPLE_RATE),
+        channels=get_i("ASIS_VOICE_CHANNELS", d.VOICE_CHANNELS),
+        block_size=get_i("ASIS_VOICE_BLOCK_SIZE", d.VOICE_BLOCK_SIZE),
+        wake_word=get_s("ASIS_VOICE_WAKE_WORD", d.VOICE_WAKE_WORD),
+        max_utterance_s=get_f(
+            "ASIS_VOICE_MAX_UTTERANCE_S", d.VOICE_MAX_UTTERANCE_S
+        ),
+        silence_s=get_f("ASIS_VOICE_SILENCE_S", d.VOICE_SILENCE_S),
+        input_engine=get_s("ASIS_VOICE_INPUT_ENGINE", d.VOICE_INPUT_ENGINE),
+        output_engine=get_s("ASIS_VOICE_OUTPUT_ENGINE", d.VOICE_OUTPUT_ENGINE),
+        stt=SpeechToTextSettings(
+            engine=get_s("ASIS_VOICE_STT_ENGINE", d.VOICE_STT_ENGINE),
+            model=get_s("ASIS_VOICE_STT_MODEL", d.VOICE_STT_MODEL),
+            device=get_s("ASIS_VOICE_STT_DEVICE", d.VOICE_STT_DEVICE),
+            compute_type=get_s(
+                "ASIS_VOICE_STT_COMPUTE_TYPE", d.VOICE_STT_COMPUTE_TYPE
+            ),
+            language=get_s("ASIS_VOICE_STT_LANGUAGE", d.VOICE_STT_LANGUAGE),
+        ),
+        tts=TTSSettings(
+            engine=get_s("ASIS_VOICE_TTS_ENGINE", d.VOICE_TTS_ENGINE),
+            voice=get_s("ASIS_VOICE_TTS_VOICE", d.VOICE_TTS_VOICE),
+            sample_rate=get_i(
+                "ASIS_VOICE_TTS_SAMPLE_RATE", d.VOICE_TTS_SAMPLE_RATE
+            ),
+        ),
+        speaker=SpeakerSettings(
+            engine=get_s("ASIS_VOICE_SPEAKER_ENGINE", d.VOICE_SPEAKER_ENGINE),
+            model=get_s("ASIS_VOICE_SPEAKER_MODEL", d.VOICE_SPEAKER_MODEL),
+            device=get_s("ASIS_VOICE_SPEAKER_DEVICE", d.VOICE_SPEAKER_DEVICE),
+            confidence=get_f(
+                "ASIS_VOICE_SPEAKER_CONFIDENCE", d.VOICE_SPEAKER_CONFIDENCE
+            ),
+            threshold=get_f(
+                "ASIS_VOICE_SPEAKER_THRESHOLD", d.VOICE_SPEAKER_THRESHOLD
+            ),
+            metric=get_s("ASIS_VOICE_SPEAKER_METRIC", d.VOICE_SPEAKER_METRIC),
+        ),
+        wake=WakeSettings(
+            engine=get_s("ASIS_VOICE_WAKE_ENGINE", d.VOICE_WAKE_ENGINE),
+            threshold=get_f(
+                "ASIS_VOICE_WAKE_THRESHOLD", d.VOICE_WAKE_THRESHOLD
+            ),
+            model=get_s("ASIS_VOICE_WAKE_MODEL", d.VOICE_WAKE_MODEL),
+        ),
+        vad=VadSettings(
+            engine=get_s("ASIS_VOICE_VAD_ENGINE", d.VOICE_VAD_ENGINE),
+            threshold=get_f("ASIS_VOICE_VAD_THRESHOLD", d.VOICE_VAD_THRESHOLD),
+        ),
+    )
+
+
+def _build_runtime_settings(get_s, get_b, get_i, d) -> RuntimeSettings:
+    return RuntimeSettings(
+        shutdown_timeout=get_i("ASIS_SHUTDOWN_TIMEOUT", d.SHUTDOWN_TIMEOUT),
+        debug=get_b("ASIS_DEBUG", d.DEBUG),
+        log_level=get_s("ASIS_LOG_LEVEL", d.LOG_LEVEL),
+    )
+
+
+def _build_coding_settings(get_s, get_i, d) -> CodingSettings:
+    return CodingSettings(
+        default_mode=get_s("ASIS_DEFAULT_MODE", d.DEFAULT_MODE),
+        workspace=get_s("ASIS_CODING_WORKSPACE", d.CODING_WORKSPACE),
+        command_timeout=get_i(
+            "ASIS_CODING_COMMAND_TIMEOUT", d.CODING_COMMAND_TIMEOUT
+        ),
+        max_file_size=get_i(
+            "ASIS_CODING_MAX_FILE_SIZE", d.CODING_MAX_FILE_SIZE
+        ),
+        max_output_size=get_i(
+            "ASIS_CODING_MAX_OUTPUT_SIZE", d.CODING_MAX_OUTPUT_SIZE
+        ),
+    )
+
+
+def _build_path_settings(environment) -> PathSettings:
+    return PathSettings(
+        data=get_data_directory(environment.get_path("ASIS_DATA_DIRECTORY")),
+        config=get_config_directory(
+            environment.get_path("ASIS_CONFIG_DIRECTORY")
+        ),
+        cache=get_cache_directory(environment.get_path("ASIS_CACHE_DIRECTORY")),
+        logs=get_log_directory(environment.get_path("ASIS_LOG_DIRECTORY")),
+        memory=get_memory_directory(
+            environment.get_path("ASIS_MEMORY_DIRECTORY")
+        ),
+        runtime=get_runtime_directory(
+            environment.get_path("ASIS_RUNTIME_DIRECTORY")
+        ),
+    )
+
+
 def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     """Build and return an independent, validated A.S.I.S. configuration.
 
@@ -268,249 +559,22 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         built = Settings(
             app_name=get_s("ASIS_IDENTITY_NAME", d.APP_NAME),
             app_version=get_s("ASIS_APP_VERSION", d.APP_VERSION),
-            identity=IdentitySettings(
-                name=get_s("ASIS_IDENTITY_NAME", d.APP_NAME),
-                title=get_s("ASIS_IDENTITY_TITLE", d.IDENTITY_TITLE),
-                shutdown_phrase=get_s("ASIS_SHUTDOWN_PHRASE", d.SHUTDOWN_PHRASE),
-            ),
-            ai=AISettings(
-                provider=get_s("ASIS_AI_PROVIDER", d.AI_PROVIDER),
-                model=get_s("ASIS_AI_MODEL", d.AI_MODEL),
-                endpoint=get_s("ASIS_AI_ENDPOINT", d.AI_ENDPOINT),
-                request_timeout=get_i("ASIS_AI_REQUEST_TIMEOUT", d.AI_REQUEST_TIMEOUT),
-                temperature=get_f("ASIS_AI_TEMPERATURE", d.AI_TEMPERATURE),
-                max_context_messages=get_i(
-                    "ASIS_AI_MAX_CONTEXT_MESSAGES", d.AI_MAX_CONTEXT_MESSAGES
-                ),
-                context_char_limit=get_i(
-                    "ASIS_AI_CONTEXT_CHAR_LIMIT", d.AI_CONTEXT_CHAR_LIMIT
-                ),
-                native_tools=get_s("ASIS_AI_NATIVE_TOOLS", d.AI_NATIVE_TOOLS),
-                think=get_s("ASIS_AI_THINK", d.AI_THINK),
-                num_predict=get_i("ASIS_AI_NUM_PREDICT", d.AI_NUM_PREDICT),
-                keep_alive=get_s("ASIS_AI_KEEP_ALIVE", d.AI_KEEP_ALIVE),
-            ),
-            conversation=ConversationSettings(
-                max_history=get_i(
-                    "ASIS_CONVERSATION_MAX_HISTORY", d.CONVERSATION_MAX_HISTORY
-                ),
-            ),
-            ollama=OllamaSettings(
-                managed=get_s("ASIS_OLLAMA_MANAGED", d.OLLAMA_MANAGED),
-                serve_timeout=environment.get_bounded_int(
-                    "ASIS_OLLAMA_SERVE_TIMEOUT", d.OLLAMA_SERVE_TIMEOUT, 5, 300
-                ),
-                shutdown_timeout=environment.get_bounded_int(
-                    "ASIS_OLLAMA_SHUTDOWN_TIMEOUT",
-                    d.OLLAMA_SHUTDOWN_TIMEOUT,
-                    1,
-                    120,
-                ),
-            ),
-            core=CoreSettings(
-                enabled=get_b("ASIS_CORE_ENABLED", d.CORE_ENABLED),
-                host=get_s("ASIS_CORE_HOST", d.CORE_HOST),
-                port=environment.get_port("ASIS_CORE_PORT", d.CORE_PORT),
-                device_file=get_s("ASIS_CORE_DEVICE_FILE", d.CORE_DEVICE_FILE),
-                ca_file=get_s("ASIS_CORE_CA_FILE", d.CORE_CA_FILE),
-                insecure=get_b("ASIS_CORE_INSECURE", d.CORE_INSECURE),
-                connect_timeout=environment.get_bounded_int(
-                    "ASIS_CORE_CONNECT_TIMEOUT", d.CORE_CONNECT_TIMEOUT, 1, 600
-                ),
-                request_timeout=environment.get_bounded_int(
-                    "ASIS_CORE_REQUEST_TIMEOUT", d.CORE_REQUEST_TIMEOUT, 1, 600
-                ),
-                reconnect_enabled=get_b(
-                    "ASIS_CORE_RECONNECT_ENABLED", d.CORE_RECONNECT_ENABLED
-                ),
-                reconnect_delay=environment.get_bounded_int(
-                    "ASIS_CORE_RECONNECT_DELAY", d.CORE_RECONNECT_DELAY, 0, 300
-                ),
-            ),
-            network=NetworkSettings(
-                timeout=get_i("ASIS_NETWORK_TIMEOUT", d.NETWORK_TIMEOUT),
-                retries=get_i("ASIS_NETWORK_RETRIES", d.NETWORK_RETRIES),
-            ),
-            tools=ToolSettings(
-                timeout=get_i("ASIS_TOOL_TIMEOUT", d.TOOL_TIMEOUT),
-                max_calls_per_turn=environment.get_bounded_int(
-                    "ASIS_TOOL_MAX_CALLS_PER_TURN", d.TOOL_MAX_CALLS_PER_TURN, 1, 10
-                ),
-            ),
-            web=WebSettings(
-                enabled=get_b("ASIS_WEB_ENABLED", d.WEB_ENABLED),
-                search_provider=get_s(
-                    "ASIS_WEB_SEARCH_PROVIDER", d.WEB_SEARCH_PROVIDER
-                ),
-                timeout=environment.get_bounded_int(
-                    "ASIS_WEB_TIMEOUT", d.WEB_TIMEOUT, 1, 120
-                ),
-                max_results=environment.get_bounded_int(
-                    "ASIS_WEB_MAX_RESULTS", d.WEB_MAX_RESULTS, 1, 10
-                ),
-                max_chars=environment.get_bounded_int(
-                    "ASIS_WEB_MAX_CHARS", d.WEB_MAX_CHARS, 500, 50_000
-                ),
-                max_response_bytes=environment.get_bounded_int(
-                    "ASIS_WEB_MAX_RESPONSE_BYTES",
-                    d.WEB_MAX_RESPONSE_BYTES,
-                    10_000,
-                    5_000_000,
-                ),
-                max_redirects=environment.get_bounded_int(
-                    "ASIS_WEB_MAX_REDIRECTS", d.WEB_MAX_REDIRECTS, 0, 5
-                ),
-                max_query_length=environment.get_bounded_int(
-                    "ASIS_WEB_MAX_QUERY_LENGTH",
-                    d.WEB_MAX_QUERY_LENGTH,
-                    1,
-                    2_000,
-                ),
-                max_url_length=environment.get_bounded_int(
-                    "ASIS_WEB_MAX_URL_LENGTH", d.WEB_MAX_URL_LENGTH, 100, 8_000
-                ),
-            ),
-            translation=TranslationSettings(
-                enabled=get_b("ASIS_TRANSLATION_ENABLED", d.TRANSLATION_ENABLED),
-                provider=get_s("ASIS_TRANSLATION_PROVIDER", d.TRANSLATION_PROVIDER),
-                model=get_s("ASIS_TRANSLATION_MODEL", d.TRANSLATION_MODEL),
-                model_path=get_s(
-                    "ASIS_TRANSLATION_MODEL_PATH", d.TRANSLATION_MODEL_PATH
-                ),
-                device=get_s("ASIS_TRANSLATION_DEVICE", d.TRANSLATION_DEVICE),
-                cache_enabled=get_b(
-                    "ASIS_TRANSLATION_CACHE_ENABLED", d.TRANSLATION_CACHE_ENABLED
-                ),
-                cache_size=environment.get_bounded_int(
-                    "ASIS_TRANSLATION_CACHE_SIZE", d.TRANSLATION_CACHE_SIZE, 1, 10_000
-                ),
-                default_source=get_s(
-                    "ASIS_TRANSLATION_DEFAULT_SOURCE", d.TRANSLATION_DEFAULT_SOURCE
-                ),
-                default_target=get_s(
-                    "ASIS_TRANSLATION_DEFAULT_TARGET", d.TRANSLATION_DEFAULT_TARGET
-                ),
-                max_chars=environment.get_bounded_int(
-                    "ASIS_TRANSLATION_MAX_CHARS", d.TRANSLATION_MAX_CHARS, 1, 50_000
-                ),
-            ),
-            calculator=CalculatorSettings(
-                enabled=get_b("ASIS_CALCULATOR_ENABLED", d.CALCULATOR_ENABLED),
-                max_expression_chars=environment.get_bounded_int(
-                    "ASIS_CALCULATOR_MAX_EXPRESSION_CHARS",
-                    d.CALCULATOR_MAX_EXPRESSION_CHARS,
-                    100,
-                    20_000,
-                ),
-                max_matrix_size=environment.get_bounded_int(
-                    "ASIS_CALCULATOR_MAX_MATRIX_SIZE",
-                    d.CALCULATOR_MAX_MATRIX_SIZE,
-                    2,
-                    50,
-                ),
-                timeout=environment.get_bounded_int(
-                    "ASIS_CALCULATOR_TIMEOUT", d.CALCULATOR_TIMEOUT, 1, 300
-                ),
-                precision=environment.get_bounded_int(
-                    "ASIS_CALCULATOR_PRECISION", d.CALCULATOR_PRECISION, 0, 30
-                ),
-                angle_mode=get_s("ASIS_CALCULATOR_ANGLE_MODE", d.CALCULATOR_ANGLE_MODE),
-            ),
-            security=SecuritySettings(
-                require_confirmation_for_dangerous=get_b(
-                    "ASIS_CONFIRM_DANGEROUS_TOOLS",
-                    d.REQUIRE_CONFIRMATION_FOR_DANGEROUS,
-                )
-            ),
-            memory=MemorySettings(
-                provider=get_s("ASIS_MEMORY_PROVIDER", d.MEMORY_PROVIDER),
-                database_name=get_s(
-                    "ASIS_MEMORY_DATABASE_NAME", d.MEMORY_DATABASE_NAME
-                ),
-            ),
-            voice=VoiceSettings(
-                sample_rate=get_i("ASIS_VOICE_SAMPLE_RATE", d.VOICE_SAMPLE_RATE),
-                channels=get_i("ASIS_VOICE_CHANNELS", d.VOICE_CHANNELS),
-                block_size=get_i("ASIS_VOICE_BLOCK_SIZE", d.VOICE_BLOCK_SIZE),
-                wake_word=get_s("ASIS_VOICE_WAKE_WORD", d.VOICE_WAKE_WORD),
-                max_utterance_s=get_f(
-                    "ASIS_VOICE_MAX_UTTERANCE_S", d.VOICE_MAX_UTTERANCE_S
-                ),
-                silence_s=get_f("ASIS_VOICE_SILENCE_S", d.VOICE_SILENCE_S),
-                input_engine=get_s("ASIS_VOICE_INPUT_ENGINE", d.VOICE_INPUT_ENGINE),
-                output_engine=get_s("ASIS_VOICE_OUTPUT_ENGINE", d.VOICE_OUTPUT_ENGINE),
-                stt=SpeechToTextSettings(
-                    engine=get_s("ASIS_VOICE_STT_ENGINE", d.VOICE_STT_ENGINE),
-                    model=get_s("ASIS_VOICE_STT_MODEL", d.VOICE_STT_MODEL),
-                    device=get_s("ASIS_VOICE_STT_DEVICE", d.VOICE_STT_DEVICE),
-                    compute_type=get_s(
-                        "ASIS_VOICE_STT_COMPUTE_TYPE", d.VOICE_STT_COMPUTE_TYPE
-                    ),
-                    language=get_s("ASIS_VOICE_STT_LANGUAGE", d.VOICE_STT_LANGUAGE),
-                ),
-                tts=TTSSettings(
-                    engine=get_s("ASIS_VOICE_TTS_ENGINE", d.VOICE_TTS_ENGINE),
-                    voice=get_s("ASIS_VOICE_TTS_VOICE", d.VOICE_TTS_VOICE),
-                    sample_rate=get_i(
-                        "ASIS_VOICE_TTS_SAMPLE_RATE", d.VOICE_TTS_SAMPLE_RATE
-                    ),
-                ),
-                speaker=SpeakerSettings(
-                    engine=get_s("ASIS_VOICE_SPEAKER_ENGINE", d.VOICE_SPEAKER_ENGINE),
-                    model=get_s("ASIS_VOICE_SPEAKER_MODEL", d.VOICE_SPEAKER_MODEL),
-                    device=get_s("ASIS_VOICE_SPEAKER_DEVICE", d.VOICE_SPEAKER_DEVICE),
-                    confidence=get_f(
-                        "ASIS_VOICE_SPEAKER_CONFIDENCE", d.VOICE_SPEAKER_CONFIDENCE
-                    ),
-                    threshold=get_f(
-                        "ASIS_VOICE_SPEAKER_THRESHOLD", d.VOICE_SPEAKER_THRESHOLD
-                    ),
-                    metric=get_s("ASIS_VOICE_SPEAKER_METRIC", d.VOICE_SPEAKER_METRIC),
-                ),
-                wake=WakeSettings(
-                    engine=get_s("ASIS_VOICE_WAKE_ENGINE", d.VOICE_WAKE_ENGINE),
-                    threshold=get_f(
-                        "ASIS_VOICE_WAKE_THRESHOLD", d.VOICE_WAKE_THRESHOLD
-                    ),
-                    model=get_s("ASIS_VOICE_WAKE_MODEL", d.VOICE_WAKE_MODEL),
-                ),
-                vad=VadSettings(
-                    engine=get_s("ASIS_VOICE_VAD_ENGINE", d.VOICE_VAD_ENGINE),
-                    threshold=get_f("ASIS_VOICE_VAD_THRESHOLD", d.VOICE_VAD_THRESHOLD),
-                ),
-            ),
-            runtime=RuntimeSettings(
-                shutdown_timeout=get_i("ASIS_SHUTDOWN_TIMEOUT", d.SHUTDOWN_TIMEOUT),
-                debug=get_b("ASIS_DEBUG", d.DEBUG),
-                log_level=get_s("ASIS_LOG_LEVEL", d.LOG_LEVEL),
-            ),
-            coding=CodingSettings(
-                default_mode=get_s("ASIS_DEFAULT_MODE", d.DEFAULT_MODE),
-                workspace=get_s("ASIS_CODING_WORKSPACE", d.CODING_WORKSPACE),
-                command_timeout=get_i(
-                    "ASIS_CODING_COMMAND_TIMEOUT", d.CODING_COMMAND_TIMEOUT
-                ),
-                max_file_size=get_i(
-                    "ASIS_CODING_MAX_FILE_SIZE", d.CODING_MAX_FILE_SIZE
-                ),
-                max_output_size=get_i(
-                    "ASIS_CODING_MAX_OUTPUT_SIZE", d.CODING_MAX_OUTPUT_SIZE
-                ),
-            ),
-            paths=PathSettings(
-                data=get_data_directory(environment.get_path("ASIS_DATA_DIRECTORY")),
-                config=get_config_directory(
-                    environment.get_path("ASIS_CONFIG_DIRECTORY")
-                ),
-                cache=get_cache_directory(environment.get_path("ASIS_CACHE_DIRECTORY")),
-                logs=get_log_directory(environment.get_path("ASIS_LOG_DIRECTORY")),
-                memory=get_memory_directory(
-                    environment.get_path("ASIS_MEMORY_DIRECTORY")
-                ),
-                runtime=get_runtime_directory(
-                    environment.get_path("ASIS_RUNTIME_DIRECTORY")
-                ),
-            ),
+            identity=_build_identity_settings(get_s, d),
+            ai=_build_ai_settings(get_s, get_i, get_f, d),
+            conversation=_build_conversation_settings(get_i, d),
+            ollama=_build_ollama_settings(get_s, environment, d),
+            core=_build_core_settings(get_s, get_b, environment, d),
+            network=_build_network_settings(get_i, d),
+            tools=_build_tool_settings(get_i, environment, d),
+            web=_build_web_settings(get_s, get_b, environment, d),
+            translation=_build_translation_settings(get_s, get_b, environment, d),
+            calculator=_build_calculator_settings(get_s, get_b, environment, d),
+            security=_build_security_settings(get_b, d),
+            memory=_build_memory_settings(get_s, d),
+            voice=_build_voice_settings(get_s, get_i, get_f, d),
+            runtime=_build_runtime_settings(get_s, get_b, get_i, d),
+            coding=_build_coding_settings(get_s, get_i, d),
+            paths=_build_path_settings(environment),
         )
     return validate_settings(built)
 

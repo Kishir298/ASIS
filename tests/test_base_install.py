@@ -53,15 +53,20 @@ def test_mock_provider_constructs_without_requests():
 
 
 def test_ollama_without_requests_fails_with_hint():
+    # The provider module imports lazily (base installs have no `requests`);
+    # construction succeeds and the first HTTP use raises a clear hint.
     proc = _run(
         "from asis.ai.manager import create_provider\n"
+        "from asis.ai.models import AIMessage, MessageRole\n"
+        "provider = create_provider('ollama')\n"
+        "assert provider.available() is False\n"
         "try:\n"
-        "    create_provider('ollama')\n"
-        "except ImportError as exc:\n"
+        "    provider.chat([AIMessage(role=MessageRole.USER, content='hi')])\n"
+        "except Exception as exc:\n"
         "    assert 'requests' in str(exc), str(exc)\n"
         "    print('ollama-hint-ok')\n"
         "else:\n"
-        "    raise AssertionError('expected ImportError without requests')\n"
+        "    raise AssertionError('expected requests hint without requests')\n"
     )
     assert proc.returncode == 0, proc.stderr
     assert "ollama-hint-ok" in proc.stdout

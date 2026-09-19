@@ -6,15 +6,33 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator, Sequence
-from typing import Any
-
-import requests
+from typing import TYPE_CHECKING, Any
 
 from asis.configuration.defaults import AI_MODEL as DEFAULT_OLLAMA_MODEL
 from asis.errors import InferenceError
 
 from ..models import AIMessage, AIResponse, NativeToolCall
 from .base import AIProvider
+
+if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime
+    import requests
+
+
+def _requests():
+    """Import ``requests`` lazily so base installs work without it.
+
+    The Ollama provider is optional (``requirements/ai.txt``); importing
+    this module must never fail on a minimal install. Actual HTTP use
+    raises a clear error when the package is missing.
+    """
+    try:
+        import requests
+    except ImportError as exc:
+        raise InferenceError(
+            "The 'requests' package is required for the Ollama provider "
+            "(pip install requests)."
+        ) from exc
+    return requests
 
 # Upper bound for the implicit availability probe so a down/unreachable
 # server is reported fast. Inference timeouts are unaffected; callers may
@@ -192,6 +210,10 @@ class OllamaProvider(AIProvider):
         else:
             probe = timeout
         try:
+            requests = _requests()
+        except InferenceError:
+            return False
+        try:
             response = requests.get(
                 f"{self.host}/api/tags",
                 timeout=probe,
@@ -240,6 +262,7 @@ class OllamaProvider(AIProvider):
         messages: Sequence[AIMessage],
     ) -> AIResponse:
         """Send a non-streaming chat request (retried per configuration)."""
+        requests = _requests()
         attempts = 1 + self.retries
         for attempt in range(attempts):
             try:
@@ -324,6 +347,7 @@ class OllamaProvider(AIProvider):
         """Send a non-streaming chat request with tool definitions."""
         from asis.ai.tool_schemas import ollama_tools
 
+        requests = _requests()
         wire = ollama_tools(list(tools))
         attempts = 1 + self.retries
         for attempt in range(attempts):
@@ -382,6 +406,7 @@ class OllamaProvider(AIProvider):
         KeyboardInterrupt is intentionally allowed to propagate to the
         caller so Ctrl+C can interrupt the current response.
         """
+        requests = _requests()
         response: requests.Response | None = None
 
         try:

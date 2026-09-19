@@ -161,7 +161,7 @@ def test_ollama_chat_request_uses_configured_model(monkeypatch):
         seen["url"] = url
         return _FakeResponse()
 
-    monkeypatch.setattr("asis.ai.providers.ollama.requests.post", _fake_post)
+    monkeypatch.setattr("requests.post", _fake_post)
 
     default_response = OllamaProvider().chat([_user("hi")])
     assert seen["model"] == DEFAULT_MODEL
@@ -192,7 +192,7 @@ def test_ollama_tool_enabled_request_uses_configured_model(monkeypatch):
         seen.update(json or {})
         return _FakeResponse()
 
-    monkeypatch.setattr("asis.ai.providers.ollama.requests.post", _fake_post)
+    monkeypatch.setattr("requests.post", _fake_post)
 
     default_response = OllamaProvider().chat_with_tools([_user("hi")], _tool_defs())
     assert seen["model"] == DEFAULT_MODEL
@@ -232,7 +232,7 @@ def test_manager_plain_and_tool_requests_use_configured_model(monkeypatch):
             return _FakeResponse({"message": {"content": "tooled"}, "done": True})
         return _FakeResponse({"message": {"content": "plain"}, "done": True})
 
-    monkeypatch.setattr("asis.ai.providers.ollama.requests.post", _fake_post)
+    monkeypatch.setattr("requests.post", _fake_post)
 
     manager = AIManager(provider=OllamaProvider())
     plain = manager.chat([_user("hello")])
