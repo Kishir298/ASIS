@@ -16,14 +16,42 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
-    os.getenv("ASIS_TRANSLATION_LIVE") != "1",
-    reason="live translation tests require ASIS_TRANSLATION_LIVE=1",
-)
+from asis.translation.provider import MADLAD_REQUIRED_FILES
+
+_LIVE_REQUESTED = os.getenv("ASIS_TRANSLATION_LIVE") == "1"
 
 
 def _model_path() -> Path:
     return Path(os.getenv("ASIS_TRANSLATION_MODEL_PATH", "")).expanduser()
+
+
+def _weights_present() -> bool:
+    root = _model_path()
+    if not _model_path().as_posix():
+        return False
+    try:
+        if not root.is_dir():
+            return False
+    except OSError:
+        return False
+    missing = [n for n in MADLAD_REQUIRED_FILES if not (root / n).is_file()]
+    weights = list(root.glob("*.safetensors")) + list(root.glob("*.bin"))
+    return not missing and bool(weights)
+
+
+pytestmark = [
+    pytest.mark.skipif(
+        not _LIVE_REQUESTED,
+        reason="live translation tests require ASIS_TRANSLATION_LIVE=1",
+    ),
+    pytest.mark.skipif(
+        _LIVE_REQUESTED and not _weights_present(),
+        reason=(
+            "MADLAD weights not installed at ASIS_TRANSLATION_MODEL_PATH; "
+            "install MADLAD-400 3B MT or run with the mock provider"
+        ),
+    ),
+]
 
 
 def test_live_madlad_initializes_offline():
