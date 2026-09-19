@@ -21,7 +21,13 @@ from asis.calculator.operations import (
 
 
 class CalculatorEngine:
-    """Deterministic local mathematics entry point."""
+    """Deterministic local mathematics entry point.
+
+    Split contract: this class owns configuration (limits, precision,
+    angle mode) and dispatch; per-operation implementations live in
+    :mod:`asis.calculator.operations` as pure functions of an explicit
+    :class:`OpContext`. Keep it that way — do not move logic back here.
+    """
 
     def __init__(
         self,

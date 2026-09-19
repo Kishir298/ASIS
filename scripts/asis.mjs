@@ -40,8 +40,15 @@ const VENV_PYTHON = IS_WINDOWS
 // Overridable for testing (e.g. ASIS_OLLAMA_PORT=1 forces the down-path).
 const OLLAMA_HOST = process.env.ASIS_OLLAMA_HOST ?? "127.0.0.1";
 const OLLAMA_PORT = Number(process.env.ASIS_OLLAMA_PORT ?? 11434);
+// Bind address for a launcher-started `ollama serve` (OLLAMA_HOST format).
+// Override for sandbox tests, e.g. ASIS_OLLAMA_SERVE_BIND=127.0.0.1:11435,
+// so the live :11434 server is never disturbed.
+const SERVE_BIND = process.env.ASIS_OLLAMA_SERVE_BIND ?? "127.0.0.1:11434";
 const MODEL = "qwen3:14b";
-const SERVE_READY_TIMEOUT_MS = 60000;
+// Slow machines need longer for first boot (cold GPU discovery under RAM
+// pressure); override with ASIS_OLLAMA_SERVE_TIMEOUT_S.
+const SERVE_READY_TIMEOUT_MS =
+  Number(process.env.ASIS_OLLAMA_SERVE_TIMEOUT_S ?? 120) * 1000;
 
 function fail(message, code = 2) {
   console.error(`asis: ERROR: ${message}`);
@@ -193,6 +200,7 @@ async function ensureOllama() {
     detached: true,
     stdio: "ignore",
     cwd: ROOT,
+    env: { ...process.env, OLLAMA_HOST: SERVE_BIND },
   });
   let spawnError = null;
   server.on("error", (error) => {
@@ -244,7 +252,13 @@ function stopServeProcess(pid) {
 /** Best-effort unload of the active model. Never throws. */
 function unloadModel(model) {
   try {
-    spawnSync("ollama", ["stop", model], { stdio: "ignore", timeout: 60000 });
+    // Scope the CLI to the launcher-owned server so a pre-existing
+    // :11434 server is never touched.
+    spawnSync("ollama", ["stop", model], {
+      stdio: "ignore",
+      timeout: 60000,
+      env: { ...process.env, OLLAMA_HOST: SERVE_BIND },
+    });
   } catch {
     // best-effort only
   }

@@ -8,6 +8,8 @@ with ``shell=False``, a workspace CWD, and enforced timeouts — never
 unrestricted shell access.
 
 Thin facade: implementations live in tools_files/tools_run/tools_git.
+This module is the permanent public surface — import tool classes and
+``build_coding_registry`` from here, not from the split modules.
 """
 
 from __future__ import annotations

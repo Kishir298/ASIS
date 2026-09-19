@@ -406,3 +406,32 @@ def test_main_entry_routes_voice(capsys):
 
     assert entry(["--version"]) == 0
     assert "A.S.I.S." in capsys.readouterr().out
+
+
+def test_voice_imports_stay_lazy():
+    """Importing voice wiring must not pull heavy ML/audio libraries."""
+    import subprocess
+    import sys
+
+    heavy = [
+        "torch",
+        "sounddevice",
+        "faster_whisper",
+        "speechbrain",
+        "openwakeword",
+        "silero",
+    ]
+    names = ", ".join(repr(m) for m in heavy)
+    code = (
+        "import sys;"
+        "import asis.voice.factory, asis.voice.pipeline,"
+        " asis.voice.runner, asis.cli.voice;"
+        "loaded = [m for m in (" + names + ",) if m in sys.modules];"
+        "assert not loaded, loaded;"
+        "print('lazy-ok')"
+    )
+    proc = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "lazy-ok" in proc.stdout
