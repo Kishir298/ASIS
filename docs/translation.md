@@ -129,4 +129,8 @@ text reply, or TTS speaks the translation (speech→speech / text→speech).
   returns uncertainty — specify the source explicitly.
 - TTS language reach depends on host OS voices.
 - Live MADLAD validation: NOT PERFORMED (no weights on this machine) —
-  do not claim it until run with `ASIS_TRANSLATION_LIVE=1`.
+  do not claim it until run. Gate checklist: `config.json` +
+  `tokenizer.json` + `*.safetensors`/`*.bin` under
+  `ASIS_TRANSLATION_MODEL_PATH`, `transformers` + `torch` installed, then
+  `ASIS_TRANSLATION_LIVE=1 ASIS_TRANSLATION_MODEL_PATH=<dir> python -m pytest tests/test_translation_live.py -q`
+  (without weights the suite now skips with a clear reason instead of failing).
