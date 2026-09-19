@@ -12,8 +12,8 @@ transformers + torch on CPU.
 
 | Candidate | License | Verdict |
 |---|---|---|
-| MADLAD-400 3B MT | Apache-2.0, 450+ languages, single T5 model | ✅ default — compatible with this project's Proprietary license |
-| NLLB-200 distilled 600M | CC-BY-NC-4.0 (non-commercial, research-only, not for production) | ❌ rejected — conflicts with Proprietary use; provider seam allows it later for non-commercial forks |
+| MADLAD-400 3B MT | Apache-2.0, 450+ languages, single T5 model | ✅ default — compatible with this project's MIT license |
+| NLLB-200 distilled 600M | CC-BY-NC-4.0 (non-commercial, research-only, not for production) | ❌ rejected — conflicts with MIT-licensed distribution; provider seam allows it later for non-commercial forks |
 | Opus-MT pair models | CC-BY-4.0 permissive, fast on CPU | Future provider option (one model per pair — poor fit for 100+ default) |
 | SeamlessM4T | CC-BY-NC-4.0 | ❌ same license problem as NLLB |
 

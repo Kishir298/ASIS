@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "A.S.I.S. - A Smart Intelligence System (intelligence layer of the R.I.S.A.R.M.S. ecosystem)"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Proprietary" }
+license = { text = "MIT" }
 authors = [{ name = "Rishik" }]
 keywords = ["ai", "assistant", "risarms", "intelligence"]
 dependencies = [
