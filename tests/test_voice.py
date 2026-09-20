@@ -8,6 +8,7 @@ output, pipeline ordering, interruption, events, CLI.
 from __future__ import annotations
 
 import dataclasses
+import sys
 
 import pytest
 
@@ -125,17 +126,45 @@ def test_mock_vad_scripted():
     assert vad.is_speech(a) is True  # default
 
 
+def _block_imports(*names):
+    """Context manager faking absent optional deps (works with voice extras installed)."""
+
+    class _Blocker:
+        def find_spec(self, name, path=None, target=None):
+            if name in names or any(name.startswith(n + ".") for n in names):
+                raise ImportError(f"No module named {name} (test-blocked)")
+
+    blocker = _Blocker()
+
+    class _Guard:
+        def __enter__(self):
+            self._saved = {}
+            for mod in list(sys.modules):
+                if mod in names or any(mod.startswith(n + ".") for n in names):
+                    self._saved[mod] = sys.modules.pop(mod)
+            sys.meta_path.insert(0, blocker)
+            return self
+
+        def __exit__(self, *args):
+            sys.meta_path.remove(blocker)
+            sys.modules.update(self._saved)
+            return False
+
+    return _Guard()
+
+
 def test_microphone_missing_dep():
     from asis.voice.input.microphone import Microphone
 
     m = Microphone()
-    # sounddevice not installed in test env -> helpful VoiceError, not crash
-    try:
-        m.start()
-    except VoiceError:
-        pass
-    except Exception as exc:  # pragma: no cover
-        pytest.fail(f"wrong error: {exc}")
+    # sounddevice unavailable -> helpful VoiceError, not crash
+    with _block_imports("sounddevice"):
+        try:
+            m.start()
+        except VoiceError:
+            pass
+        except Exception as exc:  # pragma: no cover
+            pytest.fail(f"wrong error: {exc}")
     # not running -> RuntimeError
     with pytest.raises(RuntimeError):
         m.read()
@@ -144,8 +173,9 @@ def test_microphone_missing_dep():
 def test_vad_missing_dep():
     from asis.voice.input.vad import VoiceActivityDetector
 
-    with pytest.raises((VoiceError, ValueError)):
-        VoiceActivityDetector()
+    with _block_imports("torch", "silero_vad"):
+        with pytest.raises((VoiceError, ValueError)):
+            VoiceActivityDetector()
 
 
 # -- STT ---------------------------------------------------------------
@@ -159,8 +189,9 @@ def test_mock_stt_records_and_returns():
 def test_real_stt_missing_dep_and_validation():
     from asis.voice.speech.faster_whisper import FasterWhisperRecognizer
 
-    with pytest.raises(SpeechRecognitionError):
-        FasterWhisperRecognizer(model="small")
+    with _block_imports("faster_whisper"):
+        with pytest.raises(SpeechRecognitionError):
+            FasterWhisperRecognizer(model="small")
 
     class FakeEngine:
         def transcribe(self, samples, sample_rate=16000):
@@ -233,8 +264,9 @@ def test_registration_and_matching():
 def test_speaker_embedding_missing_dep():
     from asis.voice.speaker.embeddings import SpeechBrainEmbeddingProvider
 
-    with pytest.raises(SpeakerRecognitionError):
-        SpeechBrainEmbeddingProvider()
+    with _block_imports("speechbrain"):
+        with pytest.raises(SpeakerRecognitionError):
+            SpeechBrainEmbeddingProvider()
 
 
 # -- wake word ---------------------------------------------------------
@@ -279,8 +311,9 @@ def test_mock_tts_and_output():
 def test_pyttsx3_missing_dep_and_validation():
     from asis.voice.tts.pyttsx3_engine import Pyttsx3Engine
 
-    with pytest.raises(TTSError):
-        Pyttsx3Engine()
+    with _block_imports("pyttsx3"):
+        with pytest.raises(TTSError):
+            Pyttsx3Engine()
     with pytest.raises(ValueError):
         Pyttsx3Engine(sample_rate=0)
 

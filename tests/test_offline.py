@@ -201,9 +201,21 @@ def test_offline_voice_model_loaders_report_not_installed(monkeypatch):
         SpeechTranscriber(model_size="small")
 
     # Missing package entirely -> install hint, still no download attempt.
-    monkeypatch.delitem(sys.modules, "faster_whisper")
-    with pytest.raises(SpeechRecognitionError, match="not installed"):
-        SpeechTranscriber(model_size="small")
+    # (Block the real import so this holds with or without voice extras.)
+    monkeypatch.delitem(sys.modules, "faster_whisper", raising=False)
+
+    class _Blocker:
+        def find_spec(self, name, path=None, target=None):
+            if name == "faster_whisper" or name.startswith("faster_whisper."):
+                raise ImportError("No module named faster_whisper (test-blocked)")
+
+    blocker = _Blocker()
+    sys.meta_path.insert(0, blocker)
+    try:
+        with pytest.raises(SpeechRecognitionError, match="not installed"):
+            SpeechTranscriber(model_size="small")
+    finally:
+        sys.meta_path.remove(blocker)
 
 
 def test_offline_speaker_vad_wake_report_not_installed(monkeypatch):
