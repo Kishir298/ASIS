@@ -36,6 +36,8 @@ device.json
 # VS Code / IDEs
 .vscode/
 .idea/
+.opencode/
+node_modules/
 
 # macOS / Windows
 .DS_Store
