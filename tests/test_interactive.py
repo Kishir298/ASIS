@@ -118,8 +118,8 @@ def test_mode_commands():
     assert code == 0
     assert app.chat_calls == []
     out = stream.getvalue()
-    assert "VOICE MODE" in out
-    assert "TEXT MODE" in out
+    assert "MODE: VOICE" in out
+    assert "MODE: TEXT" in out
 
 
 def test_exit_and_quit_and_shutdown_phrase():
@@ -306,7 +306,7 @@ def test_voice_typed_escape_never_traps_user():
         max_turns=5,
     )
     assert code == 0
-    assert "TEXT MODE" in stream.getvalue()
+    assert "MODE: TEXT" in stream.getvalue()
 
 
 def test_voice_tts_failure_handled_in_loop():

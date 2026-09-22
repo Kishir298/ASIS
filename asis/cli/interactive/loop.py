@@ -159,7 +159,6 @@ def run_interactive(
         except Exception:
             return
         try:
-            out.write("VOICE MODE\n" if mode == "voice" else "TEXT MODE\n")
             with contextlib.suppress(Exception):
                 out.write(_term_status.status_bar(mode=mode.upper()) + "\n")
             out.flush()
@@ -567,7 +566,6 @@ def _handle_command(
             out.write("Usage: /mode [text|voice]\n")
             out.flush()
             return None
-        out.write("VOICE MODE\n" if mode == "voice" else "TEXT MODE\n")
         with contextlib.suppress(Exception):
             out.write(_term_status.status_bar(mode=mode.upper()) + "\n")
         out.flush()

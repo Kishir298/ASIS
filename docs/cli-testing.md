@@ -103,7 +103,7 @@ python -m pytest tests/test_cli.py tests/test_interactive.py tests/test_cli_hard
 python -m pytest tests/test_voice.py tests/test_voice_runner.py tests/test_ollama_model_default.py -q
 ```
 
-> Canonical result: **693 passed, 10 skipped (2026-09-18)** — verify with `python3 -m pytest -q`. Counts below are approximate per-file snapshots, not a substitute for the runner.
+> Canonical result: **789 passed, 10 skipped (2026-09-23)** — verify with `python3 -m pytest -q`. Counts below are approximate per-file snapshots, not a substitute for the runner.
 
 | File | Approx tests | Covers |
 |---|---|---|
