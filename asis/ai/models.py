@@ -23,6 +23,9 @@ class AIMessage:
 
     role: MessageRole
     content: str
+    # Optional attached payloads (e.g. images) for multimodal providers.
+    # Text-only providers ignore these; see AIProvider.supports_vision.
+    attachments: tuple[dict[str, Any], ...] = ()
 
     def __post_init__(self) -> None:
         if not isinstance(self.role, MessageRole):

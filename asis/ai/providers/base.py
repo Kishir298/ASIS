@@ -57,6 +57,16 @@ class AIProvider(ABC):
         """
         return False
 
+    @property
+    def supports_vision(self) -> bool:
+        """Return whether the provider accepts image attachments.
+
+        Text-only providers leave the default (False); the terminal
+        then shows 'Image attachment unavailable for current model.'
+        instead of crashing.
+        """
+        return False
+
     def chat_with_tools(
         self,
         messages: Sequence[AIMessage],
