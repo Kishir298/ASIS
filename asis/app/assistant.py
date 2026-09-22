@@ -203,6 +203,11 @@ class AssistantApp:
             manager=ai, assembler=self.assembler, interrupts=interrupts
         )
         self._general_router = tools_router or build_default_tool_router()
+        if self.event_bus is not None:
+            with contextlib.suppress(Exception):
+                executor = getattr(self._general_router, "executor", None)
+                if executor is not None:
+                    executor.event_bus = self.event_bus
         self._ensure_core_tools(self._general_router)
         self._ensure_web_tools(self._general_router)
         self._ensure_translation_tools(self._general_router)

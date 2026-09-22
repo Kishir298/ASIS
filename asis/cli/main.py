@@ -77,6 +77,7 @@ def build_assistant(
     mode: AssistantMode | str | None = None,
     workspace: str | Path | None = None,
     core=None,
+    event_bus=None,
 ) -> AssistantApp:
     """Build the stateful assistant owning one conversation session."""
     return AssistantApp(
@@ -86,6 +87,7 @@ def build_assistant(
         mode=mode,
         workspace=workspace,
         core=core,
+        event_bus=event_bus,
     )
 
 
@@ -519,6 +521,7 @@ def entry(argv: Sequence[str] | None = None) -> int:
             mode=args.mode,
             workspace=args.workspace,
             core=core_manager,
+            event_bus=event_bus,
         )
 
         # Boot sequence + silent model readiness probe. Real inference

@@ -231,23 +231,70 @@ def run_interactive(
                 streamed.append(chunk)
                 render.write_chunk(chunk)
 
+        # Live tool badges: subscribe per turn to the app event bus (if any).
+        # Handlers only write display lines; engine/tool semantics untouched.
+        _tool_subs: list[tuple] = []
+
+        def _unsub_tools() -> None:
+            bus = getattr(app, "event_bus", None)
+            if bus is None or not _tool_subs:
+                return
+            for _etype, _handler in _tool_subs:
+                with contextlib.suppress(Exception):
+                    bus.unsubscribe(_etype, _handler)
+            _tool_subs.clear()
+
+        def _on_tool(event) -> None:
+            if stop_event.is_set() or shutdown_event.is_set():
+                return
+            try:
+                data = getattr(event, "data", {}) or {}
+                name = str(data.get("tool", "tool"))
+                etype = str(getattr(event, "type", ""))
+                done = "finished" in etype or "failed" in etype or "denied" in etype
+                with contextlib.suppress(Exception):
+                    out.write(_term_layout.tool_badge(name, done=done) + "\n")
+                    out.flush()
+            except Exception:
+                pass
+
+        with contextlib.suppress(Exception):
+            from asis.events.events import EventType as _EventType
+
+            _bus = getattr(app, "event_bus", None)
+            if _bus is not None:
+                for _etype in (
+                    _EventType.TOOL_EXECUTION_STARTED,
+                    _EventType.TOOL_EXECUTION_FINISHED,
+                    _EventType.TOOL_EXECUTION_FAILED,
+                    _EventType.TOOL_DENIED,
+                ):
+                    with contextlib.suppress(Exception):
+                        _bus.subscribe(_etype, _on_tool)
+                        _tool_subs.append((_etype, _on_tool))
+
         try:
             status, response = _run_cancellable(
                 lambda _m=message: session.chat_text_streamed(_m, _on_chunk)
             )
         except Exception as exc:
+            _unsub_tools()
             render.end_stream(interrupted=False)
             return "error", f"Sorry, that failed: {exc}"
         if status == "shutdown":
+            _unsub_tools()
             render.end_stream(interrupted=True)
             return status, None
         if status == "cancelled":
+            _unsub_tools()
             render.end_stream(interrupted=True)
             return status, None
         if status == "error":
+            _unsub_tools()
             render.end_stream(interrupted=False)
             return status, response
         # status ok
+        _unsub_tools()
         if streamed:
             render.end_stream(interrupted=False)
         else:
@@ -356,7 +403,7 @@ def run_interactive(
                         status, turn = _run_cancellable(session.voice_turn)
                     except RuntimeError as exc:
                         try:
-                            out.write(f"A.S.I.S. > {exc}\n")
+                            out.write(_term_layout.assistant_bubble(str(exc)) + "\n")
                             with contextlib.suppress(Exception):
                                 out.write(
                                     _term_status.clean_error(
@@ -373,7 +420,10 @@ def run_interactive(
                         continue
                     except Exception as exc:
                         try:
-                            out.write(f"A.S.I.S. > Sorry, that failed: {exc}\n")
+                            out.write(
+                                _term_layout.assistant_bubble(f"Sorry, that failed: {exc}")
+                                + "\n"
+                            )
                             with contextlib.suppress(Exception):
                                 out.write(
                                     _term_status.clean_error(
@@ -393,7 +443,7 @@ def run_interactive(
                         return 0
                     if status == "cancelled":
                         try:
-                            out.write("A.S.I.S. > [interrupted]\n")
+                            out.write(_term_layout.assistant_bubble("[interrupted]") + "\n")
                             out.flush()
                         except Exception:
                             pass
@@ -475,7 +525,7 @@ def run_interactive(
                     continue
                 if status == "error":
                     try:
-                        out.write(f"A.S.I.S. > {response}\n")
+                        out.write(_term_layout.assistant_bubble(str(response)) + "\n")
                         with contextlib.suppress(Exception):
                             out.write(
                                 _term_status.clean_error(
@@ -528,9 +578,11 @@ def _handle_command(
             out.flush()
             return None
         try:
-            doc = session.docs.attach(arg)
+            session.docs.attach(arg)
         except FileNotFoundError:
-            out.write("A.S.I.S. > I couldn't find that file.\n")
+            out.write(
+                _term_layout.assistant_bubble("I couldn't find that file.") + "\n"
+            )
             with contextlib.suppress(Exception):
                 out.write(
                     _term_status.clean_error(
@@ -545,9 +597,12 @@ def _handle_command(
         except ValueError as exc:
             text = str(exc)
             if "unsupported" in text.lower():
-                out.write("A.S.I.S. > I can't read that file type yet.\n")
+                out.write(
+                    _term_layout.assistant_bubble("I can't read that file type yet.")
+                    + "\n"
+                )
             else:
-                out.write(f"A.S.I.S. > {text}\n")
+                out.write(_term_layout.assistant_bubble(text) + "\n")
             with contextlib.suppress(Exception):
                 out.write(
                     _term_status.clean_error(
@@ -558,7 +613,10 @@ def _handle_command(
             out.flush()
             return None
         except Exception as exc:
-            out.write(f"A.S.I.S. > Couldn't attach that file: {exc}\n")
+            out.write(
+                _term_layout.assistant_bubble(f"Couldn't attach that file: {exc}")
+                + "\n"
+            )
             with contextlib.suppress(Exception):
                 out.write(
                     _term_status.clean_error(
@@ -568,19 +626,12 @@ def _handle_command(
                 )
             out.flush()
             return None
-        out.write(f"Attached: {doc.name}\n")
         with contextlib.suppress(Exception):
             out.write(_term_layout.attachments_bar(session.docs.list_names()) + "\n")
         out.flush()
         return None
     if lname == "/docs":
         names = session.docs.list_names()
-        if not names:
-            out.write("No attached documents.\n")
-        else:
-            out.write("Attached documents:\n")
-            for doc_name in names:
-                out.write(f"- {doc_name}\n")
         with contextlib.suppress(Exception):
             out.write(_term_layout.attachments_bar(names) + "\n")
         out.flush()

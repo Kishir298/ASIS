@@ -90,7 +90,7 @@ def test_commands_not_sent_to_llm():
     assert app.chat_calls == []
     out = stream.getvalue()
     assert "/mode" in out  # help text
-    assert "No attached documents." in out
+    assert "Attachments: (none)" in out
 
 
 def test_mode_commands():
@@ -367,8 +367,7 @@ def test_upload_and_docs_and_clear(tmp_path):
     )
     assert code == 0
     out = stream.getvalue()
-    assert "Attached: physics.pdf" in out
-    assert "- physics.pdf" in out
+    assert "Attachments:" in out and "physics.pdf" in out
     assert "Cleared attached documents." in out
     assert app.chat_calls == []
 
