@@ -1,4 +1,4 @@
-"""Stdlib-only keyboard watcher: ESC interrupts, CTRL+C exits.
+"""Stdlib-only keyboard watcher: ESC interrupts, TAB switches mode, CTRL+C exits.
 
 Windows uses ``msvcrt``; POSIX uses ``termios``/``tty`` + ``select``.
 Degrades to a no-op when stdin is not a TTY (tests, pipes).
@@ -26,9 +26,11 @@ class KeyWatcher:
         on_esc: Callable[[], None] | None = None,
         on_shutdown: Callable[[], None] | None = None,
         shutdown_event: threading.Event | None = None,
+        on_tab: Callable[[], None] | None = None,
     ) -> None:
         self._on_esc = on_esc
         self._on_shutdown = on_shutdown
+        self._on_tab = on_tab
         self.shutdown_event = (
             shutdown_event if shutdown_event is not None else threading.Event()
         )
@@ -76,6 +78,11 @@ class KeyWatcher:
             with contextlib.suppress(Exception):
                 self._on_esc()
 
+    def _emit_tab(self) -> None:
+        if self._on_tab is not None:
+            with contextlib.suppress(Exception):
+                self._on_tab()
+
     def _run(self) -> None:
         try:
             if sys.platform == "win32":
@@ -96,6 +103,8 @@ class KeyWatcher:
                     continue
                 if ch == "\x1b":  # ESC
                     self._emit_esc()
+                elif ch == "\x09":  # TAB: switch text <-> voice mode
+                    self._emit_tab()
                 elif ch == "\x03":  # CTRL+C
                     self.request_shutdown()
                     return
@@ -117,6 +126,8 @@ class KeyWatcher:
                 ch = sys.stdin.read(1)
                 if ch == "\x1b":
                     self._emit_esc()
+                elif ch == "\x09":  # TAB: switch text <-> voice mode
+                    self._emit_tab()
                 elif ch == "\x03":
                     self.request_shutdown()
                     return

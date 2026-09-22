@@ -12,6 +12,11 @@ from .commands import HELP_TEXT, parse_command
 from .keys import KeyWatcher
 from .renderer import TypingRenderer
 from .session import InteractiveSession
+from asis.cli.terminal import activity as _term_activity
+from asis.cli.terminal import attachments as _term_attachments
+from asis.cli.terminal import layout as _term_layout
+from asis.cli.terminal import modes as _term_modes
+from asis.cli.terminal import status as _term_status
 
 EXIT_PHRASES = frozenset({"asis shutdown"})
 
@@ -147,6 +152,20 @@ def run_interactive(
         _cancel_scopes()
         _stop_audio()
 
+    def _on_tab() -> None:
+        """TAB: switch text <-> voice without restarting (panel UI)."""
+        try:
+            mode = session.toggle_mode()
+        except Exception:
+            return
+        try:
+            out.write("VOICE MODE\n" if mode == "voice" else "TEXT MODE\n")
+            with contextlib.suppress(Exception):
+                out.write(_term_status.status_bar(mode=mode.upper()) + "\n")
+            out.flush()
+        except Exception:
+            pass
+
     def _run_cancellable(fn):
         """Run ``fn`` so ESC/SHUTDOWN returns the UI promptly.
 
@@ -189,6 +208,8 @@ def run_interactive(
     def _say_goodbye() -> None:
         try:
             out.write("Shutting down.\n")
+            with contextlib.suppress(Exception):
+                out.write(_term_layout.footer() + "\n")
             out.flush()
         except Exception:
             pass
@@ -238,7 +259,10 @@ def run_interactive(
         return status, response
 
     watcher = KeyWatcher(
-        on_esc=_on_esc, on_shutdown=_on_shutdown, shutdown_event=shutdown_event
+        on_esc=_on_esc,
+        on_shutdown=_on_shutdown,
+        shutdown_event=shutdown_event,
+        on_tab=_on_tab,
     )
 
     def _cleanup() -> None:
@@ -250,6 +274,12 @@ def run_interactive(
 
     try:
         out.write("A.S.I.S. ready.\n")
+        with contextlib.suppress(Exception):
+            out.write(_term_layout.header() + "\n")
+            out.write(
+                _term_status.status_bar(mode=session.interaction_mode.upper()) + "\n"
+            )
+            out.write(_term_layout.footer() + "\n")
         out.flush()
     except Exception:
         pass
@@ -327,6 +357,15 @@ def run_interactive(
                     except RuntimeError as exc:
                         try:
                             out.write(f"A.S.I.S. > {exc}\n")
+                            with contextlib.suppress(Exception):
+                                out.write(
+                                    _term_status.clean_error(
+                                        "Voice unavailable.",
+                                        "voice pipeline missing",
+                                        "Use /mode text to keep typing.",
+                                    )
+                                    + "\n"
+                                )
                             out.flush()
                         except Exception:
                             pass
@@ -335,6 +374,15 @@ def run_interactive(
                     except Exception as exc:
                         try:
                             out.write(f"A.S.I.S. > Sorry, that failed: {exc}\n")
+                            with contextlib.suppress(Exception):
+                                out.write(
+                                    _term_status.clean_error(
+                                        "Voice turn failed.",
+                                        "see logs",
+                                        "Retry or use /mode text.",
+                                    )
+                                    + "\n"
+                                )
                             out.flush()
                         except Exception:
                             pass
@@ -359,6 +407,8 @@ def run_interactive(
                     if transcript:
                         try:
                             out.write(f"You > {transcript}\n")
+                            with contextlib.suppress(Exception):
+                                out.write(_term_layout.user_bubble(transcript) + "\n")
                             out.flush()
                         except Exception:
                             pass
@@ -374,6 +424,15 @@ def run_interactive(
                     _say_goodbye()
                     return 0
                 try:
+                    with contextlib.suppress(Exception):
+                        out.write(
+                            _term_layout.composer(
+                                mode=session.interaction_mode.upper(),
+                                attachments=session.docs.list_names(),
+                            )
+                            + "\n"
+                        )
+                        out.flush()
                     raw = ask(prompt)
                 except EOFError:
                     _say_goodbye()
@@ -398,6 +457,9 @@ def run_interactive(
                         return 0
                     turns += 1
                     continue
+                with contextlib.suppress(Exception):
+                    out.write(_term_layout.user_bubble(message) + "\n")
+                    out.flush()
                 try:
                     status, response = _run_streamed_chat(message)
                 except Exception as exc:
@@ -414,6 +476,15 @@ def run_interactive(
                 if status == "error":
                     try:
                         out.write(f"A.S.I.S. > {response}\n")
+                        with contextlib.suppress(Exception):
+                            out.write(
+                                _term_status.clean_error(
+                                    "Generation failed.",
+                                    "provider error (see logs)",
+                                    "Retry, or check Ollama with --core-status.",
+                                )
+                                + "\n"
+                            )
                         out.flush()
                     except Exception:
                         pass
@@ -447,6 +518,8 @@ def _handle_command(
             out.flush()
             return None
         out.write("VOICE MODE\n" if mode == "voice" else "TEXT MODE\n")
+        with contextlib.suppress(Exception):
+            out.write(_term_status.status_bar(mode=mode.upper()) + "\n")
         out.flush()
         return None
     if lname in ("/upload", "/attach"):
@@ -458,6 +531,15 @@ def _handle_command(
             doc = session.docs.attach(arg)
         except FileNotFoundError:
             out.write("A.S.I.S. > I couldn't find that file.\n")
+            with contextlib.suppress(Exception):
+                out.write(
+                    _term_status.clean_error(
+                        "Attachment failed.",
+                        "file not found",
+                        "Check the path and retry /upload <path>.",
+                    )
+                    + "\n"
+                )
             out.flush()
             return None
         except ValueError as exc:
@@ -466,13 +548,29 @@ def _handle_command(
                 out.write("A.S.I.S. > I can't read that file type yet.\n")
             else:
                 out.write(f"A.S.I.S. > {text}\n")
+            with contextlib.suppress(Exception):
+                out.write(
+                    _term_status.clean_error(
+                        "Attachment failed.", text[:80], "Use /docs to list supported types."
+                    )
+                    + "\n"
+                )
             out.flush()
             return None
         except Exception as exc:
             out.write(f"A.S.I.S. > Couldn't attach that file: {exc}\n")
+            with contextlib.suppress(Exception):
+                out.write(
+                    _term_status.clean_error(
+                        "Attachment failed.", "see logs", "Retry with a supported file."
+                    )
+                    + "\n"
+                )
             out.flush()
             return None
         out.write(f"Attached: {doc.name}\n")
+        with contextlib.suppress(Exception):
+            out.write(_term_layout.attachments_bar(session.docs.list_names()) + "\n")
         out.flush()
         return None
     if lname == "/docs":
@@ -483,6 +581,8 @@ def _handle_command(
             out.write("Attached documents:\n")
             for doc_name in names:
                 out.write(f"- {doc_name}\n")
+        with contextlib.suppress(Exception):
+            out.write(_term_layout.attachments_bar(names) + "\n")
         out.flush()
         return None
     if lname == "/clear-docs":
