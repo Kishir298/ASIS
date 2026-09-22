@@ -1,7 +1,8 @@
 # Terminal UI (`asis/cli/terminal`)
 
-Stdlib-only ANSI panels wired into `../interactive/loop.py` (additive: legacy
-`You >`/`A.S.I.S. >` lines kept as plain-text fallback).
+Stdlib-only ANSI panels wired into `../interactive/loop.py`. Legacy
+`You >`/`A.S.I.S. >`/`Shutting down.` lines are fully removed; the
+streaming prefix is now `A.S.I.S.` + newline and goodbye is the footer.
 
 - `layout.py` — header/conversation/composer/footer, bubbles, badges, attachments bar
 - `status.py` — status bar + voice strip + `clean_error`

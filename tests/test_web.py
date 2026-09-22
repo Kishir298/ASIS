@@ -902,3 +902,16 @@ def test_ddg_parser_ignores_non_http_links():
               "<a class='result__a' href='ftp://example.com/f'>Nope</a></h2></div>"
               "</body></html>")
     assert parse_ddg_results(markup) == []
+
+
+def test_web_import_and_hint_without_requests(monkeypatch):
+    import sys
+
+    from asis.web import provider as provider_mod
+
+    monkeypatch.setitem(sys.modules, "requests", None)
+    with pytest.raises(Exception, match="[Rr]equests"):
+        provider_mod._requests()
+    provider = provider_mod.DuckDuckGoWebProvider()
+    with pytest.raises(Exception, match="[Rr]equests"):
+        provider.search("hello")

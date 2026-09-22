@@ -36,10 +36,9 @@ def test_startup_panels_and_legacy_strings():
     app, stream = _App(), io.StringIO()
     assert _run(app, ["hello", "/exit"], stream) == 0
     out = stream.getvalue()
-    assert "A.S.I.S. ready." in out  # legacy
-    assert "A.S.I.S. > echo:hello" in out  # legacy streamed prefix
-    assert "MODEL:" in out and "ENTER Send" in out  # new panels
-    assert "Shutting down." in out  # legacy goodbye
+    assert "A.S.I.S." in out and "MODEL:" in out  # header + status panels
+    assert "echo:hello" in out  # streamed response content
+    assert "ENTER Send" in out  # footer goodbye panel
 
 
 def test_composer_and_user_bubble_and_mode_status():

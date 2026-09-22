@@ -110,7 +110,7 @@ prompt: configuration → identity → personality → memory → tools →
 Ollama reachable → silent model readiness probe (`hello` sent directly
 through the existing provider instance — single USER message, no
 session/context/tools/memory, `think=False`, small `num_predict`) →
-`A.S.I.S. ready.` → `You >`. The probe text and reply are never printed
+`A.S.I.S.` header + status bar. The probe text and reply are never printed
 or persisted; failure prints `[FAIL]` and exits without entering
 interactive mode. ESC cancels the in-flight turn once interactive;
 `CTRL+C`/exit/EOF/failure runs centralized cleanup in `entry()`.

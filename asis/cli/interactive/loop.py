@@ -67,7 +67,7 @@ def run_interactive(
     app,
     pipeline=None,
     doc_store=None,
-    prompt: str = "You > ",
+    prompt: str = "> ",
     input_fn: Callable[[str], str] | None = None,
     renderer: TypingRenderer | None = None,
     stream=None,
@@ -206,7 +206,6 @@ def run_interactive(
 
     def _say_goodbye() -> None:
         try:
-            out.write("Shutting down.\n")
             with contextlib.suppress(Exception):
                 out.write(_term_layout.footer() + "\n")
             out.flush()
@@ -319,7 +318,6 @@ def run_interactive(
                 cleanup()
 
     try:
-        out.write("A.S.I.S. ready.\n")
         with contextlib.suppress(Exception):
             out.write(_term_layout.header() + "\n")
             out.write(
@@ -455,7 +453,6 @@ def run_interactive(
                     response = turn.get("response") or ""
                     if transcript:
                         try:
-                            out.write(f"You > {transcript}\n")
                             with contextlib.suppress(Exception):
                                 out.write(_term_layout.user_bubble(transcript) + "\n")
                             out.flush()

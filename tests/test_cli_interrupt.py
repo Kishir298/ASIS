@@ -267,7 +267,7 @@ def test_renderer_unicode_multiline_empty():
     stream2.isatty = lambda: False
     text = "héllo wörld\nline2 ✓\nline3"
     assert TypingRenderer(stream=stream2, char_delay=0).render(text) == text
-    assert stream2.getvalue() == f"A.S.I.S. > {text}\n"
+    assert stream2.getvalue() == f"A.S.I.S.\n{text}\n"
 
 
 # -- logging -----------------------------------------------------------------

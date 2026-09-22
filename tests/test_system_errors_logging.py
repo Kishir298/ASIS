@@ -50,3 +50,20 @@ def test_interrupt_scopes_register_and_cancel():
     coord.cancel("inference")
     assert coord.is_cancelled("inference") is True
     assert coord.is_cancelled("voice") is False
+
+
+def test_prompt_slice_preserves_surface():
+    from asis.app import prompt
+    from asis.app import assistant
+
+    for name in (
+        "build_memory_section",
+        "build_mode_section",
+        "build_capabilities_section",
+        "build_constraints_section",
+    ):
+        assert callable(getattr(prompt, name))
+        # Private wrappers in assistant.py preserve the old call sites.
+        assert callable(getattr(assistant, "_" + name))
+    assert prompt.build_constraints_section(None) == ""
+    assert "Tools:" in prompt.build_capabilities_section(["echo"])

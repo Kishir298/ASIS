@@ -15,11 +15,11 @@ import time
 
 
 class TypingRenderer:
-    """Renders ``A.S.I.S. > <text>`` progressively on one terminal line."""
+    """Renders ``A.S.I.S.`` responses progressively on the terminal."""
 
     def __init__(
         self,
-        prefix: str = "A.S.I.S. > ",
+        prefix: str = "A.S.I.S.\n",
         char_delay: float = 0.012,
         stream=None,
     ) -> None:

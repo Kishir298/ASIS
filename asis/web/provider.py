@@ -15,12 +15,28 @@ from __future__ import annotations
 import contextlib
 from abc import ABC, abstractmethod
 from html.parser import HTMLParser
+from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, unquote, urlparse
 
-import requests
+if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
+    import requests
 
 from asis.web.extract import extract_text, extract_title, is_html_content
 from asis.web.security import WebSecurityError, resolve_redirect, validate_url
+
+
+def _requests():
+    """Import requests lazily so base installs stay light (mirror ollama)."""
+    try:
+        import requests as _req
+
+        return _req
+    except ImportError as exc:
+        raise WebProviderError(
+            "WEB_PROVIDER_ERROR",
+            "WEB_PROVIDER_ERROR: the 'requests' package is required for web "
+            "access (pip install requests).",
+        ) from exc
 
 USER_AGENT = "ASIS-WebAccess/1.0 (local assistant; bounded fetch)"
 SEARCH_ENDPOINT = "https://html.duckduckgo.com/html/"
@@ -164,16 +180,17 @@ class DuckDuckGoWebProvider(WebProvider):
         timeout: int = 10,
         max_response_bytes: int = 1_000_000,
         max_redirects: int = 3,
-        session: requests.Session | None = None,
+        session: Any | None = None,
     ) -> None:
         self._timeout = timeout
         self._max_response_bytes = max_response_bytes
         self._max_redirects = max_redirects
         self._session = session
 
-    def _client(self) -> requests.Session:
+    def _client(self) -> Any:
         if self._session is not None:
             return self._session
+        requests = _requests()
         session = requests.Session()
         session.headers.update({"User-Agent": USER_AGENT})
         return session
@@ -195,21 +212,21 @@ class DuckDuckGoWebProvider(WebProvider):
             )
             response.raise_for_status()
             markup = response.text
-        except requests.Timeout:
+        except _requests().Timeout:
             raise WebProviderError(
                 "WEB_TIMEOUT", "WEB_TIMEOUT: search request timed out."
             ) from None
-        except requests.ConnectionError:
+        except _requests().ConnectionError:
             raise WebProviderError(
                 "WEB_UNAVAILABLE", "WEB_UNAVAILABLE: search service unreachable."
             ) from None
-        except requests.HTTPError as exc:
+        except _requests().HTTPError as exc:
             status = getattr(getattr(exc, "response", None), "status_code", "?")
             raise WebProviderError(
                 "WEB_HTTP_ERROR",
                 f"WEB_HTTP_ERROR: search failed (status {status}).",
             ) from None
-        except requests.RequestException:
+        except _requests().RequestException:
             raise WebProviderError(
                 "WEB_PROVIDER_ERROR", "WEB_PROVIDER_ERROR: search request failed."
             ) from None
@@ -234,15 +251,15 @@ class DuckDuckGoWebProvider(WebProvider):
                         allow_redirects=False,
                         stream=True,
                     )
-                except requests.Timeout:
+                except _requests().Timeout:
                     raise WebProviderError(
                         "WEB_TIMEOUT", "WEB_TIMEOUT: page request timed out."
                     ) from None
-                except requests.ConnectionError:
+                except _requests().ConnectionError:
                     raise WebProviderError(
                         "WEB_UNAVAILABLE", "WEB_UNAVAILABLE: page unreachable."
                     ) from None
-                except requests.RequestException:
+                except _requests().RequestException:
                     raise WebProviderError(
                         "WEB_PROVIDER_ERROR",
                         "WEB_PROVIDER_ERROR: page request failed.",
@@ -273,7 +290,7 @@ class DuckDuckGoWebProvider(WebProvider):
                     client.close()
 
     def _read_response(
-        self, response: requests.Response, *, original_url: str, max_chars: int
+        self, response: Any, *, original_url: str, max_chars: int
     ) -> dict:
         status = response.status_code
         final_url = getattr(response, "url", original_url)

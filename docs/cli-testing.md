@@ -9,13 +9,15 @@ Bare `asis` launches the persistent interactive terminal (TEXT/VOICE,
 documents, typing effect) on top of the existing `AssistantApp` runtime:
 
 ```text
-A.S.I.S. ready.
+A.S.I.S.  ● ONLINE  (header + MODEL/MODE/OLLAMA status bar)
 
-You > hello
+You
+┌─ hello ─┘
 
-A.S.I.S. > Hello! How can I help?
+A.S.I.S.
+└─ Hello! How can I help?
 
-You >
+>
 ```
 
 `asis` flags: `--version`, `--identify`, `--provider {mock,ollama}`,
