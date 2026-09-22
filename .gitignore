@@ -3,6 +3,7 @@
 .venv-windows/
 .venv-linux/
 .venv-macos/
+.venv-macos.bak/
 venv/
 env/
 
