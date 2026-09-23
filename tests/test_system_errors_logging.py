@@ -53,7 +53,8 @@ def test_interrupt_scopes_register_and_cancel():
 
 
 def test_prompt_slice_preserves_surface():
-    from asis.app import assistant, prompt
+    from asis.app import prompt, routers
+    from asis.app import assistant
 
     for name in (
         "build_memory_section",
@@ -62,7 +63,17 @@ def test_prompt_slice_preserves_surface():
         "build_constraints_section",
     ):
         assert callable(getattr(prompt, name))
-        # Private wrappers in assistant.py preserve the old call sites.
-        assert callable(getattr(assistant, "_" + name))
+    for name in (
+        "build_default_tool_router",
+        "build_coding_tool_router",
+        "ensure_all_tools",
+    ):
+        assert callable(getattr(routers, name))
+        # Backward-compat re-exports preserved on asis.app.assistant.
+        assert callable(getattr(assistant, name))
+    assert prompt.build_constraints_section(None) == ""
+    assert "Tools:" in prompt.build_capabilities_section(["echo"])
+    rtk_lines = len(open("asis/app/assistant.py").read().splitlines())
+    assert rtk_lines < 600, rtk_lines
     assert prompt.build_constraints_section(None) == ""
     assert "Tools:" in prompt.build_capabilities_section(["echo"])

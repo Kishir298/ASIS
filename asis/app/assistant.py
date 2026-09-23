@@ -31,10 +31,8 @@ from asis.identity.identity import Identity
 from asis.logging.logger import get_logger
 from asis.system.interrupt import InterruptCoordinator
 from asis.tools.executor import ToolExecutor
-from asis.tools.provided import CurrentTimeTool, EchoTool
-from asis.tools.registry import ToolRegistry
 from asis.tools.result import ToolResult
-from asis.tools.router import ToolRouter, build_executor
+from asis.tools.router import ToolRouter
 
 from .actions import ToolRequest, format_tool_result_for_context, parse_tool_request
 from .memories import store_auto_memories
@@ -43,6 +41,17 @@ from .native_tools import (
     max_tool_calls,
     native_tools_enabled,
     normalize_native_calls,
+)
+from .prompt import (
+    build_capabilities_section,
+    build_constraints_section,
+    build_memory_section,
+    build_mode_section,
+)
+from .routers import (
+    build_coding_tool_router,
+    build_default_tool_router,
+    ensure_all_tools,
 )
 
 # Intents that never need the native function-calling attempt: a single
@@ -57,85 +66,6 @@ _NATIVE_SKIP_INTENTS = frozenset(
         Intent.GENERAL_CHAT,
     }
 )
-
-
-def build_default_tool_router(
-    executor: ToolExecutor | None = None,
-) -> ToolRouter:
-    """Build the default safe router with the audited built-in tools."""
-    from asis.tools.provided import (
-        register_calculator_tools,
-        register_translation_tools,
-        register_web_tools,
-    )
-
-    registry = ToolRegistry()
-    registry.register(EchoTool())
-    registry.register(CurrentTimeTool())
-    # Web tools are optional; never break the default router.
-    with contextlib.suppress(Exception):
-        register_web_tools(registry)
-    # Translation tools are optional; never break the default router.
-    with contextlib.suppress(Exception):
-        register_translation_tools(registry)
-    # Calculator tools are optional; never break the default router.
-    with contextlib.suppress(Exception):
-        register_calculator_tools(registry)
-    return ToolRouter(registry=registry, executor=build_executor(executor))
-
-
-def build_coding_tool_router(
-    workspace,
-    executor: ToolExecutor | None = None,
-) -> ToolRouter:
-    """Build the coding router (general tools + workspace-bound coding tools)."""
-    from asis.coding.tools import build_coding_registry
-    from asis.tools.provided import (
-        register_calculator_tools,
-        register_translation_tools,
-        register_web_tools,
-    )
-
-    registry = ToolRegistry()
-    registry.register(EchoTool())
-    registry.register(CurrentTimeTool())
-    with contextlib.suppress(Exception):
-        register_web_tools(registry)
-    with contextlib.suppress(Exception):
-        register_translation_tools(registry)
-    with contextlib.suppress(Exception):
-        register_calculator_tools(registry)
-    for tool in build_coding_registry(workspace).list_tools():
-        registry.register(tool)
-    return ToolRouter(registry=registry, executor=build_executor(executor))
-
-
-def _build_memory_section(query, memory, max_items, logger) -> str:
-    """Memory context block for the prompt (fail-open, bounded)."""
-    from .prompt import build_memory_section
-
-    return build_memory_section(query, memory, max_items, logger)
-
-
-def _build_mode_section(mode) -> str:
-    """Mode instructions for the labeled MODE context block."""
-    from .prompt import build_mode_section
-
-    return build_mode_section(mode)
-
-
-def _build_capabilities_section(tool_names: list) -> str:
-    """Bounded capabilities summary + active tool names (no schemas)."""
-    from .prompt import build_capabilities_section
-
-    return build_capabilities_section(tool_names)
-
-
-def _build_constraints_section(plan) -> str:
-    """Per-turn orchestrator constraints (empty outside a planned turn)."""
-    from .prompt import build_constraints_section
-
-    return build_constraints_section(plan)
 
 
 class AssistantApp:
@@ -187,10 +117,7 @@ class AssistantApp:
                 executor = getattr(self._general_router, "executor", None)
                 if executor is not None:
                     executor.event_bus = self.event_bus
-        self._ensure_core_tools(self._general_router)
-        self._ensure_web_tools(self._general_router)
-        self._ensure_translation_tools(self._general_router)
-        self._ensure_calculator_tools(self._general_router)
+        ensure_all_tools(self._general_router, self.core)
         translation_settings = settings.translation
         self._translation_source = translation_settings.default_source
         self._translation_target = translation_settings.default_target
@@ -215,54 +142,6 @@ class AssistantApp:
             return f"CORE: unknown ({exc})"
         state = getattr(status.state, "value", str(status.state))
         return f"CORE: {state.lower()} (connected={status.connected})."
-
-    def _ensure_core_tools(self, router: ToolRouter) -> None:
-        """Register CORE tools on a router once (duplicate-safe)."""
-        if self.core is None or router is None:
-            return
-        try:
-            from asis.tools.provided import register_core_tools
-        except Exception:
-            return
-        # Already registered (or registry rejected) — never fatal.
-        with contextlib.suppress(Exception):
-            register_core_tools(router.registry, self.core)
-
-    def _ensure_web_tools(self, router: ToolRouter) -> None:
-        """Register shared web tools on a router once (duplicate-safe)."""
-        if router is None:
-            return
-        try:
-            from asis.tools.provided import register_web_tools
-        except Exception:
-            return
-        # Already registered (or registry rejected) — never fatal.
-        with contextlib.suppress(Exception):
-            register_web_tools(router.registry)
-
-    def _ensure_translation_tools(self, router: ToolRouter) -> None:
-        """Register shared translation tools once (duplicate-safe)."""
-        if router is None:
-            return
-        try:
-            from asis.tools.provided import register_translation_tools
-        except Exception:
-            return
-        # Already registered (or registry rejected) — never fatal.
-        with contextlib.suppress(Exception):
-            register_translation_tools(router.registry)
-
-    def _ensure_calculator_tools(self, router: ToolRouter) -> None:
-        """Register shared calculator tools once (duplicate-safe)."""
-        if router is None:
-            return
-        try:
-            from asis.tools.provided import register_calculator_tools
-        except Exception:
-            return
-        # Already registered (or registry rejected) — never fatal.
-        with contextlib.suppress(Exception):
-            register_calculator_tools(router.registry)
 
     @staticmethod
     def _coerce_mode(mode: AssistantMode | str | None) -> AssistantMode:
@@ -325,7 +204,7 @@ class AssistantApp:
         return self._workspace
 
     def _memory_context(self) -> str:
-        return _build_memory_section(
+        return build_memory_section(
             self._pending_memory_query,
             self.memory,
             self._max_memory_items,
@@ -334,7 +213,7 @@ class AssistantApp:
 
     def _mode_section(self) -> str:
         """Mode instructions for the labeled MODE context block."""
-        return _build_mode_section(self._mode)
+        return build_mode_section(self._mode)
 
     def _capabilities_section(self) -> str:
         """Bounded capabilities summary + active tool names (no schemas)."""
@@ -342,11 +221,11 @@ class AssistantApp:
             names = sorted(self.tools_router.registry.list_names())
         except Exception:
             names = []
-        return _build_capabilities_section(names)
+        return build_capabilities_section(names)
 
     def _constraints_section(self) -> str:
         """Per-turn orchestrator constraints (empty outside a planned turn)."""
-        return _build_constraints_section(self._last_plan)
+        return build_constraints_section(self._last_plan)
 
     def _assembler_context(self) -> str:
         sections = []
@@ -374,10 +253,7 @@ class AssistantApp:
                 self._coding_router = build_coding_tool_router(
                     self.workspace, executor=executor
                 )
-                self._ensure_core_tools(self._coding_router)
-                self._ensure_web_tools(self._coding_router)
-                self._ensure_translation_tools(self._coding_router)
-                self._ensure_calculator_tools(self._coding_router)
+                ensure_all_tools(self._coding_router, self.core)
             return self._coding_router
         return self._general_router
 
@@ -385,10 +261,7 @@ class AssistantApp:
     def tools_router(self, router: ToolRouter | None) -> None:
         if router is not None:
             self._general_router = router
-            self._ensure_core_tools(router)
-            self._ensure_web_tools(router)
-            self._ensure_translation_tools(router)
-            self._ensure_calculator_tools(router)
+            ensure_all_tools(router, self.core)
 
     def _execute_tool(self, request: ToolRequest) -> ToolResult:
         try:
