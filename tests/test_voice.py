@@ -189,9 +189,8 @@ def test_mock_stt_records_and_returns():
 def test_real_stt_missing_dep_and_validation():
     from asis.voice.speech.faster_whisper import FasterWhisperRecognizer
 
-    with _block_imports("faster_whisper"):
-        with pytest.raises(SpeechRecognitionError):
-            FasterWhisperRecognizer(model="small")
+    with _block_imports("faster_whisper"), pytest.raises(SpeechRecognitionError):
+        FasterWhisperRecognizer(model="small")
 
     class FakeEngine:
         def transcribe(self, samples, sample_rate=16000):
@@ -264,9 +263,8 @@ def test_registration_and_matching():
 def test_speaker_embedding_missing_dep():
     from asis.voice.speaker.embeddings import SpeechBrainEmbeddingProvider
 
-    with _block_imports("speechbrain"):
-        with pytest.raises(SpeakerRecognitionError):
-            SpeechBrainEmbeddingProvider()
+    with _block_imports("speechbrain"), pytest.raises(SpeakerRecognitionError):
+        SpeechBrainEmbeddingProvider()
 
 
 # -- wake word ---------------------------------------------------------
@@ -311,9 +309,8 @@ def test_mock_tts_and_output():
 def test_pyttsx3_missing_dep_and_validation():
     from asis.voice.tts.pyttsx3_engine import Pyttsx3Engine
 
-    with _block_imports("pyttsx3"):
-        with pytest.raises(TTSError):
-            Pyttsx3Engine()
+    with _block_imports("pyttsx3"), pytest.raises(TTSError):
+        Pyttsx3Engine()
     with pytest.raises(ValueError):
         Pyttsx3Engine(sample_rate=0)
 

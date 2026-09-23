@@ -5,7 +5,7 @@ Split out of tools.py with zero behavior change.
 
 from __future__ import annotations
 
-from asis.coding.tools_common import _ALLOW_COMMANDS, _fail, _limits, _run_argv
+from asis.coding.tools_common import _ALLOW_COMMANDS, _fail, _run_argv
 from asis.permissions.models import PermissionLevel
 from asis.tools.base import Tool, ToolMetadata
 from asis.tools.result import ToolResult
@@ -39,8 +39,7 @@ class RunTestsTool(Tool):
         if not isinstance(extra, list) or not all(isinstance(a, str) for a in extra):
             return _fail(self.name, "'args' must be a list of strings.")
         if any(a.startswith("-") and a not in ("-q", "-x", "-k") for a in extra):
-            # Allow common pytest flags but block arbitrary option injection.
-            pass
+            return _fail(self.name, "Only -q/-x/-k flags are allowed.")
         argv = ["python", "-m", "pytest", "-q", *extra]
         return _run_argv(
             self.name, self.workspace, argv, settings.coding.command_timeout

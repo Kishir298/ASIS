@@ -8,15 +8,13 @@ import sys
 import threading
 from collections.abc import Callable
 
+from asis.cli.terminal import layout as _term_layout
+from asis.cli.terminal import status as _term_status
+
 from .commands import HELP_TEXT, parse_command
 from .keys import KeyWatcher
 from .renderer import TypingRenderer
 from .session import InteractiveSession
-from asis.cli.terminal import activity as _term_activity
-from asis.cli.terminal import attachments as _term_attachments
-from asis.cli.terminal import layout as _term_layout
-from asis.cli.terminal import modes as _term_modes
-from asis.cli.terminal import status as _term_status
 
 EXIT_PHRASES = frozenset({"asis shutdown"})
 
@@ -641,6 +639,34 @@ def _handle_command(
         return None
     if lname in ("/exit", "/quit"):
         return "exit"
+    if lname in ("/identities", "/identity"):
+        try:
+            from pathlib import Path as _P
+            from asis.configuration.settings import settings as _settings
+            from asis.identities import cli as _icli
+            _db = _P(_settings.paths.memory) / "identities.db"
+            if lname == "/identities":
+                out.write(_icli.cmd_identities(_db) + "\n")
+            else:
+                parts = (arg or "").split(None, 2)
+                sub = parts[0].lower() if parts else ""
+                if sub == "analyze" and len(parts) >= 2:
+                    out.write(_icli.cmd_analyze(_db, parts[1]) + "\n")
+                elif sub in ("show", "questions", "export", "forget", "simulate") and len(parts) >= 2:
+                    fn = {"show": _icli.cmd_identity, "questions": _icli.cmd_questions,
+                          "export": _icli.cmd_export, "forget": _icli.cmd_forget}[sub] if sub != "simulate" else None
+                    if sub == "simulate":
+                        r = _icli.cmd_simulate_prompt(_db, parts[1], parts[2] if len(parts) > 2 else "hello")
+                        out.write(f"Simulation [{r.get('mode')}]: {r.get('system','')[:400]}\n{r.get('notice','')}\n")
+                    else:
+                        r = fn(_db, parts[1])
+                        out.write((r if isinstance(r, str) else str(r)) + "\n")
+                else:
+                    out.write("Usage: /identity analyze <file> | show|questions|simulate|forget|export <name>\n")
+        except Exception as exc:
+            out.write(f"Identity command failed: {exc}\n")
+        out.flush()
+        return None
     out.write(f"Unknown command: {lname} (try /help)\n")
     out.flush()
     return None

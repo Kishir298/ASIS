@@ -579,7 +579,6 @@ def entry(argv: Sequence[str] | None = None) -> int:
         _shutdown_core()
         _shutdown_owned_ollama()
     return 0
-    return 0
 
 
 if __name__ == "__main__":

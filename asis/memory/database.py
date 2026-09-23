@@ -67,6 +67,26 @@ class MemoryDatabase:
                 """
             )
 
+            for ddl in (
+                "ALTER TABLE memories ADD COLUMN identity_id TEXT NOT NULL DEFAULT 'default'",
+                "ALTER TABLE memories ADD COLUMN confidence REAL NOT NULL DEFAULT 0.7",
+                "ALTER TABLE memories ADD COLUMN source TEXT NOT NULL DEFAULT 'user-stated'",
+                "ALTER TABLE memories ADD COLUMN evidence TEXT NOT NULL DEFAULT ''",
+                """CREATE TABLE IF NOT EXISTS memory_events (
+                    seq INTEGER PRIMARY KEY AUTOINCREMENT, identity_id TEXT,
+                    memory_id INTEGER, ts TEXT, op TEXT, reason TEXT)""",
+            ):
+                try:
+                    connection.execute(ddl)
+                except Exception:
+                    pass
+            try:
+                connection.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_memories_identity ON memories(identity_id)"
+                )
+            except Exception:
+                pass
+
             connection.commit()
 
         finally:

@@ -13,7 +13,7 @@ def voice_line(state: str, transcript: str = "", reply: str = "") -> str:
     state = (state or "IDLE").upper()
     if state not in VOICE_STATES:
         state = "IDLE"
-    lines = [f"VOICE MODE", f"● {state}" if state != "IDLE" else "○ IDLE"]
+    lines = ["VOICE MODE", f"● {state}" if state != "IDLE" else "○ IDLE"]
     if transcript:
         lines.append(f"You (voice): {transcript}")
     if reply:

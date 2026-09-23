@@ -14,8 +14,8 @@ from asis.calculator import errors
 from asis.calculator.models import CalculatorResult
 from asis.calculator.operations import (
     DEFAULT_PRECISION,
-    OPERATIONS,
     OPERATION_HANDLERS,
+    OPERATIONS,
     OpContext,
 )
 

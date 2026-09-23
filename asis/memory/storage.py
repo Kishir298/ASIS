@@ -13,7 +13,8 @@ from .models import Memory, MemoryCategory, MemoryType
 
 
 def _row_to_memory(row) -> Memory:
-    """Convert a SQLite row into a Memory object."""
+    """Convert a SQLite row into a Memory object (tolerates pre-migration DBs)."""
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
     return Memory(
         memory_id=row["id"],
         content=row["content"],
@@ -23,6 +24,10 @@ def _row_to_memory(row) -> Memory:
         metadata=json.loads(row["metadata"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
+        identity_id=row["identity_id"] if "identity_id" in keys else "default",
+        confidence=float(row["confidence"]) if "confidence" in keys else 0.7,
+        source=row["source"] if "source" in keys else "user-stated",
+        evidence=row["evidence"] if "evidence" in keys else "",
     )
 
 
@@ -37,29 +42,31 @@ class MemoryStorage:
         connection = self.database._connect()
 
         try:
-            cursor = connection.execute(
-                """
-                INSERT INTO memories (
-                    content,
-                    category,
-                    memory_type,
-                    importance,
-                    metadata,
-                    created_at,
-                    updated_at
+            try:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO memories (
+                        content, category, memory_type, importance, metadata,
+                        created_at, updated_at, identity_id, confidence, source, evidence
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (memory.content, memory.category.value, memory.memory_type.value,
+                     memory.importance, json.dumps(memory.metadata),
+                     memory.created_at.isoformat(), memory.updated_at.isoformat(),
+                     memory.identity_id, memory.confidence, memory.source, memory.evidence),
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    memory.content,
-                    memory.category.value,
-                    memory.memory_type.value,
-                    memory.importance,
-                    json.dumps(memory.metadata),
-                    memory.created_at.isoformat(),
-                    memory.updated_at.isoformat(),
-                ),
-            )
+            except Exception:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO memories (
+                        content, category, memory_type, importance, metadata,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (memory.content, memory.category.value, memory.memory_type.value,
+                     memory.importance, json.dumps(memory.metadata),
+                     memory.created_at.isoformat(), memory.updated_at.isoformat()),
+                )
 
             connection.commit()
             memory_id = cursor.lastrowid

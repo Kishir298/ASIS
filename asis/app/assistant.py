@@ -44,7 +44,6 @@ from .native_tools import (
     native_tools_enabled,
     normalize_native_calls,
 )
-from .profiles import get_profile
 
 # Intents that never need the native function-calling attempt: a single
 # plain generation is faster (no tool-definition prompt tax) and

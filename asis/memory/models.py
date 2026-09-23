@@ -32,7 +32,7 @@ class MemoryType(StrEnum):
 
 @dataclass(frozen=True)
 class Memory:
-    """A single persistent memory item."""
+    """A single persistent memory item (provenance extension, backward compat)."""
 
     content: str
     category: MemoryCategory = MemoryCategory.GENERAL
@@ -42,6 +42,10 @@ class Memory:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     memory_id: int | None = None
+    identity_id: str = "default"
+    confidence: float = 0.7
+    source: str = "user-stated"
+    evidence: str = ""
 
     def __post_init__(self) -> None:
         if not isinstance(self.content, str) or not self.content.strip():

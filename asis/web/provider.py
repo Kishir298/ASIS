@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 if TYPE_CHECKING:  # pragma: no cover - import only for type checkers
-    import requests
+    pass
 
 from asis.web.extract import extract_text, extract_title, is_html_content
 from asis.web.security import WebSecurityError, resolve_redirect, validate_url

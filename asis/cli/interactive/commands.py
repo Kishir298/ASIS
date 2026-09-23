@@ -26,6 +26,8 @@ COMMANDS = (
     "/clear",
     "/exit",
     "/quit",
+    "/identities",
+    "/identity",
 )
 
 
@@ -70,6 +72,8 @@ HELP_TEXT = (
     "  /docs              list attached documents\n"
     "  /clear-docs        remove attached documents\n"
     "  /clear             clear the screen (keeps conversation)\n"
+    "  /identities        list reconstructed identities\n"
+    "  /identity <sub>    analyze|show|questions|simulate|forget|export <name>\n"
     "  /exit, /quit       leave A.S.I.S. (also CTRL+C)\n"
     "Keys: ENTER submit, ESC interrupt response, CTRL+C exit."
 )

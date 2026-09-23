@@ -53,8 +53,7 @@ def test_interrupt_scopes_register_and_cancel():
 
 
 def test_prompt_slice_preserves_surface():
-    from asis.app import prompt
-    from asis.app import assistant
+    from asis.app import assistant, prompt
 
     for name in (
         "build_memory_section",

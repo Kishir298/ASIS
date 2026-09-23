@@ -7,10 +7,9 @@ engine private state; dispatch lives in :class:`CalculatorEngine`.
 
 from __future__ import annotations
 
+import math
 from collections.abc import Callable
 from dataclasses import dataclass
-
-import math
 
 from asis.calculator import errors
 from asis.calculator.formatting import format_exact, format_number
@@ -115,7 +114,7 @@ def _op_calculate(ctx, args: dict) -> CalculatorResult:
     angle = str(args.get("angle_mode", ctx.angle_mode))
     exact, numeric = evaluate(expression, angle_mode=angle)
     verification = _verify_numeric(ctx, expression, numeric, angle)
-    return _result(ctx, 
+    return _result(ctx,
         "calculate",
         expression,
         exact=exact,
@@ -162,7 +161,7 @@ def _op_trig(ctx, args: dict) -> CalculatorResult:
         _expression(ctx, item)
     angle = str(args.get("angle_mode", ctx.angle_mode))
     exact, numeric = trig(name, items, angle_mode=angle)
-    return _result(ctx, 
+    return _result(ctx,
         "trig",
         f"{name}({', '.join(items)})",
         exact=exact,
@@ -181,7 +180,7 @@ def _op_complex(ctx, args: dict) -> CalculatorResult:
     for item in items:
         _expression(ctx, item)
     exact, numeric = complex_op(name, items)
-    return _result(ctx, 
+    return _result(ctx,
         "complex",
         f"{name}({', '.join(items)})",
         exact=exact,
@@ -197,7 +196,7 @@ def _op_constant(ctx, args: dict) -> CalculatorResult:
         raise errors.invalid_expression("constant needs a name")
     value_expr, unit, description = constant_value(name)
     exact, numeric = evaluate(value_expr)
-    return _result(ctx, 
+    return _result(ctx,
         "constant",
         name,
         exact=exact,
@@ -218,7 +217,7 @@ def _op_expand(ctx, args: dict) -> CalculatorResult:
     from asis.calculator import symbolic
 
     expression = _expression(ctx, args.get("expression", ""))
-    return _result(ctx, 
+    return _result(ctx,
         "expand", expression, exact=symbolic.expand_expr(expression)
     )
 
@@ -228,7 +227,7 @@ def _op_factor(ctx, args: dict) -> CalculatorResult:
     expression = _expression(ctx, args.get("expression", ""))
     factored = symbolic.factor_expr(expression)
     verification = _verify_factor(ctx, expression, factored)
-    return _result(ctx, 
+    return _result(ctx,
         "factor", expression, exact=factored, verification=verification
     )
 
@@ -261,7 +260,7 @@ def _op_collect(ctx, args: dict) -> CalculatorResult:
     variable = str(args.get("variable", "")).strip()
     if not variable:
         raise errors.invalid_expression("collect needs a variable")
-    return _result(ctx, 
+    return _result(ctx,
         "collect",
         expression,
         exact=symbolic.collect_expr(expression, variable),
@@ -276,7 +275,7 @@ def _op_substitute(ctx, args: dict) -> CalculatorResult:
     value = _expression(ctx, args.get("value", ""))
     if not variable:
         raise errors.invalid_expression("substitute needs a variable")
-    return _result(ctx, 
+    return _result(ctx,
         "substitute",
         expression,
         exact=symbolic.substitute(expression, variable, value),
@@ -291,7 +290,7 @@ def _op_solve(ctx, args: dict) -> CalculatorResult:
     outcome = symbolic.solve_equation(equation, variable)
     verification = _verify_solutions(ctx, equation, variable, outcome)
     if outcome["status"] == "infinite":
-        return _result(ctx, 
+        return _result(ctx,
             "solve",
             equation,
             exact="infinitely many solutions",
@@ -301,7 +300,7 @@ def _op_solve(ctx, args: dict) -> CalculatorResult:
         )
     solutions = outcome["solutions"]
     numeric = _solution_numeric(ctx, solutions)
-    return _result(ctx, 
+    return _result(ctx,
         "solve",
         equation,
         exact=", ".join(solutions),
@@ -354,7 +353,7 @@ def _op_solve_system(ctx, args: dict) -> CalculatorResult:
     equations = [_expression(ctx, item) for item in equations]
     outcome = symbolic.solve_system(equations, variables)
     if outcome["status"] == "infinite":
-        return _result(ctx, 
+        return _result(ctx,
             "solve_system",
             "; ".join(equations),
             exact="infinitely many solutions",
@@ -364,7 +363,7 @@ def _op_solve_system(ctx, args: dict) -> CalculatorResult:
         ", ".join(f"{key} = {value}" for key, value in entry.items())
         for entry in outcome["solutions"]
     )
-    return _result(ctx, 
+    return _result(ctx,
         "solve_system",
         "; ".join(equations),
         exact="; ".join(steps),
@@ -389,13 +388,13 @@ def _op_inequality(ctx, args: dict) -> CalculatorResult:
     variable = str(args.get("variable", "x")).strip() or "x"
     outcome = symbolic.solve_inequality(expression, variable)
     if outcome["status"] == "infinite":
-        return _result(ctx, 
+        return _result(ctx,
             "inequality",
             expression,
             exact="(-oo, oo)",
             variables=(variable,),
         )
-    return _result(ctx, 
+    return _result(ctx,
         "inequality",
         expression,
         exact=outcome["solution"],
@@ -413,7 +412,7 @@ def _op_differentiate(ctx, args: dict) -> CalculatorResult:
         raise errors.invalid_expression("order must be an integer") from exc
     result = symbolic.differentiate(expression, variable, order)
     verification = _verify_derivative(ctx, expression, variable, result)
-    return _result(ctx, 
+    return _result(ctx,
         "differentiate",
         expression,
         exact=result,
@@ -454,7 +453,7 @@ def _op_partial(ctx, args: dict) -> CalculatorResult:
     variables = _split_list(args.get("variables", ""), "variables")
     parts = symbolic.partial_derivatives(expression, variables)
     steps = tuple(f"d/d{name} = {value}" for name, value in parts.items())
-    return _result(ctx, 
+    return _result(ctx,
         "partial",
         expression,
         exact="; ".join(steps),
@@ -468,7 +467,7 @@ def _op_gradient(ctx, args: dict) -> CalculatorResult:
     expression = _expression(ctx, args.get("expression", ""))
     variables = _split_list(args.get("variables", ""), "variables")
     values = symbolic.gradient(expression, variables)
-    return _result(ctx, 
+    return _result(ctx,
         "gradient",
         expression,
         exact=f"[{', '.join(values)}]",
@@ -487,11 +486,11 @@ def _op_integrate(ctx, args: dict) -> CalculatorResult:
     result = symbolic.integrate(expression, variable, lower_text, upper_text)
     verification = None
     if lower_text is not None:
-        verification = _verify_definite_integral(ctx, 
+        verification = _verify_definite_integral(ctx,
             expression, variable, lower_text, upper_text, result
         )
     numeric = _solution_numeric(ctx, [result]) if lower_text else None
-    return _result(ctx, 
+    return _result(ctx,
         "integrate",
         expression,
         exact=result,
@@ -539,7 +538,7 @@ def _op_limit(ctx, args: dict) -> CalculatorResult:
     direction = str(args.get("direction", "both")).strip() or "both"
     result = symbolic.limit_expr(expression, variable, point, direction)
     numeric = _solution_numeric(ctx, [result])
-    return _result(ctx, 
+    return _result(ctx,
         "limit",
         expression,
         exact=result,
@@ -557,7 +556,7 @@ def _op_series(ctx, args: dict) -> CalculatorResult:
         order = int(str(args.get("order", "6")))
     except ValueError as exc:
         raise errors.invalid_expression("order must be an integer") from exc
-    return _result(ctx, 
+    return _result(ctx,
         "series",
         expression,
         exact=symbolic.series(expression, variable, point, order),
@@ -571,7 +570,7 @@ def _op_ode(ctx, args: dict) -> CalculatorResult:
     function = str(args.get("function", "f")).strip() or "f"
     variable = str(args.get("variable", "x")).strip() or "x"
     outcome = symbolic.solve_ode(equation, function, variable)
-    return _result(ctx, 
+    return _result(ctx,
         "ode",
         equation,
         exact="; ".join(outcome["solutions"]),
@@ -595,7 +594,7 @@ def _op_matrix(ctx, args: dict) -> CalculatorResult:
     if name == "inverse" and items:
         verification = _verify_inverse(ctx, items[0], outcome.get("result", ""))
     numeric = outcome.get("numeric")
-    return _result(ctx, 
+    return _result(ctx,
         "matrix",
         " || ".join(items),
         exact=outcome.get("result"),
@@ -631,7 +630,7 @@ def _op_vector(ctx, args: dict) -> CalculatorResult:
     for item in items:
         _expression(ctx, item)
     outcome = linalg.vector_op(name, items, max_size=ctx.max_matrix)
-    return _result(ctx, 
+    return _result(ctx,
         "vector",
         " || ".join(items),
         exact=outcome.get("result"),
@@ -677,7 +676,7 @@ def _op_triangle(ctx, args: dict) -> CalculatorResult:
         if outcome.get("ambiguous")
         else ()
     )
-    return _result(ctx, 
+    return _result(ctx,
         "triangle",
         ", ".join(f"{k}={v}" for k, v in params.items()),
         exact=" | ".join(steps),
@@ -728,12 +727,12 @@ def _op_probability(ctx, args: dict) -> CalculatorResult:
 
     if name == "factorial":
         value = stats.factorial_of(get("n"))
-        return _result(ctx, 
+        return _result(ctx,
             "probability", get("n"), exact=str(value), numeric=float(value)
         )
     if name == "permutations":
         value = stats.permutations(get("n"), get("r"))
-        return _result(ctx, 
+        return _result(ctx,
             "probability",
             f"n={get('n')}, r={get('r')}",
             exact=str(value),
@@ -741,7 +740,7 @@ def _op_probability(ctx, args: dict) -> CalculatorResult:
         )
     if name == "combinations":
         value = stats.combinations(get("n"), get("r"))
-        return _result(ctx, 
+        return _result(ctx,
             "probability",
             f"n={get('n')}, r={get('r')}",
             exact=str(value),
@@ -751,7 +750,7 @@ def _op_probability(ctx, args: dict) -> CalculatorResult:
         value = stats.binomial_probability(
             get("trials"), get("successes"), get("p")
         )
-        return _result(ctx, 
+        return _result(ctx,
             "probability", "binomial", exact=str(value), numeric=value
         )
     if name == "bayes":
@@ -762,7 +761,7 @@ def _op_probability(ctx, args: dict) -> CalculatorResult:
             _dataset(ctx, args.get("values", "")),
             _dataset(ctx, args.get("probs", "")),
         )
-        return _result(ctx, 
+        return _result(ctx,
             "probability", "expected value", exact=str(value), numeric=value
         )
     raise errors.invalid_expression(f"unknown probability function '{name}'")
@@ -780,7 +779,7 @@ def _op_number_theory(ctx, args: dict) -> CalculatorResult:
         return _result(ctx, "number_theory", get("n"), exact=str(value))
     if name == "factor":
         factors = stats.prime_factors(get("n"))
-        return _result(ctx, 
+        return _result(ctx,
             "number_theory",
             get("n"),
             exact=" * ".join(str(item) for item in factors),
@@ -789,7 +788,7 @@ def _op_number_theory(ctx, args: dict) -> CalculatorResult:
     if name == "gcd":
         values = _split_list(get("values"), "values")
         result = stats.gcd_of(*values)
-        return _result(ctx, 
+        return _result(ctx,
             "number_theory",
             ", ".join(values),
             exact=str(result),
@@ -798,7 +797,7 @@ def _op_number_theory(ctx, args: dict) -> CalculatorResult:
     if name == "lcm":
         values = _split_list(get("values"), "values")
         result = stats.lcm_of(*values)
-        return _result(ctx, 
+        return _result(ctx,
             "number_theory",
             ", ".join(values),
             exact=str(result),
@@ -806,7 +805,7 @@ def _op_number_theory(ctx, args: dict) -> CalculatorResult:
         )
     if name == "mod_pow":
         result = stats.mod_pow(get("base"), get("exponent"), get("modulus"))
-        return _result(ctx, 
+        return _result(ctx,
             "number_theory",
             "modular exponentiation",
             exact=str(result),
@@ -814,7 +813,7 @@ def _op_number_theory(ctx, args: dict) -> CalculatorResult:
         )
     if name == "mod_inverse":
         result = stats.mod_inverse(get("a"), get("modulus"))
-        return _result(ctx, 
+        return _result(ctx,
             "number_theory",
             "modular inverse",
             exact=str(result),
@@ -825,7 +824,7 @@ def _op_number_theory(ctx, args: dict) -> CalculatorResult:
         return _result(ctx, "number_theory", f"fib({get('n')})", exact=str(result))
     if name == "divisors":
         found = stats.divisors(get("n"))
-        return _result(ctx, 
+        return _result(ctx,
             "number_theory",
             get("n"),
             exact=", ".join(str(item) for item in found),
@@ -842,10 +841,10 @@ def _op_convert_units(ctx, args: dict) -> CalculatorResult:
     if not source or not target:
         raise errors.invalid_expression("convert_units needs value, from, to")
     outcome = units.convert(value, source, target)
-    verification = _verify_round_trip(ctx, 
+    verification = _verify_round_trip(ctx,
         outcome["result"], outcome["to"], value, outcome["from"]
     )
-    return _result(ctx, 
+    return _result(ctx,
         "convert_units",
         f"{value} {source} to {target}",
         exact=str(outcome["result"]),
@@ -884,7 +883,7 @@ def _op_physics(ctx, args: dict) -> CalculatorResult:
     if not formula:
         raise errors.invalid_expression("physics needs a formula")
     outcome = applied.physics(formula, _applied_params(ctx, args))
-    return _result(ctx, 
+    return _result(ctx,
         "physics",
         formula,
         exact=str(outcome["result"]),
@@ -900,7 +899,7 @@ def _op_engineering(ctx, args: dict) -> CalculatorResult:
     if not name:
         raise errors.invalid_expression("engineering needs a calculation")
     outcome = applied.engineering(name, _applied_params(ctx, args))
-    return _result(ctx, 
+    return _result(ctx,
         "engineering",
         name,
         exact=str(outcome["result"]),
@@ -921,7 +920,7 @@ def _op_finance(ctx, args: dict) -> CalculatorResult:
         for part in (outcome.get("formula", ""), outcome.get("assumptions", ""))
         if part
     )
-    return _result(ctx, 
+    return _result(ctx,
         "finance",
         name,
         exact=str(outcome["result"]),

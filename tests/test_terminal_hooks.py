@@ -52,7 +52,6 @@ def test_tool_badges_render_and_unsubscribed():
 def test_streaming_delivers_chunks_incrementally():
     """Chunks reach the terminal as they arrive (no wait-for-full-answer)."""
     from asis.events.bus import EventBus
-    from asis.events.events import Event, EventType
 
     writes: list[str] = []
 

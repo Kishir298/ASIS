@@ -10,7 +10,7 @@ from asis.permissions.models import PermissionLevel
 from asis.tools.base import Tool, ToolMetadata
 from asis.tools.result import ToolResult
 
-from .workspace import CodingWorkspace
+from .workspace import CodingWorkspace, SandboxViolation
 
 
 class GitStatusTool(Tool):
