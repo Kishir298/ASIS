@@ -38,6 +38,11 @@ def route_mode(persona: dict, incoming_text: str) -> str:
     return modes[0] if modes else "direct"
 
 
+def persona_mode(persona: dict, incoming_text: str) -> str:
+    """Current-tone alias for ``route_mode`` (keeps semantic name stable)."""
+    return route_mode(persona, incoming_text)
+
+
 def render_system_prompt(persona: dict, mode: str) -> str:
     return (
         f"You are simulating {persona.get('display')} (AI reconstruction, mode={mode}, "
@@ -45,6 +50,15 @@ def render_system_prompt(persona: dict, mode: str) -> str:
         f"phrases {persona.get('phrases', [])[:6]}. Stay in observed style. "
         f"Never invent unsupported facts. Unknowns: {persona.get('unknowns', [])[:5]}."
     )
+
+
+def render_persona_prompt(persona: dict, mode: str) -> str:
+    """Canonical persona system prompt for the live simulation console.
+
+    Same content as ``render_system_prompt``; keeps naming consistent with
+    the multi-person system prompt contract in the CLI reference.
+    """
+    return render_system_prompt(persona, mode)
 
 
 def consistency_check(generated: str, persona: dict, mode: str) -> dict[str, Any]:

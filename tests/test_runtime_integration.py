@@ -15,7 +15,7 @@ def test_cli_multi_turn_repl_shares_session(tmp_path, capsys, monkeypatch):
     code = entry(["--provider", "mock", "--memory-db", db])
     out = capsys.readouterr().out
     assert code == 0
-    assert "ENTER Send" in out  # footer goodbye panel
+    assert "[Enter] Send" in out  # footer goodbye panel
     # Two assistant replies (mock default response) + greeting.
     assert out.count("mock response") >= 2
 

@@ -10,20 +10,39 @@ def test_header_footer_panels():
     h = layout.header()
     assert "A.S.I.S." in h and "ONLINE" in h
     assert "OFFLINE" in layout.header(online=False)
+    assert "A Smart Intelligence System" in layout.header()
     f = layout.footer()
-    assert "ENTER Send" in f and "CTRL+C Exit" in f
+    assert "[Enter] Send" in f and "Ctrl+C" in f
+
+
+def test_status_panel_rows():
+    p = layout.status_panel()
+    assert "MODEL:" in p and "qwen3:14b" in p
+    assert "OLLAMA:" in p and "ONLINE" in p
+    assert "MEMORY:" in p and "READY" in p
+    assert "TOOLS:" in p and "READY" in p
+    assert "VOICE:" in p and "READY" in p
+
+
+def test_bottom_strip():
+    s = layout.bottom_strip()
+    assert "MODE" in s and "qwen3:14b" in s
+    assert "LISTENING" in s and "SPEAKING" in s
+    assert "○" in layout.bottom_strip(ollama=False)
 
 
 def test_bubbles_badges_composer():
-    assert "You" in layout.user_bubble("hello")
-    assert "Hello" in layout.assistant_bubble("Hello")
+    assert layout.user_bubble("hello") == "You > hello"
+    assert layout.assistant_bubble("Hello") == "A.S.I.S. > Hello"
     assert "▌" in layout.assistant_bubble("Hi", streaming=True)
     assert "[TOOL]" in layout.tool_badge("calc")
     assert "[DONE]" in layout.tool_badge("calc", done=True)
     assert "(none)" in layout.attachments_bar([])
     assert "physics_notes.pdf" in layout.attachments_bar(["physics_notes.pdf"])
+    assert "×" in layout.attachments_bar(["physics_notes.pdf"])
     c = layout.composer(mode="VOICE", attachments=["a.pdf"], generating=True)
     assert "VOICE" in c and "Generating" in c
+    assert "[+] Attach" in c
 
 
 def test_status_voice_error_text():

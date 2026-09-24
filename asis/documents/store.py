@@ -56,3 +56,11 @@ class DocumentStore:
         count = len(self._docs)
         self._docs.clear()
         return count
+
+    def detach(self, name: str) -> bool:
+        """Remove one attached document by name; True when something changed."""
+        cleaned = (name or "").strip()
+        kept = [d for d in self._docs if d.name != cleaned]
+        changed = len(kept) != len(self._docs)
+        self._docs = kept
+        return changed

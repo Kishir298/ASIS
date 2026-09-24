@@ -25,6 +25,8 @@ but optional uplink; R.E.S.C.S. remains a future boundary; see
 | Voice architecture + mocks | Implemented |
 | Local STT / TTS / speaker / wake / VAD | Implemented (pipeline+mocks; optional deps; hardware NOT PERFORMED) |
 | CLI (`asis`, `asis voice`) | Implemented (stateful multi-turn) |
+| CLI reference design | Implemented (status panel, arrow bubbles, tool badges, attachment chips, composer; see `CLI.jpeg`) |
+| Multi-person identity + WhatsApp persona | Implemented (analysis, timeline, calibration, `/persona <name>` simulation, `/identity answer`) |
 | Shutdown timeout | Implemented (bounded stop, FAILED + log on expiry) |
 | C.O.R.E. integration | Implemented (optional uplink; standalone by default; LAN NOT PERFORMED) |
 | Offline-first | Implemented (simulated suite passes; physical Wi-Fi-off NOT PERFORMED; see `docs/offline.md`) |
@@ -199,13 +201,36 @@ npm run asis:test           # same suite via the one-command launcher
 
 ```bash
 pip install -e .      # installs the `asis` console script
-asis                  # persistent interactive terminal (text/voice/docs)
+asis                  # persistent interactive terminal (text/voice/docs/persona)
 asis --help
 asis --message "hi"   # single shot (default model qwen3:14b)
 asis voice            # voice loop (mock engines by default)
 python -m asis        # alias for the asis console script (works from source)
 ```
 
+The interactive terminal follows the CLI reference (`CLI.jpeg`): a
+status panel (MODEL / OLLAMA / MEMORY / TOOLS / VOICE), `You >` /
+`A.S.I.S. >` message lines, `[TOOL]`/`[DONE]` activity badges,
+`Attachments: @ name ×` chips, a mode toggle + `[+] Attach` composer,
+and a persistent bottom strip.
+
 Interactive commands: `/help`, `/mode [text|voice]`, `/upload <path>` /
-`/attach <path>`, `/docs`, `/clear-docs`, `/clear`, `/exit`, `/quit`.
+`/attach <path>`, `/docs`, `/detach <name>`, `/clear-docs`, `/clear`,
+`/exit`, `/quit`.
+
+Multi-person identity + WhatsApp persona:
+  - `/identity analyze <chat.txt>` — parse a WhatsApp export, build
+    identities (baseline, styles, modes, timeline, persona).
+  - `/identity show|questions|simulate|forget|export <name>` — inspect,
+    ask open questions, preview a simulated reply, forget, or export.
+  - `/identity answer <name> <answer>` — answer the top open question
+    (stored as `USER_CONFIRMED`).
+  - `/identity calibrate <name> <conversation>` — self-calibrate the
+    persona against held-out replies (LLM predictions scored against
+    observed text; persona version bumps on consistent mismatches).
+  - `/personas` — list reconstructed identities.
+  - `/persona <name>` — enter persona mode; every message is answered
+    as that reconstructed identity (streamed, with a one-time privacy
+    notice). `/persona off` exits.
+
 ESC interrupts the response/speech; CTRL+C exits cleanly.

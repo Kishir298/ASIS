@@ -140,3 +140,44 @@ def test_cli_and_deletion(tmp_path):
     assert "Alex" in ICLI.cmd_identity(db, "Alex")
     assert ICLI.cmd_questions(db, "Alex")
     assert "[ OK ] Deleted" in ICLI.cmd_forget(db, "Alex")
+
+
+def test_answer_open_and_calibrate_cli(tmp_path):
+    p = _write(tmp_path)
+    db = tmp_path / "cli2.db"
+    ICLI.cmd_analyze(db, str(p))
+    out = ICLI.cmd_answer_open(db, "Alex", "Manchester United and pizza")
+    assert "[ OK ]" in out
+    assert ICLI.cmd_identity(db, "Alex")  # persisted fact survives
+    res = ICLI.cmd_calibrate(db, "Alex", "Chat_A", lambda ctx, eid: ("guess", "direct"))
+    assert "Calibrated Alex" in res
+    assert "avg composite" in res
+    res2 = ICLI.cmd_calibrate(db, "Missing", "Chat_A", lambda ctx, eid: ("guess", "direct"))
+    assert "Unknown identity" in res2
+
+
+def test_calibrate_conversation_uses_generator_and_persists(tmp_path):
+    from asis.identities import pipeline as P
+
+    p = _write(tmp_path)
+    db = tmp_path / "cal.db"
+    store = IdentityStore(db)
+    res = analyze_conversation(db, p, store, "Chat_A")
+    cid = res["conversation_id"]
+    seen: list[str] = []
+
+    def gen(ctx, exid):
+        seen.append(exid)
+        return "probable next line in their voice", "direct"
+
+    out = P.calibrate_conversation(db, cid, store, gen, target="Alex")
+    assert out["status"] == "ok"
+    r = out["results"]["Alex"]
+    assert r["tested"] >= 1
+    assert seen  # generator really invoked
+    loaded = store.get(r["identity_id"])
+    assert loaded is not None
+    assert any(c.get("mismatch") for c in loaded.calibration)
+    # analyze() with a generator auto-runs calibration without re-analysis
+    res2 = analyze_conversation(db, p, store, "Chat_A", generate=gen)
+    assert res2["status"] == "ok"

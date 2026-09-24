@@ -22,12 +22,15 @@ COMMANDS = (
     "/upload",
     "/attach",
     "/docs",
+    "/detach",
     "/clear-docs",
     "/clear",
     "/exit",
     "/quit",
     "/identities",
     "/identity",
+    "/personas",
+    "/persona",
 )
 
 
@@ -55,7 +58,7 @@ def parse_command(text: str) -> CommandResult | None:
     if not stripped.startswith("/"):
         return None
     name, arg = _split_arg(stripped)
-    if name in ("/upload", "/attach") and not arg:
+    if name in ("/upload", "/attach", "/detach") and not arg:
         return CommandResult(name=name, arg="")
     if name not in COMMANDS and not name.startswith("/mode"):
         # Unknown slash input: treat as command so it is not sent to the LLM.
@@ -70,10 +73,13 @@ HELP_TEXT = (
     "  /upload <path>     attach a document (.txt .md .pdf .docx .csv .json)\n"
     "  /attach <path>     same as /upload\n"
     "  /docs              list attached documents\n"
+    "  /detach <name>     remove one attached document\n"
     "  /clear-docs        remove attached documents\n"
     "  /clear             clear the screen (keeps conversation)\n"
     "  /identities        list reconstructed identities\n"
-    "  /identity <sub>    analyze|show|questions|simulate|forget|export <name>\n"
+    "  /identity <sub>    analyze|show|questions|answer|simulate|forget|export|calibrate\n"
+    "  /personas          list identities available for persona mode\n"
+    "  /persona <name>    simulate that identity (off/local to exit)\n"
     "  /exit, /quit       leave A.S.I.S. (also CTRL+C)\n"
     "Keys: ENTER submit, ESC interrupt response, CTRL+C exit."
 )

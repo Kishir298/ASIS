@@ -102,7 +102,7 @@ def test_shutdown_phrase_prints_goodbye():
         stream=stream,
     )
     assert code == 0
-    assert "ENTER Send" in stream.getvalue()  # footer goodbye panel
+    assert "[Enter] Send" in stream.getvalue()  # footer goodbye panel
 
 
 def test_exit_command_prints_goodbye():
@@ -124,7 +124,7 @@ def test_exit_command_prints_goodbye():
             stream=stream,
         )
         assert code == 0
-        assert "ENTER Send" in stream.getvalue()  # footer goodbye panel
+        assert "[Enter] Send" in stream.getvalue()  # footer goodbye panel
 
 
 # -- TTS stop -----------------------------------------------------------------------

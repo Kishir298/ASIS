@@ -13,6 +13,7 @@ from asis.cli.terminal import status as _term_status
 
 from .commands import HELP_TEXT, parse_command
 from .keys import KeyWatcher
+from .persona import PersonaConsole
 from .renderer import TypingRenderer
 from .session import InteractiveSession
 
@@ -72,6 +73,7 @@ def run_interactive(
     cleanup: Callable[[], None] | None = None,
     max_turns: int = 0,
     voice_poll: Callable[[], str | None] | None = None,
+    identities_db=None,
 ) -> int:
     """Run the persistent terminal until /exit, /quit, shutdown phrase or CTRL+C.
 
@@ -82,6 +84,8 @@ def run_interactive(
     ask = input_fn if input_fn is not None else (lambda p: input(p))
     render = renderer if renderer is not None else TypingRenderer(stream=out)
     session = InteractiveSession(app, pipeline=pipeline, doc_store=doc_store)
+    # Multi-person identity simulation console (lazy DB access).
+    session.persona_console = PersonaConsole(app, db_path=identities_db)
     stop_event = threading.Event()
     shutdown_event = threading.Event()
     poll_typed = voice_poll if voice_poll is not None else _default_voice_poll
@@ -301,6 +305,39 @@ def run_interactive(
             return "rendered", response
         return status, response
 
+    def _run_persona_chat(message: str):
+        """One persona-mode turn: stream the simulated identity's reply.
+
+        No tools, no memory, no event bus: the persona says only what the
+        reconstructed system prompt asks for. ESC/SHUTDOWN interrupt it like
+        any other turn.
+        """
+        persona = session.persona_console
+        streamed: list[str] = []
+        render.begin_stream()
+
+        def _on_chunk(chunk: str) -> None:
+            if stop_event.is_set() or shutdown_event.is_set():
+                return
+            if chunk:
+                streamed.append(chunk)
+                render.write_chunk(chunk)
+
+        try:
+            status, reply = _run_cancellable(
+                lambda: persona.chat(message, on_chunk=_on_chunk)
+            )
+        except Exception as exc:
+            render.end_stream(interrupted=False)
+            return "error", f"Sorry, that failed: {exc}"
+        if status != "ok":
+            render.end_stream(interrupted=True)
+            return status, reply
+        render.end_stream(interrupted=False)
+        if not streamed:
+            render.render(reply or "", stop_event=stop_event)
+        return "ok", reply
+
     watcher = KeyWatcher(
         on_esc=_on_esc,
         on_shutdown=_on_shutdown,
@@ -315,13 +352,36 @@ def run_interactive(
             with contextlib.suppress(Exception):
                 cleanup()
 
+    def _model_name() -> str:
+        try:
+            provider = getattr(app, "ai", None)
+            if provider is not None and getattr(provider, "provider", None) is not None:
+                value = provider.provider.model
+                if value:
+                    return str(value)
+        except Exception:
+            pass
+        return "qwen3:14b"
+
+    def _voice_state() -> str:
+        return "READY" if pipeline is not None else "OFF"
+
     try:
         with contextlib.suppress(Exception):
-            out.write(_term_layout.header() + "\n")
+            out.write(_term_layout.header(online=True) + "\n")
             out.write(
-                _term_status.status_bar(mode=session.interaction_mode.upper()) + "\n"
+                _term_layout.status_panel(
+                    model=_model_name(),
+                    online=True,
+                    memory=True,
+                    tools=True,
+                    voice=_voice_state(),
+                )
+                + "\n"
             )
-            out.write(_term_layout.footer() + "\n")
+            out.write(
+                _term_layout.composer(mode=session.interaction_mode.upper()) + "\n"
+            )
         out.flush()
     except Exception:
         pass
@@ -504,10 +564,24 @@ def run_interactive(
                 with contextlib.suppress(Exception):
                     out.write(_term_layout.user_bubble(message) + "\n")
                     out.flush()
-                try:
-                    status, response = _run_streamed_chat(message)
-                except Exception as exc:
-                    status, response = "error", f"Sorry, that failed: {exc}"
+                persona = session.persona_console
+                if persona.active() is not None:
+                    notice = persona.notice()
+                    if notice:
+                        try:
+                            out.write(_term_layout.assistant_bubble(notice) + "\n")
+                            out.flush()
+                        except Exception:
+                            pass
+                    try:
+                        status, response = _run_persona_chat(message)
+                    except Exception as exc:
+                        status, response = "error", f"Sorry, that failed: {exc}"
+                else:
+                    try:
+                        status, response = _run_streamed_chat(message)
+                    except Exception as exc:
+                        status, response = "error", f"Sorry, that failed: {exc}"
                 if status == "shutdown":
                     _say_goodbye()
                     return 0
@@ -542,6 +616,43 @@ def run_interactive(
     finally:
         _cleanup()
     return 0
+
+
+def _make_generate(provider):
+    """Build the calibration ``generate`` hook from a live AI provider.
+
+    ``generate(context_text, exchange_id) -> (predicted_text, mode)``. The
+    provider is used only for semantics; deterministic scoring lives in the
+    calibration engine. Never leaks the target's reply into the prompt.
+    """
+    from asis.ai.models import AIMessage, MessageRole
+
+    def generate(context: str, exchange_id: str):
+        del exchange_id
+        try:
+            response = provider.chat(
+                [
+                    AIMessage(
+                        role=MessageRole.SYSTEM,
+                        content=(
+                            "You reconstruct a WhatsApp contact's writing style. "
+                            "Reply with ONLY their single next message as they "
+                            "would write it — no labels, quotes or notes."
+                        ),
+                    ),
+                    AIMessage(
+                        role=MessageRole.USER,
+                        content=(context or "")[:4000],
+                    ),
+                ]
+            )
+            content = getattr(response, "content", "")
+            text = content if isinstance(content, str) else str(content or "")
+            return text, "direct"
+        except Exception:
+            return "", "direct"
+
+    return generate
 
 
 def _handle_command(
@@ -627,6 +738,21 @@ def _handle_command(
         names = session.docs.list_names()
         with contextlib.suppress(Exception):
             out.write(_term_layout.attachments_bar(names) + "\n")
+        if names:
+            out.write("Use /detach <name> to remove one.\n")
+        out.flush()
+        return None
+    if lname == "/detach":
+        if not arg:
+            out.write("Usage: /detach <name>\n")
+            out.flush()
+            return None
+        if session.docs.detach(arg):
+            out.write(f"Detached {arg}.\n")
+        else:
+            out.write(f"No attached document named {arg}.\n")
+        with contextlib.suppress(Exception):
+            out.write(_term_layout.attachments_bar(session.docs.list_names()) + "\n")
         out.flush()
         return None
     if lname == "/clear-docs":
@@ -639,6 +765,39 @@ def _handle_command(
         return None
     if lname in ("/exit", "/quit"):
         return "exit"
+    if lname == "/personas":
+        names = session.persona_console.names()
+        if not names:
+            out.write(
+                "No reconstructed identities yet — /identity analyze <file>.\n"
+            )
+        else:
+            out.write("Available personas:\n")
+            out.write("\n".join(f"  {n}" for n in names) + "\n")
+        out.flush()
+        return None
+    if lname == "/persona":
+        if not arg or arg.strip().lower() in ("off", "exit", "stop", "none"):
+            active = session.persona_console.active()
+            session.persona_console.exit()
+            if active is not None:
+                out.write(f"Left persona mode ({active}).\n")
+            else:
+                out.write("Persona mode is already off.\n")
+            out.flush()
+            return None
+        try:
+            name = session.persona_console.enter(arg)
+        except KeyError:
+            out.write(f"Unknown identity: {arg}. Use /personas.\n")
+            out.flush()
+            return None
+        out.write(
+            f"[persona] Simulating {name}. Replies are AI reconstructions "
+            "and never ground truth.\n"
+        )
+        out.flush()
+        return None
     if lname in ("/identities", "/identity"):
         try:
             from pathlib import Path as _P
@@ -652,6 +811,17 @@ def _handle_command(
                 sub = parts[0].lower() if parts else ""
                 if sub == "analyze" and len(parts) >= 2:
                     out.write(_icli.cmd_analyze(_db, parts[1]) + "\n")
+                elif sub == "answer" and len(parts) >= 3:
+                    out.write(_icli.cmd_answer_open(_db, parts[1], parts[2]) + "\n")
+                elif sub == "calibrate" and len(parts) >= 3:
+                    provider = getattr(session.app, "ai", None)
+                    provider = getattr(provider, "provider", None) if provider else None
+                    if provider is None:
+                        out.write("Calibration requires an AI provider "
+                                  "(start with a provider, e.g. Ollama).\n")
+                    else:
+                        gen = _make_generate(provider)
+                        out.write(_icli.cmd_calibrate(_db, parts[1], parts[2], gen) + "\n")
                 elif sub in ("show", "questions", "export", "forget", "simulate") and len(parts) >= 2:
                     fn = {"show": _icli.cmd_identity, "questions": _icli.cmd_questions,
                           "export": _icli.cmd_export, "forget": _icli.cmd_forget}[sub] if sub != "simulate" else None
@@ -662,7 +832,7 @@ def _handle_command(
                         r = fn(_db, parts[1])
                         out.write((r if isinstance(r, str) else str(r)) + "\n")
                 else:
-                    out.write("Usage: /identity analyze <file> | show|questions|simulate|forget|export <name>\n")
+                    out.write("Usage: /identity analyze <file> | answer <name> <answer> | show|questions|simulate|forget|export <name> | calibrate <name> <conversation>\n")
         except Exception as exc:
             out.write(f"Identity command failed: {exc}\n")
         out.flush()

@@ -38,7 +38,7 @@ def test_startup_panels_and_legacy_strings():
     out = stream.getvalue()
     assert "A.S.I.S." in out and "MODEL:" in out  # header + status panels
     assert "echo:hello" in out  # streamed response content
-    assert "ENTER Send" in out  # footer goodbye panel
+    assert "[Enter] Send" in out  # footer goodbye panel
 
 
 def test_composer_and_user_bubble_and_mode_status():

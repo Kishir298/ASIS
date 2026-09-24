@@ -19,7 +19,7 @@ class TypingRenderer:
 
     def __init__(
         self,
-        prefix: str = "A.S.I.S.\n",
+        prefix: str = "A.S.I.S. > ",
         char_delay: float = 0.012,
         stream=None,
     ) -> None:

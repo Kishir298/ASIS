@@ -70,6 +70,22 @@ def cmd_answer(db: Path, name: str, question: str, answer: str) -> str:
     store.save(target, reason="user answer")
     return f"[ OK ] User-confirmed fact stored: {r['stored']}."
 
+
+def cmd_answer_open(db: Path, name: str, answer: str) -> str:
+    """Answer the highest-impact open question for ``name``."""
+    store = _store(db)
+    target = next((i for i in store.list_all()
+                   if i.display_name.lower() == name.lower() or i.identity_id == name), None)
+    if target is None:
+        return f"Unknown identity: {name}"
+    gaps = detect_gaps(target)
+    if not gaps:
+        return f"No open questions for {name}."
+    q = gaps[0]["question"]
+    r = apply_user_answer(target, q, answer)
+    store.save(target, reason="user answer")
+    return f"[ OK ] Stored answer for \"{q}\" (provenance USER_CONFIRMED)."
+
 def cmd_simulate_prompt(db: Path, name: str, incoming: str) -> dict[str, Any]:
     store = _store(db)
     target = next((i for i in store.list_all()
@@ -100,3 +116,29 @@ def cmd_forget(db: Path, name: str) -> str:
         return f"Unknown identity: {name}"
     store.delete(target.identity_id)
     return f"[ OK ] Deleted {target.display_name} + derived records."
+
+
+def cmd_calibrate(db: Path, name: str, conversation_id: str, generate) -> str:
+    """Run self-calibration for ``name`` and persist corrections/versions."""
+    from .pipeline import calibrate_conversation
+
+    store = _store(db)
+    target = next((i for i in store.list_all()
+                   if i.display_name.lower() == name.lower() or i.identity_id == name), None)
+    if target is None:
+        return f"Unknown identity: {name}"
+    res = calibrate_conversation(db, conversation_id, store, generate, target=name)
+    r = res["results"].get(name)
+    if r is None:
+        return f"Calibration unavailable: {name} not in conversation {conversation_id}."
+    lines = [f"[ OK ] Calibrated {name} ({r['tested']} predictions, "
+             f"avg composite {r['avg_composite']}, holdout {r['holdout_avg']})"]
+    if r["mismatches"]:
+        lines.append("Mismatches:")
+        lines.extend(f"  {m['exchange']}: {m['mismatch']} (score {m['score']})"
+                     for m in r["mismatches"][:8])
+    if r["updated"]:
+        lines.append("[ OK ] Persona version updated from consistent mismatches.")
+    else:
+        lines.append("Style within tolerance; persona version unchanged.")
+    return "\n".join(lines)

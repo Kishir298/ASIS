@@ -154,8 +154,8 @@ def test_renderer_exact_output_no_extra_lines():
     text = "Hello! How can I help?"
     result = TypingRenderer(stream=stream, char_delay=0).render(text)
     assert result == text
-    assert stream.getvalue().count("\n") == 2
-    assert stream.getvalue() == f"A.S.I.S.\n{text}\n"
+    assert stream.getvalue().count("\n") == 1
+    assert stream.getvalue() == f"A.S.I.S. > {text}\n"
 
 
 def test_renderer_progressive_and_recoverable():
@@ -270,7 +270,7 @@ def test_voice_response_rendered_in_loop():
     assert code == 0
     out = stream.getvalue()
     assert "VOICE MODE" in out
-    assert "tell me about black holes" in out and "You\n" in out
+    assert "tell me about black holes" in out and "You >" in out
     assert "A black hole is..." in out
     assert tts.synthesized == ["A black hole is..."]
 
