@@ -43,6 +43,7 @@ but optional uplink; R.E.S.C.S. remains a future boundary; see
 | `docs/coding.md` | A.S.C.S. modes, workspace, coding tools, permissions |
 | `docs/tools-permissions.md` | tools, permissions, sandbox, secrets |
 | `docs/voice.md` | pipeline, engines, mock-vs-real matrix |
+| `docs/voice-manual-test.md` | manual voice hardware checklist (NOT PERFORMED) |
 | `docs/cli-testing.md` | CLI flags, tests, dependencies, workflow |
 | `docs/integration.md` | C.O.R.E. (real adapter) / R.E.S.C.S. future boundary |
 
@@ -55,16 +56,22 @@ ASIS/
 │   ├── app/               # application orchestration
 │   ├── cli/               # `asis` entry point + voice loop
 │   ├── configuration/     # centralized settings
+│   ├── documents/         # document store, parsers, context injection
+│   ├── identities/        # identity analysis / matching / timeline
 │   ├── integrations/      # C.O.R.E. adapter (real) / R.E.S.C.S. (future)
 │   ├── memory/            # local memory provider
+│   ├── storage/           # storage domains + migration
 │   ├── tools/             # tool system + permissions
 │   ├── calculator/       # offline calculator engine (SymPy-backed, verified)
 │   ├── translation/      # offline translation engine (registry, detection, providers)
 │   ├── web/              # web provider (search + fetch, SSRF guard)
 │   ├── voice/             # sole production voice implementation
-│   └── ...
+│   └── ...                # full map: `docs/architecture.md`
 ├── tests/                 # canonical test suite
 ├── requirements/          # base / ai / voice dependency sets
+├── scripts/               # launcher helpers
+├── setup_venv.py          # venv bootstrap (uv-based)
+├── .env.example           # config template (copy to `.env`)
 ├── pyproject.toml
 └── requirements.txt
 ```

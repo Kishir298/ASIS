@@ -129,10 +129,8 @@ claim 100% coverage.
 
 ## Dependencies (`pyproject.toml`, `requires-python = >=3.11`)
 
-- **Core (mandatory):** `platformdirs`, `psutil` (declared in
-  `pyproject.toml`/`requirements/base.txt` but not yet imported by any
-  `asis/` module — reserved for future system/resource features),
-  `python-dotenv`.
+- **Core (mandatory):** `platformdirs`, `python-dotenv`, `sympy`
+  (local offline math; see `pyproject.toml`/`requirements/base.txt`).
 - **AI (optional):** `requests` (the Ollama provider uses HTTP via
   `requests`; the `ollama` client package is not used). A base install
   without extras still runs the mock/offline CLI: `OllamaProvider` is
