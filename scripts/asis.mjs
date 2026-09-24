@@ -37,6 +37,8 @@ const IS_WINDOWS = os.platform() === "win32";
 const VENV_PYTHON = IS_WINDOWS
   ? join(ROOT, ".venv", "Scripts", "python.exe")
   : join(ROOT, ".venv", "bin", "python");
+// Launcher used to create the venv: `py` on Windows, `python3` on POSIX.
+const PYTHON_LAUNCHER = IS_WINDOWS ? "py" : "python3";
 // Overridable for testing (e.g. ASIS_OLLAMA_PORT=1 forces the down-path).
 const OLLAMA_HOST = process.env.ASIS_OLLAMA_HOST ?? "127.0.0.1";
 const OLLAMA_PORT = Number(process.env.ASIS_OLLAMA_PORT ?? 11434);
@@ -104,17 +106,20 @@ function ensureVenv() {
   }
   if (commandExists("uv")) {
     console.error("asis: creating .venv via setup_venv.py (uv) ...");
-    const code = runForeground("py", ["setup_venv.py"]);
+    const code = runForeground(PYTHON_LAUNCHER, ["setup_venv.py"]);
     if (code === 0 && existsSync(VENV_PYTHON)) return;
     console.error("asis: setup_venv.py failed; falling back to plain venv ...");
   } else {
     console.error("asis: 'uv' not found; falling back to plain venv ...");
   }
   let created = false;
-  for (const launcher of [
-    ["py", "-3.12"],
-    ["py", "-3"],
-  ]) {
+  const fallbacks = IS_WINDOWS
+    ? [
+        ["py", "-3.12"],
+        ["py", "-3"],
+      ]
+    : [[PYTHON_LAUNCHER]];
+  for (const launcher of fallbacks) {
     const result = runQuiet(launcher[0], [
       ...launcher.slice(1),
       "-m",
@@ -128,7 +133,9 @@ function ensureVenv() {
   }
   if (!created) {
     fail(
-      "could not create .venv. Install uv (https://docs.astral.sh/uv/) or Python 3.12+ with the 'py' launcher and retry."
+      IS_WINDOWS
+        ? "could not create .venv. Install uv (https://docs.astral.sh/uv/) or Python 3.12+ with the 'py' launcher and retry."
+        : "could not create .venv. Install uv (https://docs.astral.sh/uv/) or have Python 3.12+ available as 'python3' and retry."
     );
   }
   runForeground(VENV_PYTHON, ["-m", "pip", "install", "--upgrade", "pip"]);
