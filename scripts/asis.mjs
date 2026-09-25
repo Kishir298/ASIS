@@ -98,6 +98,8 @@ function ensureVenv() {
       "requirements.txt",
       "-r",
       "requirements/development.txt",
+      "-r",
+      "requirements/tui.txt",
     ]);
     if (code !== 0) {
       fail("pip install failed; run setup_venv.py manually and retry.");
@@ -147,6 +149,8 @@ function ensureVenv() {
     "requirements.txt",
     "-r",
     "requirements/development.txt",
+    "-r",
+    "requirements/tui.txt",
   ]);
   if (deps !== 0) fail("pip install failed.");
 }
