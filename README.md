@@ -203,6 +203,7 @@ npm run asis:test           # same suite via the one-command launcher
 pip install -e .      # installs the `asis` console script
 asis                  # persistent interactive terminal (text/voice/docs/persona)
 asis --help
+asis --preview        # render the CLI interface layout and exit (no model, no boot)
 asis --message "hi"   # single shot (default model qwen3:14b)
 asis voice            # voice loop (mock engines by default)
 python -m asis        # alias for the asis console script (works from source)

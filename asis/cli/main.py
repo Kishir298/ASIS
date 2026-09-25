@@ -205,6 +205,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="LEVEL",
         help="log level override (DEBUG, INFO, WARNING, ERROR, CRITICAL)",
     )
+    parser.add_argument(
+        "--preview", "--dry-run",
+        action="store_true",
+        help="render the CLI interface layout and exit (no model, no boot)",
+    )
     return parser
 
 
@@ -458,6 +463,18 @@ def entry(argv: Sequence[str] | None = None) -> int:
 
     if args.core_status:
         print(core_status_line())
+        return 0
+
+    if args.preview:
+        from asis.cli.terminal import layout as _term_layout
+
+        w = _term_layout.terminal_width()
+        model = getattr(settings.ai, "model", "qwen3:14b")
+        print(_term_layout.header(online=True))
+        print(_term_layout.status_panel(model=model, online=True, memory=True, tools=True, voice="READY"))
+        print(_term_layout.composer(mode="TEXT", attachments=[]))
+        print(_term_layout.bottom_strip(mode="TEXT", model=model, ollama=True, memory=True, tools=True, voice="READY"))
+        print(_term_layout.footer(w))
         return 0
 
     identity = build_identity()

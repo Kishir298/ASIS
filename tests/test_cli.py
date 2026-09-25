@@ -72,3 +72,33 @@ def test_build_parser_defaults():
 def test_build_memory_uses_given_storage(tmp_path):
     manager = build_memory(tmp_path / "mem.db")
     assert manager is not None
+
+
+def test_preview_flag_renders_layout(capsys):
+    code = entry(["--preview"])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    # Header
+    assert "A.S.I.S." in out
+    assert "A Smart Intelligence System" in out
+    assert "● ONLINE" in out
+    # Status panel
+    assert "MODEL:" in out
+    assert "OLLAMA:" in out
+    assert "MEMORY:" in out
+    assert "TOOLS:" in out
+    assert "VOICE:" in out
+    # Composer
+    assert "MODE:" in out
+    assert "[+] Attach" in out
+    assert "[Enter] Send" in out
+    assert "[Esc] Cancel" in out
+    # Bottom strip
+    assert "TEXT MODE" in out
+    assert "OLLAMA ●" in out
+    assert "MEMORY ●" in out
+    assert "TOOLS ●" in out
+    assert "VOICE ●" in out
+    # Footer
+    assert "[Ctrl+C] Exit" in out
