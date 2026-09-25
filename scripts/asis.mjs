@@ -85,7 +85,7 @@ function commandExists(cmd) {
 
 function ensureVenv() {
   if (existsSync(VENV_PYTHON)) {
-    const probe = runQuiet(VENV_PYTHON, ["-c", "import asis.cli.main"]);
+    const probe = runQuiet(VENV_PYTHON, ["-c", "import asis.cli.main; import textual"]);
     if (probe.status === 0) return; // healthy venv, nothing to do
     console.error(
       "asis: venv python or 'asis' import is broken; reinstalling light deps..."
