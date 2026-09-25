@@ -210,6 +210,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="render the CLI interface layout and exit (no model, no boot)",
     )
+    parser.add_argument(
+        "--tui",
+        action="store_true",
+        help="launch the Textual TUI interface (alternate-screen)",
+    )
     return parser
 
 
@@ -438,9 +443,16 @@ def entry(argv: Sequence[str] | None = None) -> int:
         from asis.cli.calculate import run_calculate
 
         return run_calculate(raw[1:])
+    if raw and raw[0] == "tui":
+        from asis.tui.__main__ import entry as tui_entry
+        return tui_entry(raw[1:])
 
     args = build_parser().parse_args(raw)
     apply_cli_log_level(args)
+
+    if args.tui:
+        from asis.tui.__main__ import entry as tui_entry
+        return tui_entry([])
 
     if args.version:
         print(f"{settings.app_name} {settings.app_version}")

@@ -11,7 +11,6 @@ one-time privacy notice is shown (AI reconstruction, never the real person).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from asis.ai.models import AIMessage, MessageRole
 from asis.identities.model import IdentityRecord

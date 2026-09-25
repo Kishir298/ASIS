@@ -1,0 +1,3 @@
+# TUI (Textual) dependencies for A.S.I.S. terminal interface
+textual>=0.70
+textual-dev>=0.70
