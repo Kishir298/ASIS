@@ -801,6 +801,7 @@ def _handle_command(
     if lname in ("/identities", "/identity"):
         try:
             from pathlib import Path as _P
+
             from asis.configuration.settings import settings as _settings
             from asis.identities import cli as _icli
             _db = _P(_settings.paths.memory) / "identities.db"

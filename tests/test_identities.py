@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from asis.identities import analysis as A
 from asis.identities import baseline as B
 from asis.identities import calibration as C
-from asis.identities import exchanges as E
-from asis.identities import analysis as A
 from asis.identities import cli as ICLI
+from asis.identities import exchanges as E
 from asis.identities.matching import apply_incremental_update, match_identity
 from asis.identities.model import IdentityRecord
 from asis.identities.persona import build_persona, route_mode

@@ -30,7 +30,6 @@ from asis.events.bus import EventBus
 from asis.identity.identity import Identity
 from asis.logging.logger import get_logger
 from asis.system.interrupt import InterruptCoordinator
-from asis.tools.executor import ToolExecutor
 from asis.tools.result import ToolResult
 from asis.tools.router import ToolRouter
 

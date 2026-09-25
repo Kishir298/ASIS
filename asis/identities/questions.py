@@ -21,7 +21,7 @@ def detect_gaps(ident) -> list[dict[str, Any]]:
 
 
 def apply_user_answer(ident, question: str, answer: str) -> dict:
-    from .model import Fact, Provenance, MemoryClass
+    from .model import Fact, MemoryClass, Provenance
     key = question.strip().lower()[:80]
     ident.known_facts[key] = Fact(key=key, value=answer,
                                   provenance=Provenance.USER_CONFIRMED,
