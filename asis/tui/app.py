@@ -60,6 +60,7 @@ from asis.voice.engines.mock import (
     MockTextToSpeech,
     MockVadDetector,
 )
+from asis.tui.boot_orchestrator import run_boot_sequence_legacy
 from asis.logging.logger import configure_logging
 
 
@@ -83,6 +84,9 @@ class ASISTUI(App):
         (30, "-normal"),     # 30-44 rows: standard layout
         (45, "-tall"),       # ≥45 rows: expanded layout with more conversation space
     ]
+
+    # Theme mode (dark/light) - reactive so CSS refreshes on change
+    theme_mode = Reactive("dark")
 
     # Color theme matching spec exactly
     CSS = """
@@ -188,6 +192,7 @@ class ASISTUI(App):
         Binding("escape", "cancel", "Cancel", show=True),
         Binding("tab", "toggle_mode", "Toggle Mode", show=False),
         Binding("ctrl+b", "toggle_sidebar", "Toggle Sidebar", show=False),
+        Binding("ctrl+t", "toggle_theme", "Toggle Theme", show=True),
     ]
 
     def __init__(self, **kwargs: Any) -> None:
@@ -206,8 +211,25 @@ class ASISTUI(App):
         """Return CSS variables for theming.
         
         These variables can be used in CSS with $variable syntax.
-        Override this method to customize the theme.
+        Returns different values based on theme_mode (dark/light).
         """
+        if self.theme_mode == "light":
+            return {
+                "background": "#fdf6e3",       # solarized light base
+                "surface": "#eee8d5",          # solarized light surface
+                "panel-border": "#93a1a1",     # solarized light border
+                "text": "#586e75",             # solarized light text
+                "text-dim": "#93a1a1",         # solarized light dim text
+                "identity-teal": "#2aa198",    # teal accent
+                "prompt-cyan": "#268bd2",      # cyan prompt
+                "prompt-amber": "#b58900",     # amber prompt
+                "tool-tag": "#268bd2",         # tool tags
+                "success": "#859900",          # green success
+                "warning": "#cb4b16",          # amber warning
+                "error": "#dc322f",            # red error
+                "accent": "#2aa198",           # teal accent
+            }
+        # Default dark theme
         return {
             "background": "#0a0e14",
             "surface": "#111820",
@@ -414,114 +436,21 @@ class ASISTUI(App):
                 self._handle_exception(error)
 
     async def _run_boot_sequence(self) -> None:
-        """Run the boot sequence asynchronously."""
+        """Run the boot sequence asynchronously using the BootOrchestrator."""
         try:
-            # Build identity
-            identity = build_identity()
-            self.state.add_boot_log("OK", "Identity loaded")
-
-            # Build memory
-            db_path = settings.paths.memory / settings.memory.database_name
-            db_path.parent.mkdir(parents=True, exist_ok=True)
-            memory = MemoryManager(MemoryStorage(MemoryDatabase(db_path)))
-            self.state.memory_ready = True
-            self.state.add_boot_log("OK", "Memory initialized")
-
-            # Build tool router
-            tool_router = build_default_tool_router()
-            ensure_all_tools = __import__("asis.app.routers", fromlist=["ensure_all_tools"]).ensure_all_tools
-            ensure_all_tools(tool_router, None)
-            self.state.tools_ready = True
-            self.state.add_boot_log("OK", "Tools initialized")
-
-            # Check Ollama
-            provider_name = settings.ai.provider
-            if provider_name == "ollama":
-                provider = OllamaProvider(
-                    model=settings.ai.model,
-                    host=settings.ai.endpoint,
-                    timeout=settings.ai.request_timeout,
-                    temperature=settings.ai.temperature,
-                    retries=settings.network.retries,
-                )
-                self.state.add_boot_log("BOOT", "Connecting to Ollama...")
-
-                # Check availability
-                available = False
-                try:
-                    avail_fn = getattr(provider, "available", None)
-                    if callable(avail_fn):
-                        try:
-                            available = avail_fn(timeout=5.0)
-                        except TypeError:
-                            available = avail_fn()
-                except Exception:
-                    available = False
-
-                if available:
-                    self.state.ollama_online = True
-                    self.state.add_boot_log("OK", "Ollama ready")
-                else:
-                    self.state.add_boot_log("FAIL", "Ollama server not reachable")
-                    # Fall back to mock
-                    provider = MockAIProvider(model=settings.ai.model)
-
-                self.state.model_name = settings.ai.model
-            else:
-                provider = MockAIProvider(model=settings.ai.model)
-                self.state.model_name = settings.ai.model
-
-            # Verify model readiness
-            self.state.add_boot_log("BOOT", "Verifying model...")
-            try:
-                from asis.ai.models import AIMessage, MessageRole
-                messages = [AIMessage(role=MessageRole.USER, content="hello")]
-                response = provider.chat(messages)
-                content = getattr(response, "content", "")
-                text = content if isinstance(content, str) else str(content or "")
-                if text.strip():
-                    self.state.model_ready = True
-                    self.state.add_boot_log("OK", "Model ready")
-                else:
-                    raise BootError("Model readiness probe returned empty response")
-            except Exception as exc:
-                self.state.add_boot_log("FAIL", f"Model readiness check failed: {exc}")
-                # Use mock as fallback
-                provider = MockAIProvider(model=settings.ai.model)
-                self.state.model_ready = True
-                self.state.add_boot_log("OK", "Model ready (mock fallback)")
-
-            # Build AI manager
-            ai = AIManager(provider=provider, event_bus=self.event_bus)
-
-            # Build assistant app
-            self.assistant_app = AssistantApp(
-                identity=identity,
-                ai=ai,
-                memory=memory,
-                tools_router=tool_router,
+            components = await run_boot_sequence_legacy(
+                state=self.state,
                 event_bus=self.event_bus,
-                mode=AppAssistantMode.GENERAL,
+                boot_log_panel=self.query_one(BootLogPanel),
             )
 
-            # Set up voice pipeline (mock for now)
-            try:
-                self.voice_pipeline = VoicePipeline(
-                    audio_input=MockAudioInput([]),
-                    speech_recognizer=MockSpeechRecognizer(),
-                    speaker_identifier=MockSpeakerIdentifier(),
-                    tts=MockTextToSpeech(),
-                    audio_output=MockAudioOutput(),
-                    event_bus=self.event_bus,
-                    vad=MockVadDetector(),
-                )
-                self.state.voice_state = "READY"
-                self.state.add_boot_log("OK", "Voice pipeline initialized")
-            except Exception as exc:
-                self.state.voice_state = "ERROR"
-                self.state.add_boot_log("WARN", f"Voice pipeline unavailable: {exc}")
+            # Assign components to instance attributes
+            self.assistant_app = components.get("assistant_app")
+            self.voice_pipeline = components.get("voice_pipeline")
 
-            self.state.add_boot_log("OK", "A.S.I.S. ready.")
+            # The boot sequence already sets these on state, but we also need
+            # to keep local references for backward compatibility
+            self._ollama_owned = components.get("ollama_owned", False)
 
         except Exception as exc:
             self.state.add_boot_log("FAIL", f"Boot failed: {exc}")
@@ -720,8 +649,39 @@ class ASISTUI(App):
             await conv_panel.add_system_message("[Interrupted]")
 
     async def on_input_box_attach_clicked(self, message: InputBox.AttachClicked) -> None:
-        """Handle attach button - shows usage hint since TUI can't open file dialogs."""
-        await self._handle_slash_command("/upload ")
+        """Handle attach button - open file browser modal."""
+        from asis.tui.widgets.file_browser_modal import FileBrowserModal
+
+        def on_file_selected(path: Path | None) -> None:
+            if path is None:
+                return
+
+            import os
+            from pathlib import Path
+
+            file_path = Path(path).expanduser().resolve()
+            if not file_path.exists():
+                asyncio.create_task(conv_panel.add_system_message(f"File not found: {path}"))
+                return
+            if not file_path.is_file():
+                asyncio.create_task(conv_panel.add_system_message(f"Not a file: {path}"))
+                return
+
+            # Determine file type/icon
+            suffix = file_path.suffix.lower()
+            icon_map = {
+                ".py": "🐍", ".js": "📜", ".ts": "📜", ".json": "📋",
+                ".md": "📝", ".txt": "📄", ".pdf": "📕", ".csv": "📊",
+                ".png": "🖼️", ".jpg": "🖼️", ".jpeg": "🖼️", ".gif": "🖼️",
+                ".mp3": "🎵", ".wav": "🎵", ".mp4": "🎬", ".mov": "🎬",
+            }
+            icon = icon_map.get(suffix, "📎")
+            name = file_path.name
+            self.state.add_attachment(name, str(file_path))
+            asyncio.create_task(conv_panel.add_system_message(f"Attached: {icon} {name} ({file_path})"))
+
+        conv_panel = self.query_one(ConversationPanel)
+        self.push_screen(FileBrowserModal(), callback=on_file_selected)
 
     async def on_mode_footer_panel_mode_changed(self, message: ModeFooterPanel.ModeChanged) -> None:
         """Handle mode toggle from footer panel."""
@@ -760,6 +720,17 @@ class ASISTUI(App):
                 left_col.remove_class("collapsed")
             else:
                 left_col.add_class("collapsed")
+
+    def action_toggle_theme(self) -> None:
+        """Toggle theme between dark and light (Ctrl+T)."""
+        self.theme_mode = "light" if self.theme_mode == "dark" else "dark"
+        self.refresh_css()
+        try:
+            conv_panel = self.query_one(ConversationPanel)
+            asyncio.create_task(conv_panel.add_system_message(f"Theme: {self.theme_mode}"))
+        except Exception:
+            # Ignore if ConversationPanel not available (e.g., in tests)
+            pass
 
     def action_cancel(self) -> None:
         """Handle ESC key."""

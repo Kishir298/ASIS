@@ -48,6 +48,7 @@ tui = [
 dev = [
     "pytest>=8",
     "pytest-cov>=5",
+    "pytest-asyncio>=0.23",
     "ruff",
     "black",
 ]
@@ -63,6 +64,7 @@ include = ["asis*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+asyncio_mode = "auto"
 
 [tool.black]
 line-length = 88

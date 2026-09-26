@@ -11,6 +11,7 @@ from asis.tui.widgets.input_box import InputBox
 from asis.tui.widgets.voice_bar import VoiceBar
 from asis.tui.widgets.status_bar import StatusBar
 from asis.tui.widgets.permission_modal import PermissionModal
+from asis.tui.widgets.file_browser_modal import FileBrowserModal, AttachFileScreen
 
 __all__ = [
     "IdentityPanel",
@@ -24,4 +25,6 @@ __all__ = [
     "VoiceBar",
     "StatusBar",
     "PermissionModal",
+    "FileBrowserModal",
+    "AttachFileScreen",
 ]
