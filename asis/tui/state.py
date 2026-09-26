@@ -115,6 +115,7 @@ class AppState:
 
     # Layout state
     left_column_collapsed: bool = False
+    left_column_width: int | None = None
     terminal_width: int = 120
     terminal_height: int = 38
 
@@ -231,6 +232,9 @@ class AppState:
         """Get left column width in columns."""
         if self.left_column_collapsed:
             return 0
+        # Use custom width if set, otherwise calculate from terminal width
+        if self.left_column_width is not None and self.left_column_width > 0:
+            return min(self.left_column_width, self.terminal_width - 20)
         return max(28, self.terminal_width // 4)
 
     def get_right_column_width(self) -> int:
