@@ -210,6 +210,14 @@ class CodingSettings:
 
 
 @dataclass(frozen=True)
+class TUISettings:
+    """TUI-specific persistent user preferences."""
+    sidebar_collapsed: bool = False
+    theme: str = "dark"
+    left_column_width: int = 28
+
+
+@dataclass(frozen=True)
 class IdentitySettings:
     name: str
     title: str
@@ -246,6 +254,7 @@ class Settings:
     runtime: RuntimeSettings
     core: CoreSettings
     coding: CodingSettings
+    tui: TUISettings
     paths: PathSettings
 
 
@@ -523,6 +532,14 @@ def _build_coding_settings(get_s, get_i, d) -> CodingSettings:
     )
 
 
+def _build_tui_settings(get_s, get_b, get_i, d) -> TUISettings:
+    return TUISettings(
+        sidebar_collapsed=get_b("ASIS_TUI_SIDEBAR_COLLAPSED", d.TUI_SIDEBAR_COLLAPSED),
+        theme=get_s("ASIS_TUI_THEME", d.TUI_THEME),
+        left_column_width=get_i("ASIS_TUI_LEFT_COLUMN_WIDTH", d.TUI_LEFT_COLUMN_WIDTH),
+    )
+
+
 def _build_path_settings(environment) -> PathSettings:
     return PathSettings(
         data=get_data_directory(environment.get_path("ASIS_DATA_DIRECTORY")),
@@ -574,6 +591,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             voice=_build_voice_settings(get_s, get_i, get_f, d),
             runtime=_build_runtime_settings(get_s, get_b, get_i, d),
             coding=_build_coding_settings(get_s, get_i, d),
+            tui=_build_tui_settings(get_s, get_b, get_i, d),
             paths=_build_path_settings(environment),
         )
     return validate_settings(built)

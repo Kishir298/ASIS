@@ -39,6 +39,7 @@ from asis.tui.widgets import (
     VoiceBar,
     StatusBar,
 )
+from asis.tui.config import load_tui_settings, save_tui_setting
 
 # Import backend modules
 from asis.ai.manager import AIManager
@@ -106,6 +107,13 @@ class ASISTUI(App):
 
     #left-column {
         display: none;
+        transition: width 200ms ease-in-out, opacity 150ms ease-in-out;
+    }
+
+    /* Collapsed sidebar in grid mode (normal/wide screens) */
+    #left-column.collapsed {
+        display: none;
+        animation: slide-out 150ms ease-in forwards;
     }
 
     /* Expanded sidebar on narrow screens (overlay via Ctrl+B) */
@@ -119,6 +127,29 @@ class ASISTUI(App):
         background: $surface;
         border-right: solid $panel-border;
         z-index: 100;
+        animation: slide-in 200ms ease-out;
+    }
+
+    @keyframes slide-in {
+        from {
+            opacity: 0;
+            transform: translateX(-100%);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    @keyframes slide-out {
+        from {
+            opacity: 1;
+            transform: translateX(0);
+        }
+        to {
+            opacity: 0;
+            transform: translateX(-100%);
+        }
     }
 
     #right-column {
@@ -197,7 +228,15 @@ class ASISTUI(App):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
+        
+        # Load TUI settings from config file
+        tui_config = load_tui_settings()
+        
         self.state = AppState()
+        # Apply saved TUI settings to state
+        self.state.left_column_collapsed = tui_config.get("sidebar_collapsed", False)
+        self.theme_mode = tui_config.get("theme", "dark")
+        
         self.event_bus = EventBus()
         self.event_bridge: EventBridge | None = None
         self.assistant_app: AssistantApp | None = None
@@ -711,15 +750,22 @@ class ASISTUI(App):
             if left_col.has_class("expanded"):
                 left_col.remove_class("expanded")
                 left_col.add_class("collapsed")
+                self.state.left_column_collapsed = True
             else:
                 left_col.remove_class("collapsed")
                 left_col.add_class("expanded")
+                self.state.left_column_collapsed = False
         else:
             # Normal/wide screen: toggle collapsed in grid
             if left_col.has_class("collapsed"):
                 left_col.remove_class("collapsed")
+                self.state.left_column_collapsed = False
             else:
                 left_col.add_class("collapsed")
+                self.state.left_column_collapsed = True
+        
+        # Persist sidebar state
+        save_tui_setting("sidebar_collapsed", self.state.left_column_collapsed)
 
     def action_toggle_theme(self) -> None:
         """Toggle theme between dark and light (Ctrl+T)."""
@@ -731,6 +777,9 @@ class ASISTUI(App):
         except Exception:
             # Ignore if ConversationPanel not available (e.g., in tests)
             pass
+        
+        # Persist theme preference
+        save_tui_setting("theme", self.theme_mode)
 
     def action_cancel(self) -> None:
         """Handle ESC key."""

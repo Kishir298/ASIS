@@ -17,6 +17,18 @@ from textual.widgets import Input, Static
 from asis.tui.app import ASISTUI
 from asis.tui.widgets.file_browser_modal import FileBrowserModal
 from asis.tui.state import AppState
+from asis.tui.config import get_tui_config_path
+
+
+@pytest.fixture(autouse=True)
+def clean_tui_config():
+    """Clean up TUI config file before and after each test."""
+    config_path = get_tui_config_path()
+    if config_path.exists():
+        config_path.unlink()
+    yield
+    if config_path.exists():
+        config_path.unlink()
 
 
 class TestASISTUIBoot:
