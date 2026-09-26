@@ -19,8 +19,8 @@ class BootLogPanel(Widget):
     BootLogPanel {
         width: 100%;
         height: 100%;
-        border: solid $panel-border;
-        background: $background;
+        border: solid #30363d;
+        background: #0a0e14;
     }
 
     BootLogPanel > VerticalScroll {
@@ -32,30 +32,30 @@ class BootLogPanel(Widget):
     BootLogPanel .log-line {
         width: 100%;
         height: 1;
-        color: $text;
+        color: #c9d1d9;
     }
 
     BootLogPanel .log-boot {
-        color: $text;
+        color: #c9d1d9;
     }
 
     BootLogPanel .log-ok {
-        color: $success;
+        color: #3fb950;
     }
 
     BootLogPanel .log-fail {
-        color: $error;
+        color: #f85149;
     }
 
     BootLogPanel .log-warn {
-        color: $warning;
+        color: #d29922;
     }
 
     BootLogPanel .caption {
         width: 100%;
         height: 1;
         content-align: center bottom;
-        color: $text-dim;
+        color: #6e7681;
         text-style: dim;
         margin-top: 1;
     }

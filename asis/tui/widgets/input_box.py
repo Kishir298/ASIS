@@ -25,8 +25,8 @@ class InputBox(Widget):
     InputBox {
         width: 100%;
         height: 100%;
-        border: solid $panel-border;
-        background: $background;
+        border: solid #30363d;
+        background: #0a0e14;
         padding: 1;
     }
 
@@ -41,42 +41,42 @@ class InputBox(Widget):
     }
 
     InputBox .prompt {
-        color: $prompt-cyan;
+        color: #61dafb;
         width: auto;
     }
 
     InputBox Input {
         width: 1fr;
-        background: $surface;
+        background: #111820;
         border: none;
-        color: $text;
+        color: #c9d1d9;
         padding: 0;
     }
 
     InputBox .attach-btn {
         width: auto;
-        background: $surface;
-        border: solid $panel-border;
-        color: $text;
+        background: #111820;
+        border: solid #30363d;
+        color: #c9d1d9;
         margin-left: 1;
     }
 
     InputBox .attach-btn:hover {
-        background: $accent;
-        color: $background;
+        background: #5ee6d0;
+        color: #0a0e14;
     }
 
     InputBox .hints {
         width: 100%;
         height: 1;
         content-align: right middle;
-        color: $text-dim;
+        color: #6e7681;
         text-style: dim;
         margin-top: 1;
     }
 
     InputBox .hint-key {
-        color: $text;
+        color: #c9d1d9;
         text-style: bold;
     }
     """
@@ -94,9 +94,9 @@ class InputBox(Widget):
             # Empty space for multiline (handled by Input height)
             yield Static("", id="spacer")
             yield Static(
-                "[span.hint-key][Enter][/span] Send  "
-                "[span.hint-key][Shift+Enter][/span] New Line  "
-                "[span.hint-key][Esc][/span] Cancel",
+                "[bold]Enter[/bold] Send  "
+                "[bold]Shift+Enter[/bold] New Line  "
+                "[bold]Esc[/bold] Cancel",
                 classes="hints",
                 markup=True
             )

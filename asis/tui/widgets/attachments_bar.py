@@ -19,8 +19,8 @@ class AttachmentsBar(Widget):
     AttachmentsBar {
         width: 100%;
         height: 100%;
-        border: solid $panel-border;
-        background: $background;
+        border: solid #30363d;
+        background: #0a0e14;
         padding: 0 1;
     }
 
@@ -30,34 +30,34 @@ class AttachmentsBar(Widget):
     }
 
     AttachmentsBar .label {
-        color: $text-dim;
+        color: #6e7681;
         text-style: dim;
         width: auto;
     }
 
     AttachmentsBar .chip {
-        background: $surface;
-        border: solid $panel-border;
+        background: #111820;
+        border: solid #30363d;
         padding: 0 1;
         margin-right: 1;
         min-width: 0;
     }
 
     AttachmentsBar .chip-label {
-        color: $text;
+        color: #c9d1d9;
     }
 
     AttachmentsBar .chip-close {
-        color: $text-dim;
+        color: #6e7681;
         margin-left: 1;
     }
 
     AttachmentsBar .chip-close:hover {
-        color: $error;
+        color: #f85149;
     }
 
     AttachmentsBar .no-attachments {
-        color: $text-dim;
+        color: #6e7681;
         text-style: dim;
     }
     """

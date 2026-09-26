@@ -19,20 +19,20 @@ class IdentityPanel(Widget):
     IdentityPanel {
         width: 100%;
         height: 100%;
-        border: solid $panel-border;
-        background: $background;
+        border: solid #30363d;
+        background: #0a0e14;
     }
 
     IdentityPanel > Static {
         width: 100%;
         content-align: center middle;
         text-style: bold;
-        color: $identity-teal;
+        color: #5ee6d0;
     }
 
     IdentityPanel > Static.tagline {
         text-style: dim;
-        color: $text-dim;
+        color: #6e7681;
     }
     """
 

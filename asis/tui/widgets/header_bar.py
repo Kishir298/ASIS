@@ -18,8 +18,8 @@ class HeaderBar(Widget):
     HeaderBar {
         width: 100%;
         height: 100%;
-        border: solid $panel-border;
-        background: $background;
+        border: solid #30363d;
+        background: #0a0e14;
         padding: 0 1;
     }
 
@@ -30,12 +30,12 @@ class HeaderBar(Widget):
     }
 
     HeaderBar .mode-label {
-        color: $accent;
+        color: #5ee6d0;
         text-style: bold;
     }
 
     HeaderBar .workspace-path {
-        color: $text-dim;
+        color: #6e7681;
         text-style: dim;
     }
     """
@@ -57,9 +57,9 @@ class HeaderBar(Widget):
         header = self.query_one("#header-content", Static)
 
         mode_text = self.state.assistant_mode.value
-        content = f"[span.mode-label]MODE: {mode_text}[/span]"
+        content = f"[mode-label]MODE: {mode_text}[/mode-label]"
 
         if self.state.assistant_mode == AssistantMode.CODING and self.state.workspace_path:
-            content += f"  [span.workspace-path]{self.state.workspace_path}[/span]"
+            content += f"  [workspace-path]{self.state.workspace_path}[/workspace-path]"
 
         header.update(content)

@@ -19,9 +19,9 @@ class StatusBar(Widget):
     StatusBar {
         width: 100%;
         height: 1;
-        background: $surface;
-        border: solid $panel-border;
-        border-top: solid $panel-border;
+        background: #111820;
+        border: solid #30363d;
+        border-top: solid #30363d;
         padding: 0 1;
     }
 
@@ -31,34 +31,34 @@ class StatusBar(Widget):
     }
 
     StatusBar .left-section {
-        color: $text;
+        color: #c9d1d9;
     }
 
     StatusBar .right-section {
-        color: $text-dim;
+        color: #6e7681;
         text-style: dim;
         content-align: right middle;
     }
 
     StatusBar .mode-label {
-        color: $accent;
+        color: #5ee6d0;
         text-style: bold;
     }
 
     StatusBar .model-name {
-        color: $text;
+        color: #c9d1d9;
     }
 
     StatusBar .dot-online {
-        color: $success;
+        color: #3fb950;
     }
 
     StatusBar .dot-offline {
-        color: $error;
+        color: #f85149;
     }
 
     StatusBar .shortcut-key {
-        color: $text;
+        color: #c9d1d9;
         text-style: bold;
     }
     """
@@ -89,17 +89,17 @@ class StatusBar(Widget):
         tools_class = "dot-online" if self.state.tools_ready else "dot-offline"
 
         left = (
-            f"[span.mode-label]{mode_text} MODE[/span]  "
-            f"[span.model-name]{self.state.model_name}[/span]  "
-            f"OLLAMA [span.{ollama_class}]{ollama_dot}[/span]  "
-            f"MEMORY [span.{mem_class}]{mem_dot}[/span]  "
-            f"TOOLS [span.{tools_class}]{tools_dot}[/span]"
+            f"[mode-label]{mode_text} MODE[/mode-label]  "
+            f"[model-name]{self.state.model_name}[/model-name]  "
+            f"OLLAMA [{ollama_class}]{ollama_dot}[/{ollama_class}]  "
+            f"MEMORY [{mem_class}]{mem_dot}[/{mem_class}]  "
+            f"TOOLS [{tools_class}]{tools_dot}[/{tools_class}]"
         )
 
         # Right section
         right = (
-            f"[span.shortcut-key]Ctrl+C[/span] Exit  "
-            f"[span.shortcut-key]Esc[/span] Cancel"
+            f"[shortcut-key]Ctrl+C[/shortcut-key] Exit  "
+            f"[shortcut-key]Esc[/shortcut-key] Cancel"
         )
 
         # Combine with spacing

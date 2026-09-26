@@ -20,8 +20,8 @@ class ConversationPanel(Widget):
     ConversationPanel {
         width: 100%;
         height: 100%;
-        border: solid $panel-border;
-        background: $background;
+        border: solid #30363d;
+        background: #0a0e14;
     }
 
     ConversationPanel > VerticalScroll {
@@ -36,41 +36,41 @@ class ConversationPanel(Widget):
     }
 
     ConversationPanel .user-msg {
-        color: $prompt-cyan;
+        color: #61dafb;
     }
 
     ConversationPanel .assistant-msg {
-        color: $prompt-amber;
+        color: #d4a76a;
     }
 
     ConversationPanel .tool-msg {
-        color: $tool-tag;
+        color: #79c0ff;
     }
 
     ConversationPanel .system-msg {
-        color: $text-dim;
+        color: #6e7681;
         text-style: dim;
     }
 
     ConversationPanel .streaming-caret {
-        color: $prompt-amber;
+        color: #d4a76a;
         text-style: blink;
     }
 
     ConversationPanel .tool-started {
-        color: $tool-tag;
+        color: #79c0ff;
     }
 
     ConversationPanel .tool-running {
-        color: $warning;
+        color: #d29922;
     }
 
     ConversationPanel .tool-done {
-        color: $success;
+        color: #3fb950;
     }
 
     ConversationPanel .tool-fail {
-        color: $error;
+        color: #f85149;
     }
     """
 

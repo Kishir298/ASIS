@@ -25,13 +25,13 @@ class PermissionModal(ModalScreen):
         width: 40;
         height: auto;
         max-height: 80%;
-        background: $surface;
-        border: solid $panel-border;
+        background: #111820;
+        border: solid #30363d;
         padding: 2;
     }
 
     PermissionModal .title {
-        color: $warning;
+        color: d29922;
         text-style: bold;
         width: 100%;
         content-align: center middle;
@@ -39,13 +39,13 @@ class PermissionModal(ModalScreen):
     }
 
     PermissionModal .message {
-        color: $text;
+        color: #c9d1d9;
         width: 100%;
         margin-bottom: 1;
     }
 
     PermissionModal .tool-name {
-        color: $accent;
+        color: #5ee6d0;
         text-style: bold;
     }
 
@@ -57,14 +57,14 @@ class PermissionModal(ModalScreen):
     }
 
     PermissionModal .allow-btn {
-        background: $success;
-        color: $background;
+        background: #3fb950;
+        color: #0a0e14;
         margin-right: 2;
     }
 
     PermissionModal .deny-btn {
-        background: $error;
-        color: $background;
+        background: #f85149;
+        color: #0a0e14;
     }
     """
 

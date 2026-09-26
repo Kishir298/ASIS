@@ -8,13 +8,22 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import inspect
+import os
 import sys
+from contextlib import redirect_stdout, redirect_stderr
 from typing import Any
 
-from textual.app import App, ComposeResult
+from textual import constants, events
+from textual.app import App, ComposeResult, Control, ScreenStackError
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.geometry import Size
+from textual.reactive import Reactive
+from textual.timer import Timer
 from textual.widgets import Static
+
+from rich.console import Console
 
 from asis.tui.state import AppState
 from asis.tui.events import EventBridge, create_event_bridge
@@ -63,6 +72,7 @@ class ASISTUI(App):
     # Color theme matching spec exactly
     CSS = """
     /* Exact colors from spec */
+    /* CSS variables not supported in Textual, using hardcoded values */
     $background: #0a0e14;           /* near-black navy */
     $surface: #111820;              /* slightly lighter for panels */
     $panel-border: #30363d;         /* muted slate-blue borders */
@@ -79,8 +89,8 @@ class ASISTUI(App):
 
     /* Global styles */
     Screen {
-        background: $background;
-        color: $text;
+        background: #0a0e14;
+        color: #c9d1d9;
     }
 
     /* Layout grid - responsive */
@@ -125,62 +135,13 @@ class ASISTUI(App):
         column-span: 2;
     }
 
-    /* Responsive breakpoints */
-    @media (max-width: 119) {
-        #main-grid {
-            grid-columns: 25% 75%;
-        }
-    }
-
-    @media (max-width: 89) {
-        #main-grid {
-            grid-columns: 1fr;
-            grid-rows: auto;
-        }
-
-        #left-column {
-            display: none;
-        }
-
-        #left-column.expanded {
-            display: block;
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 28;
-            height: 100%;
-            background: $surface;
-            border-right: solid $panel-border;
-            z-index: 100;
-        }
-
-        #right-column {
-            column-span: 1;
-            row-span: 1;
-        }
-    }
-
-    @media (max-width: 59) {
-        #main-grid {
-            display: none;
-        }
-
-        #too-narrow {
-            display: block;
-            width: 100%;
-            height: 100%;
-            content-align: center middle;
-            color: $error;
-        }
-    }
-
     /* Hidden by default, shown when terminal too narrow */
     #too-narrow {
         display: none;
         width: 100%;
         height: 100%;
         content-align: center middle;
-        color: $error;
+        color: #f85149;
     }
     """
 
@@ -241,6 +202,156 @@ class ASISTUI(App):
         # Set up input handler
         input_box = self.query_one(InputBox)
         input_box.focus()
+
+    async def _process_messages(
+        self,
+        ready_callback=None,
+        headless=False,
+        inline=False,
+        inline_no_clear=False,
+        mouse=True,
+        terminal_size=None,
+        message_hook=None,
+    ) -> None:
+        """Fixed version that properly captures nested functions as closures."""
+        self._thread_init()
+
+        async def app_prelude() -> bool:
+            """Work required before running the app."""
+            await self._init_devtools()
+            self.log.system("---")
+            self.log.system(loop=asyncio.get_running_loop())
+            self.log.system(features=self.features)
+            if constants.LOG_FILE is not None:
+                _log_path = os.path.abspath(constants.LOG_FILE)
+                self.log.system(f"Writing logs to {_log_path!r}")
+
+            try:
+                if self.css_path:
+                    self.stylesheet.read_all(self.css_path)
+                for read_from, css, tie_breaker, scope in self._get_default_css():
+                    self.stylesheet.add_source(
+                        css,
+                        read_from=read_from,
+                        is_default_css=True,
+                        tie_breaker=tie_breaker,
+                        scope=scope,
+                    )
+                if self.CSS:
+                    try:
+                        app_path = inspect.getfile(self.__class__)
+                    except (TypeError, OSError):
+                        app_path = ""
+                    read_from = (app_path, f"{self.__class__.__name__}.CSS")
+                    self.stylesheet.add_source(
+                        self.CSS, read_from=read_from, is_default_css=False
+                    )
+            except Exception as error:
+                self._handle_exception(error)
+                self._print_error_renderables()
+                return False
+
+            if self.css_monitor:
+                self.set_interval(0.25, self.css_monitor, name="css monitor")
+                self.log.system("STARTED", self.css_monitor)
+            return True
+
+        async def run_process_messages():
+            """The main message loop."""
+
+            async def invoke_ready_callback() -> None:
+                if ready_callback is not None:
+                    ready_result = ready_callback()
+                    if inspect.isawaitable(ready_result):
+                        await ready_result
+
+            with self.batch_update():
+                try:
+                    try:
+                        await self._dispatch_message(events.Compose())
+                        await self._dispatch_message(
+                            events.Resize.from_dimensions(self.size, None)
+                        )
+                        default_screen = self.screen
+                        self.stylesheet.apply(self)
+                        await self._dispatch_message(events.Mount())
+                        self.check_idle()
+                    finally:
+                        self._mounted_event.set()
+                        self._is_mounted = True
+
+                    Reactive._initialize_object(self)
+
+                    if self.screen is not default_screen:
+                        self.stylesheet.apply(default_screen)
+
+                    await self.animator.start()
+
+                except Exception:
+                    await self.animator.stop()
+                    raise
+
+                finally:
+                    self._running = True
+                    await self._ready()
+                    await invoke_ready_callback()
+
+            try:
+                await self._process_messages_loop()
+            except asyncio.CancelledError:
+                pass
+            finally:
+                self.workers.cancel_all()
+                self._running = False
+                try:
+                    await self.animator.stop()
+                finally:
+                    await Timer._stop_all(self._timers)
+
+        with self._context():
+            if not await app_prelude():
+                return
+            try:
+                load_event = events.Load()
+                await self._dispatch_message(load_event)
+
+                driver = self._driver = self._build_driver(
+                    headless=headless,
+                    inline=inline,
+                    mouse=mouse,
+                    size=terminal_size,
+                )
+                self.log(driver=driver)
+
+                if not self._exit:
+                    driver.start_application_mode()
+                    try:
+                        with redirect_stdout(self._capture_stdout):
+                            with redirect_stderr(self._capture_stderr):
+                                await run_process_messages()
+
+                    finally:
+                        Reactive._clear_watchers(self)
+                        if self._driver.is_inline:
+                            cursor_x, cursor_y = self._previous_cursor_position
+                            self._driver.write(
+                                Control.move(-cursor_x, -cursor_y).segment.text
+                            )
+                            self._driver.flush()
+                            if inline_no_clear and not self.app._exit_renderables:
+                                console = Console()
+                                try:
+                                    console.print(self.screen._compositor)
+                                except ScreenStackError:
+                                    console.print()
+                            else:
+                                self._driver.write(
+                                    Control.move(0, -self.INLINE_PADDING).segment.text
+                                )
+
+                        driver.stop_application_mode()
+            except Exception as error:
+                self._handle_exception(error)
 
     async def _run_boot_sequence(self) -> None:
         """Run the boot sequence asynchronously."""
@@ -547,12 +658,15 @@ class ASISTUI(App):
         """Handle terminal resize."""
         self.state.update_terminal_size(event.size.width, event.size.height)
 
-        # Update left column visibility
-        left_col = self.query_one("#left-column", Vertical)
-        if self.state.terminal_width < 90:
-            left_col.add_class("collapsed")
-        else:
-            left_col.remove_class("collapsed")
+        # Update left column visibility (only if composed)
+        try:
+            left_col = self.query_one("#left-column", Vertical)
+            if self.state.terminal_width < 90:
+                left_col.add_class("collapsed")
+            else:
+                left_col.remove_class("collapsed")
+        except Exception:
+            pass  # Not composed yet
 
         self.refresh()
 

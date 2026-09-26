@@ -20,8 +20,8 @@ class ModeFooterPanel(Widget):
     ModeFooterPanel {
         width: 100%;
         height: 100%;
-        border: solid $panel-border;
-        background: $background;
+        border: solid #30363d;
+        background: #0a0e14;
         padding: 0 1;
     }
 
@@ -34,7 +34,7 @@ class ModeFooterPanel(Widget):
     ModeFooterPanel .recap-line {
         width: 100%;
         height: 1;
-        color: $text-dim;
+        color: #6e7681;
         text-style: dim;
     }
 
@@ -50,15 +50,15 @@ class ModeFooterPanel(Widget):
     }
 
     ModeFooterPanel .mode-btn-active {
-        background: $accent;
-        color: $background;
+        background: #5ee6d0;
+        color: #0a0e14;
         text-style: bold;
     }
 
     ModeFooterPanel .mode-btn-inactive {
-        background: $surface;
-        color: $text-dim;
-        border: solid $panel-border;
+        background: #111820;
+        color: #6e7681;
+        border: solid #30363d;
     }
     """
 

@@ -21,8 +21,8 @@ class VoiceBar(Widget):
     VoiceBar {
         width: 100%;
         height: 100%;
-        border: solid $panel-border;
-        background: $background;
+        border: solid #30363d;
+        background: #0a0e14;
         padding: 0 1;
     }
 
@@ -33,48 +33,48 @@ class VoiceBar(Widget):
     }
 
     VoiceBar .voice-chip {
-        background: $surface;
-        border: solid $panel-border;
+        background: #111820;
+        border: solid #30363d;
         padding: 0 1;
         margin-right: 2;
     }
 
     VoiceBar .voice-chip-ready {
-        color: $success;
+        color: #3fb950;
     }
 
     VoiceBar .voice-chip-error {
-        color: $error;
+        color: #f85149;
     }
 
     VoiceBar .voice-chip-off {
-        color: $text-dim;
+        color: #6e7681;
     }
 
     VoiceBar .segment {
         padding: 0 1;
         margin: 0 1;
-        border: solid $panel-border;
-        color: $text-dim;
+        border: solid #30363d;
+        color: #6e7681;
         text-style: dim;
         min-width: 12;
         content-align: center middle;
     }
 
     VoiceBar .segment-active {
-        background: $accent;
-        color: $background;
+        background: #5ee6d0;
+        color: #0a0e14;
         text-style: bold;
-        border: solid $accent;
+        border: solid #5ee6d0;
     }
 
     VoiceBar .glyph {
-        color: $text;
+        color: #c9d1d9;
         margin-left: 2;
     }
 
     VoiceBar .glyph-active {
-        color: $success;
+        color: #3fb950;
     }
     """
 
