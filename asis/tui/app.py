@@ -69,59 +69,40 @@ class ASISTUI(App):
     TITLE = "A.S.I.S."
     SUB_TITLE = "A Smart Intelligence System"
 
+    # Responsive breakpoints - Textual auto-applies these classes to Screen based on width
+    # Classes accumulate: at width 100, both -narrow and -normal apply; at 130, all three apply
+    HORIZONTAL_BREAKPOINTS = [
+        (0, "-narrow"),      # < 90 columns: single column, sidebar hidden (base styles)
+        (90, "-normal"),     # 90-119 columns: two column layout
+        (120, "-wide"),      # ≥120 columns: two column with full sidebar
+    ]
+
     # Color theme matching spec exactly
     CSS = """
-    /* Exact colors from spec */
-    /* CSS variables not supported in Textual, using hardcoded values */
-    $background: #0a0e14;           /* near-black navy */
-    $surface: #111820;              /* slightly lighter for panels */
-    $panel-border: #30363d;         /* muted slate-blue borders */
-    $text: #c9d1d9;                 /* light gray body text */
-    $text-dim: #6e7681;             /* dim gray for inactive */
-    $identity-teal: #5ee6d0;        /* teal/mint for A.S.I.S. */
-    $prompt-cyan: #61dafb;          /* cyan for You > */
-    $prompt-amber: #d4a76a;         /* warm amber for A.S.I.S. > */
-    $tool-tag: #79c0ff;             /* blue-purple for [TOOL] tags */
-    $success: #3fb950;              /* green for READY/ONLINE */
-    $warning: #d29922;              /* amber for warnings */
-    $error: #f85149;                /* red for FAIL/DENIED */
-    $accent: #5ee6d0;               /* teal accent for active modes */
-
-    /* Global styles */
     Screen {
         background: #0a0e14;
         color: #c9d1d9;
     }
 
-    /* Layout grid - responsive */
     #main-grid {
         layout: grid;
-        grid-size: 2;
-        grid-columns: 25% 75%;
+        grid-size: 1;
+        grid-columns: 1fr;
         grid-rows: 11% 18% 32% 35% 7% 20% 7% 1;
         grid-gutter: 0;
         height: 100%;
     }
 
-    /* Left column */
     #left-column {
-        column-span: 1;
-        row-span: 7;
-        display: block;
-    }
-
-    #left-column.collapsed {
         display: none;
     }
 
-    /* Right column */
     #right-column {
         column-span: 1;
         row-span: 8;
         display: block;
     }
 
-    /* Right column internal grid */
     #right-grid {
         layout: grid;
         grid-size: 1;
@@ -129,13 +110,11 @@ class ASISTUI(App):
         height: 100%;
     }
 
-    /* Status bar - full width, bottom row */
     StatusBar {
         row-span: 1;
-        column-span: 2;
+        column-span: 1;
     }
 
-    /* Hidden by default, shown when terminal too narrow */
     #too-narrow {
         display: none;
         width: 100%;
@@ -550,7 +529,7 @@ class ASISTUI(App):
                 f"TOOLS: {'READY' if self.state.tools_ready else 'OFFLINE'}\n"
                 f"VOICE: {self.state.voice_state.value}\n"
                 f"MODE: {self.state.assistant_mode.value}\n"
-                f"INTERACTION: {self.state.interaction_mode.value}"
+                f"INTERACTON: {self.state.interaction_mode.value}"
             )
 
         elif cmd == "model":
@@ -655,19 +634,8 @@ class ASISTUI(App):
         self.refresh()
 
     async def on_resize(self, event: Any) -> None:
-        """Handle terminal resize."""
+        """Handle terminal resize - update state for other components."""
         self.state.update_terminal_size(event.size.width, event.size.height)
-
-        # Update left column visibility (only if composed)
-        try:
-            left_col = self.query_one("#left-column", Vertical)
-            if self.state.terminal_width < 90:
-                left_col.add_class("collapsed")
-            else:
-                left_col.remove_class("collapsed")
-        except Exception:
-            pass  # Not composed yet
-
         self.refresh()
 
     def action_toggle_mode(self) -> None:
