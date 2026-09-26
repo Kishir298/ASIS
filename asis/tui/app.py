@@ -77,11 +77,18 @@ class ASISTUI(App):
         (120, "-wide"),      # ≥120 columns: two column with full sidebar
     ]
 
+    # Vertical breakpoints for height-based responsive layout
+    VERTICAL_BREAKPOINTS = [
+        (0, "-short"),       # < 30 rows: compact layout
+        (30, "-normal"),     # 30-44 rows: standard layout
+        (45, "-tall"),       # ≥45 rows: expanded layout with more conversation space
+    ]
+
     # Color theme matching spec exactly
     CSS = """
     Screen {
-        background: #0a0e14;
-        color: #c9d1d9;
+        background: $background;
+        color: $text;
     }
 
     #main-grid {
@@ -95,6 +102,19 @@ class ASISTUI(App):
 
     #left-column {
         display: none;
+    }
+
+    /* Expanded sidebar on narrow screens (overlay via Ctrl+B) */
+    #left-column.expanded {
+        display: block;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 28;
+        height: 100%;
+        background: $surface;
+        border-right: solid $panel-border;
+        z-index: 100;
     }
 
     #right-column {
@@ -120,7 +140,46 @@ class ASISTUI(App):
         width: 100%;
         height: 100%;
         content-align: center middle;
-        color: #f85149;
+        color: $error;
+    }
+
+    /* ===== VERTICAL BREAKPOINTS ===== */
+
+    /* Short terminal (< 30 rows): compact layout */
+    Screen.-short #main-grid {
+        grid-rows: 8% 12% 30% 40% 5% 15% 5% 1;
+    }
+
+    Screen.-short #right-grid {
+        grid-rows: 8% 55% 7% 20% 10%;
+    }
+
+    Screen.-short HeaderBar {
+        height: auto;
+        min-height: 1;
+    }
+
+    Screen.-short StatusBar {
+        height: auto;
+        min-height: 1;
+    }
+
+    Screen.-short ModeFooterPanel {
+        height: auto;
+        min-height: 1;
+    }
+
+    /* Tall terminal (≥ 45 rows): expanded conversation space */
+    Screen.-tall #main-grid {
+        grid-rows: 10% 15% 30% 38% 7% 20% 5% 1;
+    }
+
+    Screen.-tall #right-grid {
+        grid-rows: 10% 60% 5% 18% 7%;
+    }
+
+    Screen.-tall ConversationPanel {
+        height: 1fr;
     }
     """
 
@@ -142,6 +201,28 @@ class ASISTUI(App):
         self._ollama_owned = False
         self._core_manager = None
         self._core_ctx = None
+
+    def get_css_variables(self) -> dict[str, str]:
+        """Return CSS variables for theming.
+        
+        These variables can be used in CSS with $variable syntax.
+        Override this method to customize the theme.
+        """
+        return {
+            "background": "#0a0e14",
+            "surface": "#111820",
+            "panel-border": "#30363d",
+            "text": "#c9d1d9",
+            "text-dim": "#6e7681",
+            "identity-teal": "#5ee6d0",
+            "prompt-cyan": "#61dafb",
+            "prompt-amber": "#d4a76a",
+            "tool-tag": "#79c0ff",
+            "success": "#3fb950",
+            "warning": "#d29922",
+            "error": "#f85149",
+            "accent": "#5ee6d0",
+        }
 
     def compose(self) -> ComposeResult:
         """Create the UI layout."""
@@ -510,7 +591,7 @@ class ASISTUI(App):
                 "  /memory         Show memory status\n"
                 "  /tools          List available tools\n"
                 "  /system         Show system info\n"
-                "  /mode [text|voice|coding|translation]  Set mode\n"
+                "  /mode [general|coding|translation]  Set mode\n"
                 "  /voice          Toggle voice mode\n"
                 "  /permissions    Show permission status\n"
                 "  /clear          Clear conversation\n"
@@ -529,7 +610,7 @@ class ASISTUI(App):
                 f"TOOLS: {'READY' if self.state.tools_ready else 'OFFLINE'}\n"
                 f"VOICE: {self.state.voice_state.value}\n"
                 f"MODE: {self.state.assistant_mode.value}\n"
-                f"INTERACTON: {self.state.interaction_mode.value}"
+                f"INTERACTION: {self.state.interaction_mode.value}"
             )
 
         elif cmd == "model":
@@ -587,15 +668,34 @@ class ASISTUI(App):
 
         elif cmd in ("upload", "attach"):
             if arg:
-                self.state.add_attachment(arg, arg)
-                await conv_panel.add_system_message(f"Attached: {arg}")
+                import os
+                from pathlib import Path
+                file_path = Path(arg).expanduser().resolve()
+                if not file_path.exists():
+                    await conv_panel.add_system_message(f"File not found: {arg}")
+                elif not file_path.is_file():
+                    await conv_panel.add_system_message(f"Not a file: {arg}")
+                else:
+                    # Determine file type/icon
+                    suffix = file_path.suffix.lower()
+                    icon_map = {
+                        ".py": "🐍", ".js": "📜", ".ts": "📜", ".json": "📋",
+                        ".md": "📝", ".txt": "📄", ".pdf": "📕", ".csv": "📊",
+                        ".png": "🖼️", ".jpg": "🖼️", ".jpeg": "🖼️", ".gif": "🖼️",
+                        ".mp3": "🎵", ".wav": "🎵", ".mp4": "🎬", ".mov": "🎬",
+                    }
+                    icon = icon_map.get(suffix, "📎")
+                    name = file_path.name
+                    self.state.add_attachment(name, str(file_path))
+                    await conv_panel.add_system_message(f"Attached: {icon} {name} ({file_path})")
             else:
                 await conv_panel.add_system_message("Usage: /upload <path>")
 
         elif cmd == "docs":
             if self.state.attachments:
+                await conv_panel.add_system_message("Attachments:")
                 for att in self.state.attachments:
-                    await conv_panel.add_system_message(f"  {att.icon} {att.name}")
+                    await conv_panel.add_system_message(f"  {att.icon} {att.name} ({att.path})")
             else:
                 await conv_panel.add_system_message("No attachments")
 
@@ -620,10 +720,8 @@ class ASISTUI(App):
             await conv_panel.add_system_message("[Interrupted]")
 
     async def on_input_box_attach_clicked(self, message: InputBox.AttachClicked) -> None:
-        """Handle attach button - for now just a placeholder."""
-        # In a real implementation, this would open a file picker
-        # For now, we'll simulate with a test file
-        pass
+        """Handle attach button - shows usage hint since TUI can't open file dialogs."""
+        await self._handle_slash_command("/upload ")
 
     async def on_mode_footer_panel_mode_changed(self, message: ModeFooterPanel.ModeChanged) -> None:
         """Handle mode toggle from footer panel."""
@@ -646,14 +744,22 @@ class ASISTUI(App):
 
     def action_toggle_sidebar(self) -> None:
         """Toggle left sidebar (Ctrl+B)."""
+        left_col = self.query_one("#left-column", Vertical)
+        
         if self.state.terminal_width < 90:
-            left_col = self.query_one("#left-column", Vertical)
-            if left_col.has_class("collapsed"):
+            # Narrow screen: toggle expanded overlay
+            if left_col.has_class("expanded"):
+                left_col.remove_class("expanded")
+                left_col.add_class("collapsed")
+            else:
                 left_col.remove_class("collapsed")
                 left_col.add_class("expanded")
+        else:
+            # Normal/wide screen: toggle collapsed in grid
+            if left_col.has_class("collapsed"):
+                left_col.remove_class("collapsed")
             else:
                 left_col.add_class("collapsed")
-                left_col.remove_class("expanded")
 
     def action_cancel(self) -> None:
         """Handle ESC key."""

@@ -96,11 +96,18 @@ class StatusBar(Widget):
             f"TOOLS [{tools_class}]{tools_dot}[/{tools_class}]"
         )
 
-        # Right section
-        right = (
-            f"[shortcut-key]Ctrl+C[/shortcut-key] Exit  "
-            f"[shortcut-key]Esc[/shortcut-key] Cancel"
-        )
+        # Right section - show Ctrl+B hint in narrow mode
+        if self.state.terminal_width < 90:
+            right = (
+                f"[shortcut-key]Ctrl+B[/shortcut-key] Sidebar  "
+                f"[shortcut-key]Ctrl+C[/shortcut-key] Exit  "
+                f"[shortcut-key]Esc[/shortcut-key] Cancel"
+            )
+        else:
+            right = (
+                f"[shortcut-key]Ctrl+C[/shortcut-key] Exit  "
+                f"[shortcut-key]Esc[/shortcut-key] Cancel"
+            )
 
         # Combine with spacing
         status.update(f"{left}  {right}")
