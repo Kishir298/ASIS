@@ -44,6 +44,8 @@ docs = [
 tui = [
     "textual>=0.70",
     "textual-dev>=0.70",
+    "tomli>=2.0",
+    "tomli-w>=1.0",
 ]
 dev = [
     "pytest>=8",
