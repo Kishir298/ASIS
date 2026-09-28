@@ -347,15 +347,14 @@ def test_offline_no_hidden_network_dependencies():
             "api.openai",
             "api.anthropic",
             "generativelanguage",
-            "update_check",
-            "auto_update",
         ):
             if token in text.lower():
                 banned.append(f"{rel}: {token}")
     assert request_users == {
         "ai/providers/ollama.py",
         "web/provider.py",
+        "update/detectors.py",
     }, request_users
-    assert socket_users == {"web/security.py"}, socket_users
+    assert socket_users == {"web/security.py", "update/detectors.py"}, socket_users
     assert banned == []
 

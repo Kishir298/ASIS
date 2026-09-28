@@ -30,6 +30,7 @@ from asis.tools.provided import (
     TranslateTextTool,
     build_core_tools,
 )
+from asis.update.manager import get_update_manager
 
 
 def build_memory(db_path: str | Path | None = None) -> MemoryManager:
@@ -215,7 +216,56 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="launch the Textual TUI interface (alternate-screen)",
     )
+    parser.add_argument(
+        "--update",
+        action="store_true",
+        help="check for updates and optionally install them",
+    )
+    parser.add_argument(
+        "--update-install",
+        action="store_true",
+        help="install available updates (requires --update)",
+    )
     return parser
+
+
+def handle_update(install: bool = False) -> int:
+    """Handle the --update command."""
+    from asis.update.manager import get_update_manager
+
+    print("Checking for updates...")
+    manager = get_update_manager()
+    result = manager.check_all()
+
+    print(f"Online: {'Yes' if result.online else 'No'}")
+    print(f"Last check: {result.timestamp}")
+
+    if not result.has_updates:
+        print("No updates available.")
+        return 0
+
+    print("\nAvailable updates:")
+    for name in result.updatable_components:
+        component = result.components[name]
+        print(f"  {name}: {component.current_version} -> {component.available_version}")
+        if component.description:
+            print(f"    {component.description}")
+
+    if install:
+        print("\nInstalling updates...")
+        install_results = manager.auto_install(result)
+        for name, success in install_results.items():
+            status = "OK" if success else "FAILED"
+            print(f"  {name}: {status}")
+        if all(install_results.values()):
+            print("\nAll updates installed successfully.")
+            if any(r.requires_restart for r in manager._installers.values() if hasattr(r, 'requires_restart')):
+                print("Note: Some updates require ASIS restart.")
+        else:
+            print("\nSome updates failed to install.")
+            return 1
+
+    return 0
 
 
 def core_status_line() -> str:
@@ -223,7 +273,45 @@ def core_status_line() -> str:
 
     Never prompts for the provisioning credential and never opens a
     socket: with no credential available the manager reports DISABLED
-    (CORE off) or DISCONNECTED (CORE on, no session) — both secret-free.
+    (CORE off) or DISCONNECTED (CORE on, no session) -- both secret-free.
+    """
+    from asis.integrations.core.adapter import RealCoreAdapter
+    from asis.integrations.core.connection import (
+        build_connection_manager_from_settings,
+    )
+    from asis.system.context import RuntimeContext
+
+    core = settings.core
+    adapter = RealCoreAdapter(
+        host=core.host,
+        port=core.port,
+        device_file=core.device_file,
+        ca_file=core.ca_file,
+        insecure=core.insecure,
+        connect_timeout=core.connect_timeout,
+        request_timeout=core.request_timeout,
+    )
+    manager = build_connection_manager_from_settings(
+        settings, adapter, credential_provider=None
+    )
+    context = RuntimeContext()
+    manager.start(context)
+    try:
+        status = manager.status()
+    finally:
+        manager.stop(context)
+    state = getattr(status.state, "value", str(status.state)).lower()
+    if state == "disabled":
+        return "CORE: disabled (standalone)."
+    return f"CORE: {state} (host={core.host}:{core.port})."
+
+
+def core_status_line() -> str:
+    """Describe the configured C.O.R.E. uplink without connecting.
+
+    Never prompts for the provisioning credential and never opens a
+    socket: with no credential available the manager reports DISABLED
+    (CORE off) or DISCONNECTED (CORE on, no session) -- both secret-free.
     """
     from asis.integrations.core.adapter import RealCoreAdapter
     from asis.integrations.core.connection import (
@@ -476,6 +564,9 @@ def entry(argv: Sequence[str] | None = None) -> int:
     if args.core_status:
         print(core_status_line())
         return 0
+
+    if args.update:
+        return handle_update(args.update_install)
 
     if args.preview:
         from asis.cli.terminal import layout as _term_layout

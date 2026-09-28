@@ -178,6 +178,23 @@ def _clean_web_env(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture
+def _enable_web_env(monkeypatch):
+    """Enable web access for tests that need it."""
+    monkeypatch.setenv("ASIS_WEB_ENABLED", "true")
+    monkeypatch.setenv("ASIS_WEB_SEARCH_PROVIDER", "duckduckgo")
+    monkeypatch.setenv("ASIS_WEB_TIMEOUT", "10")
+    monkeypatch.setenv("ASIS_WEB_MAX_RESULTS", "5")
+    monkeypatch.setenv("ASIS_WEB_MAX_CHARS", "8000")
+    monkeypatch.setenv("ASIS_WEB_MAX_RESPONSE_BYTES", "1000000")
+    monkeypatch.setenv("ASIS_WEB_MAX_REDIRECTS", "3")
+    monkeypatch.setenv("ASIS_WEB_MAX_QUERY_LENGTH", "500")
+    monkeypatch.setenv("ASIS_WEB_MAX_URL_LENGTH", "2000")
+    # Reload settings with the new env
+    from asis.configuration.settings import reset_settings
+    reset_settings()
+
+
 # -- registration / schemas ----------------------------------------------
 
 
@@ -200,7 +217,7 @@ def test_web_tool_schemas_for_native_calling():
     assert fetch.parameters["properties"]["max_chars"] == {"type": "integer"}
 
 
-def test_web_tools_are_low_permission():
+def test_web_tools_are_low_permission(_enable_web_env):
     assert WebSearchTool(FakeWebProvider()).permission is PermissionLevel.LOW
     assert WebFetchTool(FakeWebProvider()).permission is PermissionLevel.LOW
     manager = PermissionManager()
@@ -211,7 +228,7 @@ def test_web_tools_are_low_permission():
 # -- web_search tool ------------------------------------------------------
 
 
-def test_search_valid_returns_structured_results():
+def test_search_valid_returns_structured_results(_enable_web_env):
     tool = WebSearchTool(FakeWebProvider())
     result = tool.execute(query="example")
     assert result.success is True
@@ -220,19 +237,19 @@ def test_search_valid_returns_structured_results():
     assert {"title", "url", "snippet", "source"} <= set(first)
 
 
-def test_search_rejects_empty_and_whitespace_query():
+def test_search_rejects_empty_and_whitespace_query(_enable_web_env):
     tool = WebSearchTool(FakeWebProvider())
     assert tool.execute(query="").success is False
     assert tool.execute(query="   ").success is False
     assert tool.execute(query=None).success is False
 
 
-def test_search_enforces_query_length():
+def test_search_enforces_query_length(_enable_web_env):
     tool = WebSearchTool(FakeWebProvider())
     assert tool.execute(query="x" * 501).success is False
 
 
-def test_search_result_count_is_bounded():
+def test_search_result_count_is_bounded(_enable_web_env):
     provider = FakeWebProvider(
         results=[
             {"title": f"T{i}", "url": f"https://example.com/{i}",
@@ -248,13 +265,13 @@ def test_search_result_count_is_bounded():
     assert provider.search_calls[0][1] == 5
 
 
-def test_search_rejects_non_integer_count():
+def test_search_rejects_non_integer_count(_enable_web_env):
     tool = WebSearchTool(FakeWebProvider())
     assert tool.execute(query="x", max_results="many").success is False
     assert tool.execute(query="x", max_results=True).success is False
 
 
-def test_search_provider_failure_maps_to_web_code():
+def test_search_provider_failure_maps_to_web_code(_enable_web_env):
     tool = WebSearchTool(
         FakeWebProvider(
             search_error=WebProviderError("WEB_TIMEOUT", "WEB_TIMEOUT: slow")
@@ -265,7 +282,7 @@ def test_search_provider_failure_maps_to_web_code():
     assert result.error.startswith("WEB_TIMEOUT")
 
 
-def test_search_unexpected_provider_error_is_wrapped():
+def test_search_unexpected_provider_error_is_wrapped(_enable_web_env):
     tool = WebSearchTool(FakeWebProvider(search_error=RuntimeError("boom")))
     result = tool.execute(query="x")
     assert result.success is False
@@ -275,7 +292,7 @@ def test_search_unexpected_provider_error_is_wrapped():
 # -- web_fetch tool -------------------------------------------------------
 
 
-def test_fetch_valid_returns_metadata_and_text():
+def test_fetch_valid_returns_metadata_and_text(_enable_web_env):
     tool = WebFetchTool(FakeWebProvider())
     result = tool.execute(url="https://example.com/")
     assert result.success is True
@@ -286,7 +303,7 @@ def test_fetch_valid_returns_metadata_and_text():
 
 
 @pytest.mark.parametrize("url", ["", "   ", None, 123])
-def test_fetch_rejects_empty_url(url):
+def test_fetch_rejects_empty_url(_enable_web_env, url):
     assert WebFetchTool(FakeWebProvider()).execute(url=url).success is False
 
 
@@ -294,7 +311,7 @@ def test_fetch_rejects_empty_url(url):
     "url", ["ftp://example.com/f", "file:///etc/passwd", "data:text/html,hi",
             "javascript:alert(1)", "gopher://example.com/"]
 )
-def test_fetch_rejects_unsupported_schemes_without_executing(url):
+def test_fetch_rejects_unsupported_schemes_without_executing(_enable_web_env, url):
     provider = FakeWebProvider()
     result = WebFetchTool(provider).execute(url=url)
     assert result.success is False
@@ -302,13 +319,13 @@ def test_fetch_rejects_unsupported_schemes_without_executing(url):
     assert provider.fetch_calls == []
 
 
-def test_fetch_rejects_malformed_url():
+def test_fetch_rejects_malformed_url(_enable_web_env):
     provider = FakeWebProvider()
     assert WebFetchTool(provider).execute(url="not a url").success is False
     assert provider.fetch_calls == []
 
 
-def test_fetch_enforces_url_length(monkeypatch):
+def test_fetch_enforces_url_length(_enable_web_env, monkeypatch):
     _clean_web_env(monkeypatch)
     _patch_global_settings(
         monkeypatch, load_settings({"ASIS_WEB_MAX_URL_LENGTH": "100"})
@@ -318,14 +335,14 @@ def test_fetch_enforces_url_length(monkeypatch):
     ).success is False
 
 
-def test_fetch_max_chars_is_bounded():
+def test_fetch_max_chars_is_bounded(_enable_web_env):
     provider = FakeWebProvider()
     result = WebFetchTool(provider).execute(url="https://example.com/", max_chars=10**9)
     assert result.success is True
     assert provider.fetch_calls[0][1] == 8000  # clamped to configured max
 
 
-def test_fetch_provider_security_error_maps_to_code():
+def test_fetch_provider_security_error_maps_to_code(_enable_web_env):
     tool = WebFetchTool(
         FakeWebProvider(
             fetch_error=WebSecurityError(
@@ -772,7 +789,8 @@ def test_native_web_multi_step_loop_is_bounded(memory_manager):
 def test_web_config_defaults(monkeypatch):
     _clean_web_env(monkeypatch)
     config = load_settings()
-    assert config.web.enabled is True
+    # Web is disabled by default for offline-first operation
+    assert config.web.enabled is False
     assert config.web.search_provider == "duckduckgo"
     assert config.web.timeout == 10
     assert config.web.max_results == 5

@@ -408,6 +408,36 @@ def _validate_coding(settings: Settings) -> None:
     _require_positive_int("coding", "max_output_size", settings.coding.max_output_size)
 
 
+def _validate_update(settings: Settings) -> None:
+    if not isinstance(settings.update.enabled, bool):
+        raise ConfigurationError(
+            "Invalid configuration update.enabled: expected a boolean."
+        )
+    if not isinstance(settings.update.check_on_startup, bool):
+        raise ConfigurationError(
+            "Invalid configuration update.check_on_startup: expected a boolean."
+        )
+    if not isinstance(settings.update.auto_install, bool):
+        raise ConfigurationError(
+            "Invalid configuration update.auto_install: expected a boolean."
+        )
+    _require_positive_int(
+        "update", "check_interval_hours", settings.update.check_interval_hours
+    )
+    _require_positive_int("update", "network_timeout", settings.update.network_timeout)
+    if not isinstance(settings.update.skip_components, list):
+        raise ConfigurationError(
+            "Invalid configuration update.skip_components: expected a list."
+        )
+    allowed_components = {"git", "pip", "ollama_models"}
+    for comp in settings.update.skip_components:
+        if comp not in allowed_components:
+            raise ConfigurationError(
+                f"Invalid configuration update.skip_components: unknown component "
+                f"'{comp}'. Allowed: {sorted(allowed_components)}"
+            )
+
+
 def _validate_core(settings: Settings) -> None:
     _require_non_empty("core", "host", settings.core.host)
     if "\x00" in settings.core.host:
@@ -479,6 +509,7 @@ def validate_settings(settings: Settings) -> Settings:
     _validate_voice(settings)
     _validate_runtime(settings)
     _validate_coding(settings)
+    _validate_update(settings)
     _validate_core(settings)
     _validate_paths(settings)
     return settings

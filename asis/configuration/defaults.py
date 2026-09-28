@@ -95,7 +95,7 @@ TOOL_TIMEOUT = 30
 TOOL_MAX_CALLS_PER_TURN = 3
 
 # Basic web access (optional capability; standalone by default)
-WEB_ENABLED = True
+WEB_ENABLED = False
 WEB_SEARCH_PROVIDER = "duckduckgo"
 WEB_TIMEOUT = 10
 WEB_MAX_RESULTS = 5
@@ -104,6 +104,14 @@ WEB_MAX_RESPONSE_BYTES = 1_000_000
 WEB_MAX_REDIRECTS = 3
 WEB_MAX_QUERY_LENGTH = 500
 WEB_MAX_URL_LENGTH = 2_000
+
+# Update system (offline-first, optional online auto-updates)
+UPDATE_ENABLED = True
+UPDATE_CHECK_ON_STARTUP = True
+UPDATE_AUTO_INSTALL = True
+UPDATE_CHECK_INTERVAL_HOURS = 24
+UPDATE_NETWORK_TIMEOUT = 3
+UPDATE_SKIP_COMPONENTS = ""
 
 # Translation engine (optional local capability; mock backend by default)
 TRANSLATION_ENABLED = True

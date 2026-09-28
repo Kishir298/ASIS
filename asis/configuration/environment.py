@@ -178,4 +178,12 @@ def get_path(name: str) -> Path | None:
     return Path(value).expanduser().absolute()
 
 
+def get_list(name: str, default: str) -> list[str]:
+    """Return a comma-separated list variable, or default split when unset/empty."""
+    value = _raw(name)
+    if value is None:
+        return [item.strip() for item in default.split(",") if item.strip()]
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
 _load_env_files()

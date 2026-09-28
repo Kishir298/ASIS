@@ -218,6 +218,18 @@ class TUISettings:
 
 
 @dataclass(frozen=True)
+class UpdateSettings:
+    """Auto-update system (offline-first, optional online updates)."""
+
+    enabled: bool
+    check_on_startup: bool
+    auto_install: bool
+    check_interval_hours: int
+    network_timeout: int
+    skip_components: list[str]
+
+
+@dataclass(frozen=True)
 class IdentitySettings:
     name: str
     title: str
@@ -255,6 +267,7 @@ class Settings:
     core: CoreSettings
     coding: CodingSettings
     tui: TUISettings
+    update: UpdateSettings
     paths: PathSettings
 
 
@@ -540,6 +553,21 @@ def _build_tui_settings(get_s, get_b, get_i, d) -> TUISettings:
     )
 
 
+def _build_update_settings(get_s, get_b, get_i, get_list, d) -> UpdateSettings:
+    return UpdateSettings(
+        enabled=get_b("ASIS_UPDATE_ENABLED", d.UPDATE_ENABLED),
+        check_on_startup=get_b("ASIS_UPDATE_CHECK_ON_STARTUP", d.UPDATE_CHECK_ON_STARTUP),
+        auto_install=get_b("ASIS_UPDATE_AUTO_INSTALL", d.UPDATE_AUTO_INSTALL),
+        check_interval_hours=environment.get_bounded_int(
+            "ASIS_UPDATE_CHECK_INTERVAL_HOURS", d.UPDATE_CHECK_INTERVAL_HOURS, 1, 168
+        ),
+        network_timeout=environment.get_bounded_int(
+            "ASIS_UPDATE_NETWORK_TIMEOUT", d.UPDATE_NETWORK_TIMEOUT, 1, 30
+        ),
+        skip_components=get_list("ASIS_UPDATE_SKIP_COMPONENTS", d.UPDATE_SKIP_COMPONENTS),
+    )
+
+
 def _build_path_settings(environment) -> PathSettings:
     return PathSettings(
         data=get_data_directory(environment.get_path("ASIS_DATA_DIRECTORY")),
@@ -572,6 +600,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         get_b = environment.get_bool
         get_i = environment.get_int
         get_f = environment.get_float
+        get_list = environment.get_list
         d = defaults
         built = Settings(
             app_name=get_s("ASIS_IDENTITY_NAME", d.APP_NAME),
@@ -592,6 +621,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             runtime=_build_runtime_settings(get_s, get_b, get_i, d),
             coding=_build_coding_settings(get_s, get_i, d),
             tui=_build_tui_settings(get_s, get_b, get_i, d),
+            update=_build_update_settings(get_s, get_b, get_i, get_list, d),
             paths=_build_path_settings(environment),
         )
     return validate_settings(built)
@@ -599,3 +629,10 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
 
 # Global read-only configuration instance.
 settings = load_settings()
+
+
+def reset_settings(env: Mapping[str, str] | None = None) -> Settings:
+    """Reload settings with optional environment overrides (for tests)."""
+    global settings
+    settings = load_settings(env=env)
+    return settings

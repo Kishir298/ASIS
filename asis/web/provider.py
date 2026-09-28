@@ -357,8 +357,28 @@ def build_default_provider(settings_obj=None) -> WebProvider:
     if settings_obj is None:
         from asis.configuration.settings import settings as settings_obj
     web = settings_obj.web
+    if not web.enabled:
+        return _OfflineWebProvider()
     return DuckDuckGoWebProvider(
         timeout=web.timeout,
         max_response_bytes=web.max_response_bytes,
         max_redirects=web.max_redirects,
     )
+
+
+class _OfflineWebProvider(WebProvider):
+    """Offline fallback: returns empty results without network calls."""
+
+    def search(self, query: str, max_results: int = 5) -> list[dict]:
+        return []
+
+    def fetch(self, url: str, max_chars: int = 8000) -> dict:
+        return {
+            "url": url,
+            "final_url": url,
+            "status_code": 0,
+            "content_type": "",
+            "title": "",
+            "text": "[Web access disabled - running offline]",
+            "truncated": False,
+        }
