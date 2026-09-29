@@ -6,6 +6,13 @@ tools must be declared with a higher PermissionLevel and approved by the
 permission system via the ToolExecutor.
 """
 
+from .ascs_integration import (
+    AscsIntegrationTool,
+    AscsHandoverTool,
+    AscsStatusTool,
+    build_ascs_tools,
+    register_ascs_tools,
+)
 from .calculator_tools import (
     CalculateTool,
     build_calculator_tools,
@@ -58,4 +65,9 @@ __all__ = [
     "CoreStatusTool",
     "build_core_tools",
     "register_core_tools",
+    "AscsIntegrationTool",
+    "AscsHandoverTool",
+    "AscsStatusTool",
+    "build_ascs_tools",
+    "register_ascs_tools",
 ]

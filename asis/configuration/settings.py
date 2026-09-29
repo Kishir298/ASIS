@@ -210,6 +210,22 @@ class CodingSettings:
 
 
 @dataclass(frozen=True)
+class AscsSettings:
+    """A.S.C.S. integration settings (optional coding agent)."""
+    enabled: bool
+    invoke_mode: str  # "subprocess" | "api"
+    workspace: str
+    mode: str
+    intelligence: str
+    command_timeout: int
+    request_timeout: int
+    model: str
+    fallback_model: str
+    max_iterations: int
+    handover_enabled: bool
+
+
+@dataclass(frozen=True)
 class TUISettings:
     """TUI-specific persistent user preferences."""
     sidebar_collapsed: bool = False
@@ -266,6 +282,7 @@ class Settings:
     runtime: RuntimeSettings
     core: CoreSettings
     coding: CodingSettings
+    ascs: AscsSettings
     tui: TUISettings
     update: UpdateSettings
     paths: PathSettings
@@ -545,6 +562,22 @@ def _build_coding_settings(get_s, get_i, d) -> CodingSettings:
     )
 
 
+def _build_ascs_settings(get_s, get_b, get_i, get_list, environment, d) -> AscsSettings:
+    return AscsSettings(
+        enabled=get_b("ASIS_ASCS_ENABLED", d.ASCS_ENABLED),
+        invoke_mode=get_s("ASIS_ASCS_INVOKE_MODE", d.ASCS_INVOKE_MODE),
+        workspace=get_s("ASIS_ASCS_WORKSPACE", d.ASCS_WORKSPACE),
+        mode=get_s("ASIS_ASCS_MODE", d.ASCS_MODE),
+        intelligence=get_s("ASIS_ASCS_INTELLIGENCE", d.ASCS_INTELLIGENCE),
+        command_timeout=get_i("ASIS_ASCS_COMMAND_TIMEOUT", d.ASCS_COMMAND_TIMEOUT),
+        request_timeout=get_i("ASIS_ASCS_REQUEST_TIMEOUT", d.ASCS_REQUEST_TIMEOUT),
+        model=get_s("ASIS_ASCS_MODEL", d.ASCS_MODEL),
+        fallback_model=get_s("ASIS_ASCS_FALLBACK_MODEL", d.ASCS_FALLBACK_MODEL),
+        max_iterations=get_i("ASIS_ASCS_MAX_ITERATIONS", d.ASCS_MAX_ITERATIONS),
+        handover_enabled=get_b("ASIS_ASCS_HANDOVER_ENABLED", d.ASCS_HANDOVER_ENABLED),
+    )
+
+
 def _build_tui_settings(get_s, get_b, get_i, d) -> TUISettings:
     return TUISettings(
         sidebar_collapsed=get_b("ASIS_TUI_SIDEBAR_COLLAPSED", d.TUI_SIDEBAR_COLLAPSED),
@@ -620,6 +653,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             voice=_build_voice_settings(get_s, get_i, get_f, d),
             runtime=_build_runtime_settings(get_s, get_b, get_i, d),
             coding=_build_coding_settings(get_s, get_i, d),
+            ascs=_build_ascs_settings(get_s, get_b, get_i, get_list, environment, d),
             tui=_build_tui_settings(get_s, get_b, get_i, d),
             update=_build_update_settings(get_s, get_b, get_i, get_list, d),
             paths=_build_path_settings(environment),

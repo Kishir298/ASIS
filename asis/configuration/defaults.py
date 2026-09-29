@@ -160,6 +160,19 @@ CODING_COMMAND_TIMEOUT = 120
 CODING_MAX_FILE_SIZE = 200_000
 CODING_MAX_OUTPUT_SIZE = 60_000
 
+# A.S.C.S. Integration (optional; standalone by default)
+ASCS_ENABLED = False
+ASCS_INVOKE_MODE = "subprocess"  # "subprocess" | "api"
+ASCS_WORKSPACE = ""
+ASCS_MODE = "AUTO"
+ASCS_INTELLIGENCE = "high"
+ASCS_COMMAND_TIMEOUT = 120
+ASCS_REQUEST_TIMEOUT = 600
+ASCS_MODEL = "qwen3-coder:30b"
+ASCS_FALLBACK_MODEL = "qwen2.5-coder:14b"
+ASCS_MAX_ITERATIONS = 50
+ASCS_HANDOVER_ENABLED = True
+
 # TUI (Terminal User Interface) - persistent user preferences
 TUI_SIDEBAR_COLLAPSED = False
 TUI_THEME = "dark"

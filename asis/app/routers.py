@@ -42,6 +42,7 @@ def build_coding_tool_router(
     """Build the coding router (general tools + workspace-bound coding tools)."""
     from asis.coding.tools import build_coding_registry
     from asis.tools.provided import (
+        register_ascs_tools,
         register_calculator_tools,
         register_translation_tools,
         register_web_tools,
@@ -56,6 +57,8 @@ def build_coding_tool_router(
         register_translation_tools(registry)
     with contextlib.suppress(Exception):
         register_calculator_tools(registry)
+    with contextlib.suppress(Exception):
+        register_ascs_tools(registry)
     for tool in build_coding_registry(workspace).list_tools():
         registry.register(tool)
     return ToolRouter(registry=registry, executor=build_executor(executor))
