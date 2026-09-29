@@ -231,7 +231,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 def handle_update(install: bool = False) -> int:
     """Handle the --update command."""
-    from asis.update.manager import get_update_manager
 
     print("Checking for updates...")
     manager = get_update_manager()

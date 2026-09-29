@@ -53,7 +53,7 @@ class BaseChecker(ABC):
         """
         pass
 
-    def _run_command(self, cmd: list[str], cwd: Optional[str] = None) -> tuple[int, str, str]:
+    def _run_command(self, cmd: list[str], cwd: str | None = None) -> tuple[int, str, str]:
         """Run a command and return (returncode, stdout, stderr)."""
         import subprocess
         try:

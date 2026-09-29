@@ -7,7 +7,6 @@ in the user's config directory.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +15,6 @@ import tomli_w
 
 from asis.configuration import settings
 from asis.configuration.paths import get_config_directory
-
 
 # TUI config file name
 TUI_CONFIG_FILENAME = "tui.toml"

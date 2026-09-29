@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from textual.containers import Horizontal
 from textual.widget import Widget
-from textual.widgets import Static, Button
+from textual.widgets import Button, Static
 
 from asis.tui.state import AppState, VoiceState
 

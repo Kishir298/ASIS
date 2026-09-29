@@ -6,18 +6,15 @@ These tests verify TUI behavior without requiring a full terminal.
 
 from __future__ import annotations
 
-import pytest
-import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
-from textual.app import App
-from textual.widgets import Input, Static
+import pytest
 
 from asis.tui.app import ASISTUI
-from asis.tui.widgets.file_browser_modal import FileBrowserModal
-from asis.tui.state import AppState
 from asis.tui.config import get_tui_config_path
+from asis.tui.state import AppState
+from asis.tui.widgets.file_browser_modal import FileBrowserModal
 
 
 @pytest.fixture(autouse=True)
@@ -85,7 +82,6 @@ class TestFileBrowserModal:
     @pytest.mark.asyncio
     async def test_file_browser_initialization(self):
         """Test file browser initializes with correct path."""
-        from asis.tui.widgets.file_browser_modal import FileBrowserModal
         modal = FileBrowserModal(Path("/test/path"))
         assert modal.current_path == Path("/test/path")
         assert modal.selected_index == 0
@@ -93,16 +89,13 @@ class TestFileBrowserModal:
     @pytest.mark.asyncio
     async def test_file_browser_default_path(self):
         """Test file browser defaults to home directory."""
-        from asis.tui.widgets.file_browser_modal import FileBrowserModal
         modal = FileBrowserModal()
         assert modal.current_path == Path.home()
 
     @pytest.mark.asyncio
     async def test_file_browser_entries_building(self):
         """Test file browser builds entries correctly."""
-        from asis.tui.widgets.file_browser_modal import FileBrowserModal
         import tempfile
-        import os
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create test files
@@ -128,9 +121,7 @@ class TestFileBrowserModal:
     @pytest.mark.asyncio
     async def test_file_browser_action_select_file(self):
         """Test selecting a file returns the path."""
-        from asis.tui.widgets.file_browser_modal import FileBrowserModal
         import tempfile
-        from unittest.mock import MagicMock
 
         with tempfile.TemporaryDirectory() as tmpdir:
             test_file = Path(tmpdir) / "test.txt"
@@ -155,7 +146,6 @@ class TestFileBrowserModal:
     @pytest.mark.asyncio
     async def test_file_browser_action_select_dir(self):
         """Test selecting a directory changes current path."""
-        from asis.tui.widgets.file_browser_modal import FileBrowserModal
         import tempfile
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -280,7 +270,7 @@ class TestThemeToggle:
         """Test action_toggle_theme method exists."""
         app = ASISTUI()
         assert hasattr(app, 'action_toggle_theme')
-        assert callable(getattr(app, 'action_toggle_theme'))
+        assert callable(app.action_toggle_theme)
 
     @pytest.mark.asyncio
     async def test_theme_mode_toggle(self):
@@ -307,7 +297,6 @@ class TestBootSequence:
         assert hasattr(app, 'boot_task')
         assert hasattr(app, 'event_bus')
         assert hasattr(app, 'state')
-        from asis.tui.state import AppState
         assert isinstance(app.state, AppState)
 
     @pytest.mark.asyncio
@@ -343,8 +332,8 @@ class TestAttachmentHandling:
     @pytest.mark.asyncio
     async def test_attachment_validation_logic(self):
         """Test file attachment validation logic."""
-        import tempfile
         import os
+        import tempfile
         from pathlib import Path
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
@@ -401,7 +390,7 @@ class TestThemeToggle:
         """Test action_toggle_theme method exists."""
         app = ASISTUI()
         assert hasattr(app, 'action_toggle_theme')
-        assert callable(getattr(app, 'action_toggle_theme'))
+        assert callable(app.action_toggle_theme)
 
     @pytest.mark.asyncio
     async def test_theme_mode_toggle(self):
@@ -428,7 +417,6 @@ class TestBootSequence:
         assert hasattr(app, 'boot_task')
         assert hasattr(app, 'event_bus')
         assert hasattr(app, 'state')
-        from asis.tui.state import AppState
         assert isinstance(app.state, AppState)
 
     @pytest.mark.asyncio
@@ -464,8 +452,8 @@ class TestAttachmentHandling:
     @pytest.mark.asyncio
     async def test_attachment_validation_logic(self):
         """Test file attachment validation logic."""
-        import tempfile
         import os
+        import tempfile
         from pathlib import Path
 
         with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
@@ -522,7 +510,7 @@ class TestThemeToggle:
         """Test action_toggle_theme method exists."""
         app = ASISTUI()
         assert hasattr(app, 'action_toggle_theme')
-        assert callable(getattr(app, 'action_toggle_theme'))
+        assert callable(app.action_toggle_theme)
 
     @pytest.mark.asyncio
     async def test_theme_mode_toggle(self):
@@ -549,7 +537,6 @@ class TestBootSequence:
         assert hasattr(app, 'boot_task')
         assert hasattr(app, 'event_bus')
         assert hasattr(app, 'state')
-        from asis.tui.state import AppState
         assert isinstance(app.state, AppState)
 
     @pytest.mark.asyncio

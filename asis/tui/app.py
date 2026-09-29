@@ -11,58 +11,41 @@ import contextlib
 import inspect
 import os
 import sys
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from typing import Any
 
+from rich.console import Console
 from textual import constants, events
 from textual.app import App, ComposeResult, Control, ScreenStackError
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.geometry import Size
 from textual.reactive import Reactive
 from textual.timer import Timer
 from textual.widgets import Static
 
-from rich.console import Console
-
-from asis.tui.state import AppState
-from asis.tui.events import EventBridge, create_event_bridge
-from asis.tui.widgets import (
-    IdentityPanel,
-    StatusPanel,
-    BootLogPanel,
-    ModeFooterPanel,
-    HeaderBar,
-    ConversationPanel,
-    AttachmentsBar,
-    InputBox,
-    VoiceBar,
-    StatusBar,
-)
-from asis.tui.config import load_tui_settings, save_tui_setting
-
 # Import backend modules
-from asis.ai.manager import AIManager
-from asis.ai.providers import MockAIProvider, OllamaProvider
 from asis.app.assistant import AssistantApp
-from asis.app.boot import BootError
 from asis.app.modes import AssistantMode as AppAssistantMode
-from asis.app.routers import build_default_tool_router
 from asis.configuration import settings
 from asis.events import EventBus
-from asis.identity import build_identity
-from asis.memory import MemoryManager, MemoryStorage, MemoryDatabase
-from asis.voice.pipeline import VoicePipeline
-from asis.voice.engines.mock import (
-    MockAudioInput,
-    MockAudioOutput,
-    MockSpeakerIdentifier,
-    MockSpeechRecognizer,
-    MockTextToSpeech,
-    MockVadDetector,
-)
-from asis.tui.boot_orchestrator import run_boot_sequence_legacy
 from asis.logging.logger import configure_logging
+from asis.tui.boot_orchestrator import run_boot_sequence_legacy
+from asis.tui.config import load_tui_settings, save_tui_setting
+from asis.tui.events import EventBridge, create_event_bridge
+from asis.tui.state import AppState
+from asis.tui.widgets import (
+    AttachmentsBar,
+    BootLogPanel,
+    ConversationPanel,
+    HeaderBar,
+    IdentityPanel,
+    InputBox,
+    ModeFooterPanel,
+    StatusBar,
+    StatusPanel,
+    VoiceBar,
+)
+from asis.voice.pipeline import VoicePipeline
 
 
 class ASISTUI(App):
@@ -228,15 +211,15 @@ class ASISTUI(App):
 
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
-        
+
         # Load TUI settings from config file
         tui_config = load_tui_settings()
-        
+
         self.state = AppState()
         # Apply saved TUI settings to state
         self.state.left_column_collapsed = tui_config.get("sidebar_collapsed", False)
         self.theme_mode = tui_config.get("theme", "dark")
-        
+
         self.event_bus = EventBus()
         self.event_bridge: EventBridge | None = None
         self.assistant_app: AssistantApp | None = None
@@ -298,13 +281,12 @@ class ASISTUI(App):
                 yield ModeFooterPanel(self.state)
 
             # Right column
-            with Vertical(id="right-column"):
-                with Vertical(id="right-grid"):
-                    yield HeaderBar(self.state)
-                    yield ConversationPanel(self.state)
-                    yield AttachmentsBar(self.state)
-                    yield InputBox(self.state)
-                    yield VoiceBar(self.state)
+            with Vertical(id="right-column"), Vertical(id="right-grid"):
+                yield HeaderBar(self.state)
+                yield ConversationPanel(self.state)
+                yield AttachmentsBar(self.state)
+                yield InputBox(self.state)
+                yield VoiceBar(self.state)
 
             # Status bar (full width)
             yield StatusBar(self.state)
@@ -636,7 +618,6 @@ class ASISTUI(App):
 
         elif cmd in ("upload", "attach"):
             if arg:
-                import os
                 from pathlib import Path
                 file_path = Path(arg).expanduser().resolve()
                 if not file_path.exists():
@@ -671,7 +652,7 @@ class ASISTUI(App):
             if arg and self.state.remove_attachment(arg):
                 await conv_panel.add_system_message(f"Detached: {arg}")
             else:
-                await conv_panel.add_system_message(f"Usage: /detach <name>")
+                await conv_panel.add_system_message("Usage: /detach <name>")
 
         else:
             await conv_panel.add_system_message(f"Unknown command: {cmd} (try /help)")
@@ -695,7 +676,6 @@ class ASISTUI(App):
             if path is None:
                 return
 
-            import os
             from pathlib import Path
 
             file_path = Path(path).expanduser().resolve()
@@ -744,7 +724,7 @@ class ASISTUI(App):
     def action_toggle_sidebar(self) -> None:
         """Toggle left sidebar (Ctrl+B)."""
         left_col = self.query_one("#left-column", Vertical)
-        
+
         if self.state.terminal_width < 90:
             # Narrow screen: toggle expanded overlay
             if left_col.has_class("expanded"):
@@ -763,7 +743,7 @@ class ASISTUI(App):
             else:
                 left_col.add_class("collapsed")
                 self.state.left_column_collapsed = True
-        
+
         # Persist sidebar state
         save_tui_setting("sidebar_collapsed", self.state.left_column_collapsed)
 
@@ -777,7 +757,7 @@ class ASISTUI(App):
         except Exception:
             # Ignore if ConversationPanel not available (e.g., in tests)
             pass
-        
+
         # Persist theme preference
         save_tui_setting("theme", self.theme_mode)
 

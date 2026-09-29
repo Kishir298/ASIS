@@ -4,18 +4,13 @@ File Browser Modal - In-TUI file browser for selecting files to attach.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
 
-from textual import events
 from textual.app import ComposeResult
-from textual.containers import Vertical, Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Static, Input, Button, ListView, ListItem, Label
-from textual.message import Message
-
-from asis.tui.state import AppState
+from textual.widgets import Button, Input, Label, ListItem, ListView
 
 
 class FileBrowserModal(ModalScreen[Optional[Path]]):
@@ -122,7 +117,7 @@ class FileBrowserModal(ModalScreen[Optional[Path]]):
         ("right", "enter_dir", "Enter Dir"),
     ]
 
-    def __init__(self, start_path: Optional[Path] = None) -> None:
+    def __init__(self, start_path: Path | None = None) -> None:
         super().__init__()
         self.current_path = start_path or Path.home()
         self.selected_index = 0
@@ -260,7 +255,7 @@ class FileBrowserModal(ModalScreen[Optional[Path]]):
 class AttachFileScreen(ModalScreen[Optional[Path]]):
     """Screen for attaching files - shows file browser."""
 
-    def __init__(self, start_path: Optional[Path] = None) -> None:
+    def __init__(self, start_path: Path | None = None) -> None:
         super().__init__()
         self.start_path = start_path
 

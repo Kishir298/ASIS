@@ -9,7 +9,6 @@ import logging
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 from asis.configuration.settings import settings
 
@@ -17,7 +16,7 @@ from .checkers import ComponentUpdate
 from .checkers.git import GitChecker
 from .checkers.ollama import OllamaModelChecker
 from .checkers.pip import PipChecker
-from .detectors import NetworkDetector, is_online
+from .detectors import NetworkDetector
 from .installers.git import GitInstaller
 from .installers.ollama import OllamaModelInstaller
 from .installers.pip import PipInstaller
@@ -59,16 +58,16 @@ class UpdateManager:
     def __init__(
         self,
         network_detector: NetworkDetector | None = None,
-        config: Optional[dict] = None,
+        config: dict | None = None,
     ):
         self._network = network_detector or NetworkDetector(
             timeout=settings.update_network_timeout if hasattr(settings, "update_network_timeout") else 3.0,
             cache_ttl=300.0,
         )
         self._config = config or {}
-        self._last_result: Optional[UpdateResult] = None
+        self._last_result: UpdateResult | None = None
         self._check_lock = threading.Lock()
-        self._check_task: Optional[asyncio.Task] = None
+        self._check_task: asyncio.Task | None = None
 
         # Initialize checkers and installers
         self._checkers = {
@@ -276,11 +275,11 @@ class UpdateManager:
 
 
 # Global manager instance
-_manager: Optional[UpdateManager] = None
+_manager: UpdateManager | None = None
 _manager_lock = threading.Lock()
 
 
-def get_update_manager(config: Optional[dict] = None) -> UpdateManager:
+def get_update_manager(config: dict | None = None) -> UpdateManager:
     """Get or create the global update manager."""
     global _manager
     with _manager_lock:

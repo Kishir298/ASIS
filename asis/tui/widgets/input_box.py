@@ -10,10 +10,10 @@ Bordered box with:
 from __future__ import annotations
 
 from textual.containers import Horizontal, Vertical
-from textual.widget import Widget
-from textual.widgets import Static, Input, Button
 from textual.events import Key
 from textual.message import Message
+from textual.widget import Widget
+from textual.widgets import Button, Input, Static
 
 from asis.tui.state import AppState
 

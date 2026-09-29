@@ -12,7 +12,7 @@ All network operations are opt-in and gracefully degrade when offline.
 from __future__ import annotations
 
 from .detectors import NetworkDetector, is_online
-from .manager import UpdateManager, UpdateResult, ComponentUpdate
+from .manager import ComponentUpdate, UpdateManager, UpdateResult
 
 __all__ = [
     "NetworkDetector",

@@ -7,11 +7,10 @@ allowing for easier testing and configuration of individual components.
 
 from __future__ import annotations
 
-import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Protocol
 
 from asis.ai.manager import AIManager
 from asis.ai.providers import AIProvider, MockAIProvider, OllamaProvider
@@ -22,9 +21,9 @@ from asis.app.routers import build_default_tool_router
 from asis.configuration import settings
 from asis.events import EventBus
 from asis.identity import build_identity
-from asis.logging.logger import configure_logging
-from asis.memory import MemoryManager, MemoryStorage, MemoryDatabase
-from asis.voice.pipeline import VoicePipeline
+from asis.memory import MemoryDatabase, MemoryManager, MemoryStorage
+from asis.tui.state import AppState
+from asis.tui.widgets import BootLogPanel
 from asis.voice.engines.mock import (
     MockAudioInput,
     MockAudioOutput,
@@ -33,10 +32,7 @@ from asis.voice.engines.mock import (
     MockTextToSpeech,
     MockVadDetector,
 )
-
-from asis.tui.state import AppState
-from asis.tui.widgets import BootLogPanel
-
+from asis.voice.pipeline import VoicePipeline
 
 logger = logging.getLogger("asis.boot.orchestrator")
 

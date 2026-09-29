@@ -5,7 +5,6 @@ Ollama model update checker for ASIS.
 from __future__ import annotations
 
 import json
-import subprocess
 
 from . import BaseChecker, ComponentUpdate
 

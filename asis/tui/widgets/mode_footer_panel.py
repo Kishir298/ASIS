@@ -6,9 +6,9 @@ Condensed boot recap + mode toggle control [ TEXT ] [ VOICE ].
 from __future__ import annotations
 
 from textual.containers import VerticalScroll
-from textual.widget import Widget
-from textual.widgets import Static, Button
 from textual.message import Message
+from textual.widget import Widget
+from textual.widgets import Button, Static
 
 from asis.tui.state import AppState, InteractionMode
 

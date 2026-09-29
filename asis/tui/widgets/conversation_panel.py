@@ -6,11 +6,9 @@ Formats: You >, A.S.I.S. >, [TOOL], [RUN ], [....], [DONE], [FAIL]
 
 from __future__ import annotations
 
-import re
 from textual.containers import VerticalScroll
 from textual.widget import Widget
-from textual.widgets import RichLog, Input
-from textual.message import Message
+from textual.widgets import Input, RichLog
 
 from asis.tui.state import AppState, ConversationMessage
 

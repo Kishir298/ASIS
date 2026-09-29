@@ -11,7 +11,6 @@ import socket
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 # requests is imported lazily in _requests()
 
@@ -27,7 +26,7 @@ class NetworkDetector:
 
     timeout: float = 3.0
     cache_ttl: float = 300.0  # 5 minutes
-    _cached_result: Optional[bool] = field(default=None, init=False)
+    _cached_result: bool | None = field(default=None, init=False)
     _cache_time: float = field(default=0.0, init=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, init=False)
 
@@ -77,7 +76,7 @@ class NetworkDetector:
         try:
             socket.create_connection(("8.8.8.8", 53), timeout=self.timeout)
             return True
-        except (socket.timeout, socket.error, OSError):
+        except (TimeoutError, OSError):
             return False
 
     def _requests(self):
@@ -114,7 +113,7 @@ class NetworkDetector:
 
 
 # Global detector instance for convenience
-_default_detector: Optional[NetworkDetector] = None
+_default_detector: NetworkDetector | None = None
 
 
 def get_detector(
