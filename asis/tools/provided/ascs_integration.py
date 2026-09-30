@@ -10,7 +10,6 @@ Supports handover protocol for ASCS -> ASIS session continuation.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import subprocess
@@ -18,7 +17,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from asis.permissions.models import PermissionLevel
 
@@ -30,7 +29,7 @@ from ..result import ToolResult
 class AscsHandoverState:
     """Serialized ASCS session state for ASIS takeover."""
     task: str
-    plan: Optional[dict]
+    plan: dict | None
     completed_actions: list
     observations: list
     partial_results: dict
@@ -87,52 +86,52 @@ class AscsIntegrationTool(Tool):
     def _build_subprocess_cmd(self, args: dict, settings) -> list[str]:
         """Build the risa CLI command."""
         cmd = ["risa"]
-        
+
         # Add task
         cmd.append(args["task"])
-        
+
         # Mode
         mode = args.get("mode", settings.ascs.mode)
         if mode:
             cmd.extend(["--mode", mode])
-        
+
         # Workspace
         workspace = args.get("workspace", settings.ascs.workspace)
         if workspace:
             cmd.extend(["--workspace", workspace])
-        
+
         # Model
         model = args.get("model", settings.ascs.model)
         if model:
             cmd.extend(["--model", model])
-        
+
         # Intelligence
         intelligence = args.get("intelligence", settings.ascs.intelligence)
         if intelligence:
             cmd.extend(["--intelligence", intelligence])
-        
+
         # Max iterations
         max_iter = args.get("max_iterations", settings.ascs.max_iterations)
         if max_iter:
             cmd.extend(["--max-iterations", str(max_iter)])
-        
+
         # Request timeout
         req_timeout = settings.ascs.request_timeout
         if req_timeout:
             cmd.extend(["--request-timeout", str(req_timeout)])
-        
+
         # Command timeout
         cmd_timeout = settings.ascs.command_timeout
         if cmd_timeout:
             cmd.extend(["--command-timeout", str(cmd_timeout)])
-        
+
         return cmd
 
     def _execute_subprocess(self, cmd: list[str], workspace: str) -> tuple[int, str, str]:
         """Execute risa command via subprocess."""
         env = os.environ.copy()
         env["RISALIVE"] = "0"  # Ensure no live tests
-        
+
         try:
             result = subprocess.run(
                 cmd,
@@ -155,12 +154,12 @@ class AscsIntegrationTool(Tool):
         try:
             # Import ASCS modules
             sys.path.insert(0, str(Path(settings.ascs.workspace).parent / "ASCS"))
-            
+
             from agent.config import load_config
-            from agent.models.client import OllamaClient
             from agent.core.loop import run_graph_agent
+            from agent.models.client import OllamaClient
             from agent.workspace import Workspace
-            
+
             config = load_config(
                 workspace=args.get("workspace", settings.ascs.workspace),
                 mode=args.get("mode", settings.ascs.mode),
@@ -170,25 +169,25 @@ class AscsIntegrationTool(Tool):
                 request_timeout=settings.ascs.request_timeout,
                 command_timeout=settings.ascs.command_timeout,
             )
-            
+
             client = OllamaClient(
                 base_url=config.ollama_base_url,
                 model=config.model,
                 request_timeout=config.request_timeout,
             )
-            
+
             # Run with event sink to capture output
             output_lines = []
             def log_capture(msg):
                 output_lines.append(msg)
-            
+
             result = run_graph_agent(
                 config, client, args["task"],
                 log=log_capture,
             )
-            
+
             return 0 if result.is_complete else 1, "\n".join(output_lines), result.error
-            
+
         except ImportError as e:
             return -1, "", f"ASCS modules not available: {e}. Use subprocess mode."
         except Exception as e:
@@ -196,27 +195,27 @@ class AscsIntegrationTool(Tool):
 
     def execute(self, **kwargs: Any) -> ToolResult:
         settings = self._get_settings()
-        
+
         if not settings.ascs.enabled:
             return ToolResult.failure(
                 error="ASCS integration is disabled. Set ASIS_ASCS_ENABLED=true to enable.",
                 tool_name=self.name,
             )
-        
+
         task = kwargs.get("task", "")
         if not isinstance(task, str) or not task.strip():
             return ToolResult.failure(
                 error="'task' must be a non-empty string.",
                 tool_name=self.name,
             )
-        
+
         invoke_mode = kwargs.get("invoke_mode", settings.ascs.invoke_mode)
         if invoke_mode not in ("subprocess", "api"):
             return ToolResult.failure(
                 error="'invoke_mode' must be 'subprocess' or 'api'.",
                 tool_name=self.name,
             )
-        
+
         # Build command arguments
         cmd_args = {
             "task": task.strip(),
@@ -226,34 +225,34 @@ class AscsIntegrationTool(Tool):
             "model": kwargs.get("model", settings.ascs.model),
             "max_iterations": kwargs.get("max_iterations", settings.ascs.max_iterations),
         }
-        
+
         workspace = cmd_args["workspace"]
         if not Path(workspace).exists():
             return ToolResult.failure(
                 error=f"Workspace does not exist: {workspace}",
                 tool_name=self.name,
             )
-        
+
         # Execute
         start_time = time.time()
-        
+
         if invoke_mode == "subprocess":
             cmd = self._build_subprocess_cmd(cmd_args, settings)
             returncode, stdout, stderr = self._execute_subprocess(cmd, workspace)
         else:
             returncode, stdout, stderr = self._execute_api(cmd_args, settings)
-        
+
         elapsed = time.time() - start_time
-        
+
         # Handle handover if enabled and ASCS completed
         handover_state = None
-        if (settings.ascs.handover_enabled and 
-            kwargs.get("enable_handover", True) and 
+        if (settings.ascs.handover_enabled and
+            kwargs.get("enable_handover", True) and
             returncode == 0 and
             Path(workspace, ".ascs", "task_state.json").exists()):
-            
+
             handover_state = self._extract_handover_state(workspace, task)
-        
+
         # Record session
         session_mgr = self._get_session_manager()
         session_mgr.record_session(
@@ -267,7 +266,7 @@ class AscsIntegrationTool(Tool):
             elapsed=elapsed,
             handover_state=handover_state,
         )
-        
+
         if returncode == 0:
             return ToolResult.ok(
                 data={
@@ -288,16 +287,16 @@ class AscsIntegrationTool(Tool):
                 tool_name=self.name,
             )
 
-    def _extract_handover_state(self, workspace: str, task: str) -> Optional[AscsHandoverState]:
+    def _extract_handover_state(self, workspace: str, task: str) -> AscsHandoverState | None:
         """Extract handover state from ASCS task_state.json."""
         try:
             task_state_path = Path(workspace) / ".ascs" / "task_state.json"
             if not task_state_path.exists():
                 return None
-            
+
             with open(task_state_path) as f:
                 data = json.load(f)
-            
+
             # Extract relevant fields
             return AscsHandoverState(
                 task=task,
@@ -346,7 +345,7 @@ class AscsHandoverTool(Tool):
                 error="'handover_state' must be a valid object.",
                 tool_name=self.name,
             )
-        
+
         # Validate required fields
         required = ["task", "workspace", "context_index_ref", "completed_actions", "observations"]
         for field in required:
@@ -355,7 +354,7 @@ class AscsHandoverTool(Tool):
                     error=f"Missing required field in handover_state: {field}",
                     tool_name=self.name,
                 )
-        
+
         # Load context index
         context_index_path = handover_data.get("context_index_ref")
         context_data = {}
@@ -365,7 +364,7 @@ class AscsHandoverTool(Tool):
                     context_data = json.load(f)
             except Exception:
                 pass
-        
+
         # Build continuation context for ASIS
         continuation_context = {
             "original_task": handover_data["task"],
@@ -377,7 +376,7 @@ class AscsHandoverTool(Tool):
             "context_index_summary": self._summarize_context_index(context_data),
             "timestamp": handover_data.get("timestamp"),
         }
-        
+
         return ToolResult.ok(
             data={
                 "continuation_context": continuation_context,
@@ -389,15 +388,15 @@ class AscsHandoverTool(Tool):
             },
             tool_name=self.name,
         )
-    
+
     def _summarize_context_index(self, context_data: dict) -> str:
         """Summarize the ASCS context index for ASIS prompt."""
         if not context_data:
             return "No context index available."
-        
+
         files = context_data.get("files", {})
         symbols = context_data.get("symbols", {})
-        
+
         return (
             f"Context index: {len(files)} files indexed, "
             f"{len(symbols)} symbols extracted. "
@@ -430,15 +429,15 @@ class AscsStatusTool(Tool):
         settings = self._get_settings() if hasattr(self, '_get_settings') else None
         if settings is None:
             from asis.configuration.settings import settings
-        
+
         if not settings.ascs.enabled:
             return ToolResult.failure(
                 error="ASCS integration is disabled.",
                 tool_name=self.name,
             )
-        
+
         result_data = {"enabled": True, "invoke_mode": settings.ascs.invoke_mode}
-        
+
         if kwargs.get("check_install", True):
             # Check if risa is available
             try:
@@ -448,11 +447,11 @@ class AscsStatusTool(Tool):
             except Exception:
                 result_data["risa_available"] = False
                 result_data["risa_version"] = "not found"
-        
+
         if kwargs.get("list_sessions", True):
             session_mgr = self._get_session_manager()
             result_data["sessions"] = session_mgr.get_recent_sessions(10)
-        
+
         return ToolResult.ok(data=result_data, tool_name=self.name)
 
     def _get_settings(self):
