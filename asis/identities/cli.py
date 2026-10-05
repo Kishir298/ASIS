@@ -82,7 +82,7 @@ def cmd_answer_open(db: Path, name: str, answer: str) -> str:
     if not gaps:
         return f"No open questions for {name}."
     q = gaps[0]["question"]
-    r = apply_user_answer(target, q, answer)
+    apply_user_answer(target, q, answer)
     store.save(target, reason="user answer")
     return f"[ OK ] Stored answer for \"{q}\" (provenance USER_CONFIRMED)."
 

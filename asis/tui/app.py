@@ -21,7 +21,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import Reactive
 from textual.timer import Timer
-from textual.widgets import Static
+from textual.widgets import Static, RichLog
 
 # Import backend modules
 from asis.app.assistant import AssistantApp
@@ -516,7 +516,7 @@ class ASISTUI(App):
 
         try:
             # Run in thread to avoid blocking UI
-            response = await asyncio.get_event_loop().run_in_executor(
+            await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self.assistant_app.chat_streamed(text, on_chunk=on_chunk)
             )
@@ -670,13 +670,12 @@ class ASISTUI(App):
 
     async def on_input_box_attach_clicked(self, message: InputBox.AttachClicked) -> None:
         """Handle attach button - open file browser modal."""
+        from pathlib import Path
         from asis.tui.widgets.file_browser_modal import FileBrowserModal
 
         def on_file_selected(path: Path | None) -> None:
             if path is None:
                 return
-
-            from pathlib import Path
 
             file_path = Path(path).expanduser().resolve()
             if not file_path.exists():

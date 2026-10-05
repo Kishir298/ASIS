@@ -6,7 +6,6 @@ import os
 import sys
 import subprocess
 import time
-import shutil
 from pathlib import Path
 
 
@@ -92,7 +91,6 @@ def fetch_json(path: str):
     request = urllib.request.Request(url)
     response = urllib.request.urlopen(request, timeout=5)
     body = response.read().decode("utf-8")
-    import json
     return json.loads(body)
 
 def ollama_up() -> bool:

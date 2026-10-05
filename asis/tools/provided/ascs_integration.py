@@ -127,7 +127,7 @@ class AscsIntegrationTool(Tool):
 
         return cmd
 
-    def _execute_subprocess(self, cmd: list[str], workspace: str) -> tuple[int, str, str]:
+    def _execute_subprocess(self, cmd: list[str], workspace: str, settings) -> tuple[int, str, str]:
         """Execute risa command via subprocess."""
         env = os.environ.copy()
         env["RISALIVE"] = "0"  # Ensure no live tests
@@ -158,7 +158,6 @@ class AscsIntegrationTool(Tool):
             from agent.config import load_config
             from agent.core.loop import run_graph_agent
             from agent.models.client import OllamaClient
-            from agent.workspace import Workspace
 
             config = load_config(
                 workspace=args.get("workspace", settings.ascs.workspace),
@@ -238,7 +237,7 @@ class AscsIntegrationTool(Tool):
 
         if invoke_mode == "subprocess":
             cmd = self._build_subprocess_cmd(cmd_args, settings)
-            returncode, stdout, stderr = self._execute_subprocess(cmd, workspace)
+            returncode, stdout, stderr = self._execute_subprocess(cmd, workspace, settings)
         else:
             returncode, stdout, stderr = self._execute_api(cmd_args, settings)
 

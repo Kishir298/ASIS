@@ -171,7 +171,6 @@ class TestSlashCommands:
     @pytest.mark.asyncio
     async def test_help_command_parsing(self):
         """Test /help command parsing."""
-        app = ASISTUI()
         # Test the command parsing logic directly
         text = "/help"
         parts = text[1:].split(" ", 1)
@@ -183,7 +182,6 @@ class TestSlashCommands:
     @pytest.mark.asyncio
     async def test_mode_command_parsing(self):
         """Test /mode command parsing."""
-        app = ASISTUI()
         text = "/mode coding"
         parts = text[1:].split(" ", 1)
         cmd = parts[0].lower()
@@ -194,7 +192,6 @@ class TestSlashCommands:
     @pytest.mark.asyncio
     async def test_upload_command_parsing(self):
         """Test /upload command parsing."""
-        app = ASISTUI()
         text = "/upload /path/to/file.txt"
         parts = text[1:].split(" ", 1)
         cmd = parts[0].lower()
@@ -205,7 +202,6 @@ class TestSlashCommands:
     @pytest.mark.asyncio
     async def test_status_command_parsing(self):
         """Test /status command parsing."""
-        app = ASISTUI()
         text = "/status"
         parts = text[1:].split(" ", 1)
         cmd = parts[0].lower()
@@ -216,11 +212,12 @@ class TestSlashCommands:
     @pytest.mark.asyncio
     async def test_unknown_command_parsing(self):
         """Test unknown command parsing."""
-        app = ASISTUI()
         text = "/unknown"
         parts = text[1:].split(" ", 1)
         cmd = parts[0].lower()
+        arg = parts[1] if len(parts) > 1 else ""
         assert cmd == "unknown"
+        assert arg == ""
 
 
 class TestThemeVariables:
@@ -287,7 +284,7 @@ class TestThemeToggle:
             assert app.theme_mode == "dark"
 
 
-class TestBootSequence:
+class TestBootSequenceV1:
     """Tests for boot sequence initialization."""
 
     @pytest.mark.asyncio
@@ -358,7 +355,7 @@ class TestAttachmentHandling:
             os.unlink(temp_path)
 
 
-class TestResponsiveBreakpoints:
+class TestResponsiveBreakpointsV1:
     """Tests for responsive breakpoint logic."""
 
     @pytest.mark.asyncio
@@ -382,7 +379,7 @@ class TestResponsiveBreakpoints:
         assert breakpoints[2] == (45, "-tall")
 
 
-class TestThemeToggle:
+class TestThemeToggleV2:
     """Tests for theme toggle functionality."""
 
     @pytest.mark.asyncio
@@ -407,7 +404,7 @@ class TestThemeToggle:
             assert app.theme_mode == "dark"
 
 
-class TestBootSequence:
+class TestBootSequenceV2:
     """Tests for boot sequence initialization."""
 
     @pytest.mark.asyncio
@@ -427,58 +424,7 @@ class TestBootSequence:
         assert hasattr(app, 'boot_task')
 
 
-class TestAttachmentHandling:
-    """Tests for file attachment handling logic."""
-
-    @pytest.mark.asyncio
-    async def test_attachment_icon_mapping(self):
-        """Test file extension to icon mapping."""
-        icon_map = {
-            ".py": "🐍", ".js": "📜", ".ts": "📜", ".json": "📋",
-            ".md": "📝", ".txt": "📄", ".pdf": "📕", ".csv": "📊",
-            ".png": "🖼️", ".jpg": "🖼️", ".jpeg": "🖼️", ".gif": "🖼️",
-            ".mp3": "🎵", ".wav": "🎵", ".mp4": "🎬", ".mov": "🎬",
-        }
-
-        # Test known extensions
-        assert icon_map.get(".py") == "🐍"
-        assert icon_map.get(".txt") == "📄"
-        assert icon_map.get(".pdf") == "📕"
-        assert icon_map.get(".png") == "🖼️"
-
-        # Test unknown extension defaults
-        assert icon_map.get(".xyz", "📎") == "📎"
-
-    @pytest.mark.asyncio
-    async def test_attachment_validation_logic(self):
-        """Test file attachment validation logic."""
-        import os
-        import tempfile
-        from pathlib import Path
-
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
-            f.write("test content")
-            temp_path = f.name
-
-        try:
-            file_path = Path(temp_path).expanduser().resolve()
-            assert file_path.exists()
-            assert file_path.is_file()
-
-            # Test non-existent file
-            fake_path = Path("/fake/path.txt").expanduser().resolve()
-            assert not fake_path.exists()
-
-            # Test directory
-            dir_path = Path(".").resolve()
-            assert dir_path.exists()
-            assert not dir_path.is_file()
-
-        finally:
-            os.unlink(temp_path)
-
-
-class TestResponsiveBreakpoints:
+class TestResponsiveBreakpointsV2:
     """Tests for responsive breakpoint logic."""
 
     @pytest.mark.asyncio
@@ -502,7 +448,7 @@ class TestResponsiveBreakpoints:
         assert breakpoints[2] == (45, "-tall")
 
 
-class TestThemeToggle:
+class TestThemeToggleV3:
     """Tests for theme toggle functionality."""
 
     @pytest.mark.asyncio
@@ -527,7 +473,7 @@ class TestThemeToggle:
             assert app.theme_mode == "dark"
 
 
-class TestBootSequence:
+class TestBootSequenceV3:
     """Tests for boot sequence initialization."""
 
     @pytest.mark.asyncio
@@ -547,7 +493,7 @@ class TestBootSequence:
         assert hasattr(app, 'boot_task')
 
 
-class TestResponsiveBreakpoints:
+class TestResponsiveBreakpointsV3:
     """Tests for responsive breakpoint logic."""
 
     @pytest.mark.asyncio

@@ -248,16 +248,12 @@ class AppState:
         if h < 10:
             return {}
 
-        # Row boundaries as percentages of content height
+# Row boundaries as percentages of content height
         r0 = 0
         r1 = max(3, int(h * 0.11))      # Identity / Header (11%)
         r2 = max(r1 + 1, int(h * 0.29))  # Status (18%)
         r3 = max(r2 + 1, int(h * 0.61))  # Boot log / Conversation (32%)
         r4 = max(r3 + 1, int(h * 0.96))  # Mode footer (35%)
-        r5 = h                             # End
-
-        left_w = self.get_left_column_width()
-        right_w = self.get_right_column_width()
 
         return {
             "identity": (r0, r1 - r0),

@@ -305,44 +305,6 @@ def core_status_line() -> str:
     return f"CORE: {state} (host={core.host}:{core.port})."
 
 
-def core_status_line() -> str:
-    """Describe the configured C.O.R.E. uplink without connecting.
-
-    Never prompts for the provisioning credential and never opens a
-    socket: with no credential available the manager reports DISABLED
-    (CORE off) or DISCONNECTED (CORE on, no session) -- both secret-free.
-    """
-    from asis.integrations.core.adapter import RealCoreAdapter
-    from asis.integrations.core.connection import (
-        build_connection_manager_from_settings,
-    )
-    from asis.system.context import RuntimeContext
-
-    core = settings.core
-    adapter = RealCoreAdapter(
-        host=core.host,
-        port=core.port,
-        device_file=core.device_file,
-        ca_file=core.ca_file,
-        insecure=core.insecure,
-        connect_timeout=core.connect_timeout,
-        request_timeout=core.request_timeout,
-    )
-    manager = build_connection_manager_from_settings(
-        settings, adapter, credential_provider=None
-    )
-    context = RuntimeContext()
-    manager.start(context)
-    try:
-        status = manager.status()
-    finally:
-        manager.stop(context)
-    state = getattr(status.state, "value", str(status.state)).lower()
-    if state == "disabled":
-        return "CORE: disabled (standalone)."
-    return f"CORE: {state} (host={core.host}:{core.port})."
-
-
 def handle_mode_command(app: AssistantApp, message: str) -> str | None:
     """Handle /mode, /ascs, /translate and translation REPL commands."""
     text = message.strip()

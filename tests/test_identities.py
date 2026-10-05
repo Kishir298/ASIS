@@ -104,7 +104,7 @@ def test_pipeline_persist_restart(tmp_path):
     store2 = IdentityStore(db)
     assert len(store2.list_all()) >= 2
     # second import updates, not duplicates
-    res2 = analyze_conversation(db, p, store2, "Chat_A")
+    analyze_conversation(db, p, store2, "Chat_A")
     assert len(store2.list_all()) == len(store.list_all())
 
 

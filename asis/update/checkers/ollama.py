@@ -69,25 +69,6 @@ class OllamaModelChecker(BaseChecker):
                     description=f"Model '{self._model}' not installed locally",
                 )
 
-            # Check each model for updates
-            updates = []
-            for model in models:
-                name = model.get("name", "")
-                if not name:
-                    continue
-
-                # Get model info to check for newer version
-                returncode, stdout, stderr = self._run_command(["ollama", "show", name, "--format", "json"])
-                if returncode == 0:
-                    try:
-                        info = json.loads(stdout)
-                        # Check if there's a newer version available
-                        # This is a simplified check - real implementation would
-                        # compare with registry
-                        pass
-                    except json.JSONDecodeError:
-                        pass
-
             # For now, just report current models
             # Real update checking would require querying Ollama registry
             model_names = [m.get("name", "unknown") for m in models]

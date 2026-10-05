@@ -171,7 +171,6 @@ class ConversationPanel(Widget):
 
     def action_toggle_search(self) -> None:
         """Toggle search input visibility."""
-        search_input = self.query_one("#search-input", Input)
         if self._search_active:
             self._close_search()
         else:
