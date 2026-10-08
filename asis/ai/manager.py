@@ -7,7 +7,6 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from asis.configuration.settings import settings
 from asis.errors import InferenceError
 from asis.events.bus import EventBus
 from asis.events.events import Event, EventType
@@ -17,27 +16,34 @@ from .models import AIMessage, AIResponse
 from .providers import AIProvider, MockAIProvider
 
 
+def _get_settings():
+    """Get the current settings instance (allows test overrides)."""
+    from asis.configuration.settings import settings as current_settings
+    return current_settings
+
+
 def create_provider(provider_name: str | None = None) -> AIProvider:
     """Build the configured AI provider."""
-    name = (provider_name or settings.ai.provider).lower()
+    s = _get_settings()
+    name = (provider_name or s.ai.provider).lower()
 
     if name == "mock":
         return MockAIProvider(
-            model=settings.ai.model,
+            model=s.ai.model,
         )
 
     if name == "ollama":
         from .providers import OllamaProvider, resolve_think
 
         return OllamaProvider(
-            model=settings.ai.model,
-            host=settings.ai.endpoint,
-            timeout=settings.ai.request_timeout,
-            temperature=settings.ai.temperature,
-            retries=settings.network.retries,
-            think=resolve_think(settings.ai.think, settings.ai.model),
-            num_predict=settings.ai.num_predict or None,
-            keep_alive=settings.ai.keep_alive or None,
+            model=s.ai.model,
+            host=s.ai.endpoint,
+            timeout=s.ai.request_timeout,
+            temperature=s.ai.temperature,
+            retries=s.network.retries,
+            think=resolve_think(s.ai.think, s.ai.model),
+            num_predict=s.ai.num_predict or None,
+            keep_alive=s.ai.keep_alive or None,
         )
 
     raise InferenceError(f"Unknown AI provider: {name}")

@@ -27,7 +27,7 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { get } from "node:http";
+import { request as httpRequest } from "node:http";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import os from "node:os";
@@ -42,11 +42,24 @@ const PYTHON_LAUNCHER = IS_WINDOWS ? "py" : "python3";
 // Overridable for testing (e.g. ASIS_OLLAMA_PORT=1 forces the down-path).
 const OLLAMA_HOST = process.env.ASIS_OLLAMA_HOST ?? "127.0.0.1";
 const OLLAMA_PORT = Number(process.env.ASIS_OLLAMA_PORT ?? 11434);
+// Parse ASIS_AI_ENDPOINT if set (format: http://host:port)
+let ENDPOINT_HOST = OLLAMA_HOST;
+let ENDPOINT_PORT = OLLAMA_PORT;
+const AI_ENDPOINT = process.env.ASIS_AI_ENDPOINT;
+if (AI_ENDPOINT) {
+  try {
+    const url = new URL(AI_ENDPOINT);
+    ENDPOINT_HOST = url.hostname;
+    ENDPOINT_PORT = Number(url.port) || (url.protocol === "https:" ? 443 : 80);
+  } catch {
+    // Ignore parse errors, fall back to defaults
+  }
+}
 // Bind address for a launcher-started `ollama serve` (OLLAMA_HOST format).
 // Override for sandbox tests, e.g. ASIS_OLLAMA_SERVE_BIND=127.0.0.1:11435,
 // so the live :11434 server is never disturbed.
 const SERVE_BIND = process.env.ASIS_OLLAMA_SERVE_BIND ?? "127.0.0.1:11434";
-const MODEL = "qwen3:14b";
+const MODEL = process.env.ASIS_AI_MODEL ?? "qwen3:14b";
 // Slow machines need longer for first boot (cold GPU discovery under RAM
 // pressure); override with ASIS_OLLAMA_SERVE_TIMEOUT_S.
 const SERVE_READY_TIMEOUT_MS =
@@ -162,8 +175,8 @@ function voiceDepsPresent() {
 
 function fetchJson(path) {
   return new Promise((resolvePromise, rejectPromise) => {
-    const request = get(
-      { host: OLLAMA_HOST, port: OLLAMA_PORT, path, timeout: 5000 },
+    const request = httpRequest(
+      { host: ENDPOINT_HOST, port: ENDPOINT_PORT, path, method: "GET", timeout: 5000 },
       (response) => {
         let body = "";
         response.on("data", (chunk) => {
@@ -182,6 +195,7 @@ function fetchJson(path) {
       request.destroy(new Error("timed out"));
     });
     request.on("error", rejectPromise);
+    request.end();
   });
 }
 
@@ -286,6 +300,62 @@ async function checkModel() {
   }
 }
 
+async function probeInference() {
+  // Minimal inference probe: POST /api/chat with a single "hello" message
+  // Use higher num_predict to allow thinking models to generate visible content
+  // Also disable thinking for the probe to get a faster response
+  return new Promise((resolvePromise, rejectPromise) => {
+    const payload = JSON.stringify({
+      model: MODEL,
+      messages: [{ role: "user", content: "hello" }],
+      stream: false,
+      think: false,
+      options: { num_predict: 64 },
+    });
+    const request = httpRequest(
+      {
+        host: ENDPOINT_HOST,
+        port: ENDPOINT_PORT,
+        path: "/api/chat",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+        timeout: 30000,
+      },
+      (response) => {
+        let body = "";
+        response.on("data", (chunk) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          try {
+            const data = JSON.parse(body);
+            // Check both content and thinking fields (for thinking models)
+            const content = data?.message?.content ?? "";
+            const thinking = data?.message?.thinking ?? "";
+            const visible = content.trim() || thinking.trim();
+            if (visible) {
+              resolvePromise(true);
+            } else {
+              rejectPromise(new Error("Empty response from model"));
+            }
+          } catch (error) {
+            rejectPromise(error);
+          }
+        });
+      }
+    );
+    request.on("timeout", () => {
+      request.destroy(new Error("inference probe timed out"));
+    });
+    request.on("error", rejectPromise);
+    request.write(payload);
+    request.end();
+  });
+}
+
 async function main() {
   const rawArgs = process.argv.slice(2);
   process.chdir(ROOT);
@@ -294,6 +364,11 @@ async function main() {
   if (rawArgs.includes("--test")) {
     process.exit(runForeground(VENV_PYTHON, ["-m", "pytest", "-q"]));
   }
+
+  const isMockMode = rawArgs.includes("--mock");
+
+  // Remove --mock from args passed to Python (Python uses --provider mock)
+  const filteredArgs = rawArgs.filter(arg => arg !== "--mock");
 
   if (rawArgs[0] === "voice" && !voiceDepsPresent()) {
     console.error(
@@ -305,21 +380,61 @@ async function main() {
   }
 
   if (rawArgs.includes("--check")) {
-    process.exit(runForeground(VENV_PYTHON, ["-m", "asis", "--identify"]));
+    if (isMockMode) {
+      process.exit(runForeground(VENV_PYTHON, ["-m", "asis", "--identify", "--provider", "mock"]));
+    }
+    const { owned, servePid } = await ensureOllama();
+    await checkModel();
+    try {
+      await probeInference();
+      console.error("asis: Inference probe successful.");
+    } catch (error) {
+      if (owned) {
+        unloadModel(MODEL);
+        stopServeProcess(servePid);
+      }
+      fail(`Inference probe failed: ${error.message}`);
+    }
+    if (owned) {
+      unloadModel(MODEL);
+      stopServeProcess(servePid);
+    }
+    process.exit(0);
   }
 
-  const { owned, servePid } = await ensureOllama();
-  await checkModel();
+  let owned = false;
+  let servePid = null;
+  if (!isMockMode) {
+    const result = await ensureOllama();
+    owned = result.owned;
+    servePid = result.servePid;
+    await checkModel();
+  }
 
-  const child = spawn(VENV_PYTHON, ["-m", "asis", ...rawArgs], {
-    stdio: "inherit",
-  });
   const shutdownOwned = () => {
     if (owned) {
       unloadModel(MODEL);
       stopServeProcess(servePid);
     }
   };
+
+  // Register cleanup handlers early (before any risky operations)
+  process.on("SIGINT", () => {
+    shutdownOwned();
+    process.exit(130);
+  });
+  process.on("SIGTERM", () => {
+    shutdownOwned();
+    process.exit(143);
+  });
+
+  const pythonArgs = ["-m", "asis", ...filteredArgs];
+  if (isMockMode) {
+    pythonArgs.push("--provider", "mock");
+  }
+  const child = spawn(VENV_PYTHON, pythonArgs, {
+    stdio: "inherit",
+  });
   child.on("error", (error) => {
     shutdownOwned();
     fail(`could not launch asis: ${error.message}`);

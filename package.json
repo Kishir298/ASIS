@@ -8,6 +8,7 @@
     "asis:voice": "node scripts/asis.mjs voice",
     "asis:check": "node scripts/asis.mjs --check",
     "asis:test": "node scripts/asis.mjs --test",
+    "asis:mock": "node scripts/asis.mjs --mock --tui",
     "ASIS": "npm run asis --"
   }
 }

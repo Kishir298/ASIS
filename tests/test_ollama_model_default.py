@@ -128,15 +128,19 @@ def test_cli_model_override(monkeypatch):
 def test_manager_create_provider_uses_configured_model(monkeypatch):
     _clean_env(monkeypatch)
     import asis.ai.manager as manager_module
+    from asis.configuration.settings import reset_settings
 
-    monkeypatch.setattr(
-        manager_module, "settings", load_settings({"ASIS_AI_MODEL": OVERRIDE_MODEL})
-    )
+    # Use environment variables to configure settings (reset_settings reads from env)
+    monkeypatch.setenv("ASIS_AI_MODEL", OVERRIDE_MODEL)
+    reset_settings()
+    
     provider = manager_module.create_provider("ollama")
     assert provider.name == "ollama"
     assert provider.model == OVERRIDE_MODEL
 
-    monkeypatch.setattr(manager_module, "settings", load_settings())
+    # Reset to defaults
+    monkeypatch.delenv("ASIS_AI_MODEL", raising=False)
+    reset_settings()
     default_provider = manager_module.create_provider("ollama")
     assert default_provider.model == DEFAULT_MODEL
 

@@ -7,13 +7,14 @@ allowing for easier testing and configuration of individual components.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from asis.ai.manager import AIManager
-from asis.ai.providers import AIProvider, MockAIProvider, OllamaProvider
+from asis.ai.manager import AIManager, create_provider
+from asis.ai.providers import AIProvider, MockAIProvider
 from asis.app.assistant import AssistantApp
 from asis.app.boot import BootError
 from asis.app.modes import AssistantMode as AppAssistantMode
@@ -22,7 +23,7 @@ from asis.configuration import settings
 from asis.events import EventBus
 from asis.identity import build_identity
 from asis.memory import MemoryDatabase, MemoryManager, MemoryStorage
-from asis.tui.state import AppState
+from asis.tui.state import AppState, VoiceState
 from asis.tui.widgets import BootLogPanel
 from asis.voice.engines.mock import (
     MockAudioInput,
@@ -99,6 +100,7 @@ class BootOrchestrator:
         state: AppState,
         event_bus: EventBus,
         boot_log_panel: BootLogPanel | None = None,
+        mock_mode: bool = False,
         # Dependency injection hooks
         identity_provider: IdentityProvider | None = None,
         memory_provider_factory: Callable[[], MemoryManager] | None = None,
@@ -109,13 +111,13 @@ class BootOrchestrator:
         self.state = state
         self.event_bus = event_bus
         self.boot_log_panel = boot_log_panel
+        self.mock_mode = mock_mode
         self._components = BootComponents()
 
         # DI hooks (use defaults if not provided)
         self._identity_provider = identity_provider or DefaultIdentityProvider()
         self._memory_provider_factory = memory_provider_factory or self._default_memory_factory
         self._tool_router_provider = tool_router_provider or DefaultToolRouterProvider()
-        self._ai_provider_factory = ai_provider_factory or DefaultAIProviderFactory()
         self._voice_pipeline_factory = voice_pipeline_factory or DefaultVoicePipelineFactory()
 
     def _add_boot_log(self, status: str, message: str) -> None:
@@ -199,48 +201,74 @@ class BootOrchestrator:
     async def _boot_ai_provider(self) -> None:
         """Boot AI provider."""
         try:
-            provider_name = settings.ai.provider
-            if provider_name == "ollama":
-                provider = OllamaProvider(
-                    model=settings.ai.model,
-                    host=settings.ai.endpoint,
-                    timeout=settings.ai.request_timeout,
-                    temperature=settings.ai.temperature,
-                    retries=settings.network.retries,
-                )
-                self._add_boot_log("BOOT", "Connecting to Ollama...")
+            if self.mock_mode:
+                provider = MockAIProvider(model=settings.ai.model)
+                self.state.model_name = settings.ai.model
+                self._add_boot_log("OK", "AI provider ready (MOCK)")
+            else:
+                # Create provider with CLI overrides if provided
+                from asis.ai.providers import OllamaProvider, resolve_think
+                from asis.configuration import settings as global_settings
 
-                # Check availability
+                model = global_settings.ai.model
+                host = global_settings.ai.endpoint
+                timeout = global_settings.ai.request_timeout
+                temperature = self.state.ai_temperature if self.state.ai_temperature is not None else global_settings.ai.temperature
+                retries = global_settings.network.retries
+                think = resolve_think(
+                    self.state.ai_think if self.state.ai_think is not None else global_settings.ai.think,
+                    model
+                )
+                num_predict = self.state.ai_num_predict if self.state.ai_num_predict is not None else (global_settings.ai.num_predict or None)
+                keep_alive = self.state.ai_keep_alive if self.state.ai_keep_alive is not None else (global_settings.ai.keep_alive or None)
+
+                provider = OllamaProvider(
+                    model=model,
+                    host=host,
+                    timeout=timeout,
+                    temperature=temperature,
+                    retries=retries,
+                    think=think,
+                    num_predict=num_predict,
+                    keep_alive=keep_alive,
+                )
+                self.state.model_name = model
+                self._add_boot_log("BOOT", f"Connecting to {provider.name} ({provider.model})...")
+
+                # Check availability in executor to avoid blocking
+                loop = asyncio.get_event_loop()
                 available = False
-                try:
-                    avail_fn = getattr(provider, "available", None)
-                    if callable(avail_fn):
-                        try:
-                            available = avail_fn(timeout=5.0)
-                        except TypeError:
-                            available = avail_fn()
-                except Exception:
-                    available = False
+                avail_fn = getattr(provider, "available", None)
+                if callable(avail_fn):
+                    try:
+                        available = await asyncio.wait_for(
+                            loop.run_in_executor(None, lambda: avail_fn(timeout=5.0)),
+                            timeout=10.0,
+                        )
+                    except TypeError:
+                        available = await asyncio.wait_for(
+                            loop.run_in_executor(None, avail_fn),
+                            timeout=10.0,
+                        )
+                    except Exception:
+                        available = False
 
                 if available:
                     self.state.ollama_online = True
-                    self._add_boot_log("OK", "Ollama ready")
+                    self._add_boot_log("OK", f"{provider.name.capitalize()} ready")
                 else:
-                    self._add_boot_log("FAIL", "Ollama server not reachable")
-                    provider = MockAIProvider(model=settings.ai.model)
-
-                self.state.model_name = settings.ai.model
-            else:
-                provider = MockAIProvider(model=settings.ai.model)
-                self.state.model_name = settings.ai.model
+                    self._add_boot_log("FAIL", f"{provider.name.capitalize()} server not reachable")
+                    raise BootError(f"{provider.name.capitalize()} server not reachable at {getattr(provider, 'host', global_settings.ai.endpoint)}")
 
             self._components.ai_provider = provider
+        except BootError:
+            raise
         except Exception as exc:
             self._add_boot_log("FAIL", f"AI provider failed: {exc}")
             raise BootError(f"AI provider boot failed: {exc}") from exc
 
     async def _verify_model(self) -> None:
-        """Verify model readiness."""
+        """Verify model readiness with a real inference probe."""
         self._add_boot_log("BOOT", "Verifying model...")
         try:
             from asis.ai.models import AIMessage, MessageRole
@@ -249,7 +277,13 @@ class BootOrchestrator:
                 raise BootError("AI provider not initialized")
 
             messages = [AIMessage(role=MessageRole.USER, content="hello")]
-            response = provider.chat(messages)
+
+            # Run chat in executor to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            response = await asyncio.wait_for(
+                loop.run_in_executor(None, lambda: provider.chat(messages)),
+                timeout=30.0,
+            )
             content = getattr(response, "content", "")
             text = content if isinstance(content, str) else str(content or "")
 
@@ -258,12 +292,14 @@ class BootOrchestrator:
                 self._add_boot_log("OK", "Model ready")
             else:
                 raise BootError("Model readiness probe returned empty response")
+        except BootError:
+            raise
+        except asyncio.TimeoutError:
+            self._add_boot_log("FAIL", "Model readiness probe timed out")
+            raise BootError("Model readiness probe timed out after 30s")
         except Exception as exc:
             self._add_boot_log("FAIL", f"Model readiness check failed: {exc}")
-            # Use mock as fallback
-            self._components.ai_provider = MockAIProvider(model=settings.ai.model)
-            self.state.model_ready = True
-            self._add_boot_log("OK", "Model ready (mock fallback)")
+            raise BootError(f"Model readiness check failed: {exc}") from exc
 
     async def _boot_ai_manager(self) -> None:
         """Boot AI manager."""
@@ -310,10 +346,10 @@ class BootOrchestrator:
         try:
             voice_pipeline = self._voice_pipeline_factory.create(self.event_bus)
             self._components.voice_pipeline = voice_pipeline
-            self.state.voice_state = "READY"
+            self.state.voice_state = VoiceState.READY
             self._add_boot_log("OK", "Voice pipeline initialized")
         except Exception as exc:
-            self.state.voice_state = "ERROR"
+            self.state.voice_state = VoiceState.ERROR
             self._add_boot_log("WARN", f"Voice pipeline unavailable: {exc}")
 
 
@@ -331,22 +367,6 @@ class DefaultToolRouterProvider:
 
     def build(self) -> Any:
         return build_default_tool_router()
-
-
-class DefaultAIProviderFactory:
-    """Default AI provider factory."""
-
-    def create(self, settings_obj: Any) -> AIProvider:
-        provider_name = settings.ai.provider
-        if provider_name == "ollama":
-            return OllamaProvider(
-                model=settings.ai.model,
-                host=settings.ai.endpoint,
-                timeout=settings.ai.request_timeout,
-                temperature=settings.ai.temperature,
-                retries=settings.network.retries,
-            )
-        return MockAIProvider(model=settings.ai.model)
 
 
 class DefaultVoicePipelineFactory:
@@ -369,6 +389,7 @@ async def run_boot_sequence_legacy(
     state: AppState,
     event_bus: EventBus,
     boot_log_panel: BootLogPanel | None = None,
+    mock_mode: bool = False,
 ) -> dict[str, Any]:
     """
     Legacy compatibility wrapper for the old boot sequence.
@@ -380,6 +401,7 @@ async def run_boot_sequence_legacy(
         state=state,
         event_bus=event_bus,
         boot_log_panel=boot_log_panel,
+        mock_mode=mock_mode,
     )
     components = await orchestrator.run()
     return {

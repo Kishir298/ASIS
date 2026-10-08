@@ -83,6 +83,12 @@ class AppState:
     ollama_online: bool = False
     model_ready: bool = False
 
+    # Inference options (from CLI)
+    ai_temperature: float | None = None
+    ai_think: str | None = None
+    ai_num_predict: int | None = None
+    ai_keep_alive: str | None = None
+
     # Subsystem readiness
     memory_ready: bool = False
     tools_ready: bool = False

@@ -28,6 +28,7 @@ from asis.app.assistant import AssistantApp
 from asis.app.modes import AssistantMode as AppAssistantMode
 from asis.configuration import settings
 from asis.events import EventBus
+from asis.app.boot import BootError
 from asis.logging.logger import configure_logging
 from asis.tui.boot_orchestrator import run_boot_sequence_legacy
 from asis.tui.config import load_tui_settings, save_tui_setting
@@ -209,7 +210,15 @@ class ASISTUI(App):
         Binding("ctrl+t", "toggle_theme", "Toggle Theme", show=True),
     ]
 
-    def __init__(self, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        mock_mode: bool = False,
+        ai_temperature: float | None = None,
+        ai_think: str | None = None,
+        ai_num_predict: int | None = None,
+        ai_keep_alive: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
 
         # Load TUI settings from config file
@@ -219,6 +228,13 @@ class ASISTUI(App):
         # Apply saved TUI settings to state
         self.state.left_column_collapsed = tui_config.get("sidebar_collapsed", False)
         self.theme_mode = tui_config.get("theme", "dark")
+
+        # Store inference options from CLI
+        self.state.ai_temperature = ai_temperature
+        self.state.ai_think = ai_think
+        self.state.ai_num_predict = ai_num_predict
+        self.state.ai_keep_alive = ai_keep_alive
+        self.mock_mode = mock_mode
 
         self.event_bus = EventBus()
         self.event_bridge: EventBridge | None = None
@@ -299,11 +315,15 @@ class ASISTUI(App):
         # Set up event bridge
         self.event_bridge = create_event_bridge(self.state, self.event_bus)
 
+        # Disable input until boot completes
+        input_box = self.query_one(InputBox)
+        input_box.placeholder = "Booting..."
+        input_box.disabled = True
+
         # Start boot sequence
         self.boot_task = asyncio.create_task(self._run_boot_sequence())
 
-        # Set up input handler
-        input_box = self.query_one(InputBox)
+        # Set up input handler (will be enabled after boot)
         input_box.focus()
 
     async def _process_messages(
@@ -458,11 +478,19 @@ class ASISTUI(App):
 
     async def _run_boot_sequence(self) -> None:
         """Run the boot sequence asynchronously using the BootOrchestrator."""
+        # Get boot log panel if available (not available in headless mode)
+        boot_log_panel = None
+        try:
+            boot_log_panel = self.query_one(BootLogPanel)
+        except Exception:
+            pass  # Headless mode or not mounted yet
+
         try:
             components = await run_boot_sequence_legacy(
                 state=self.state,
                 event_bus=self.event_bus,
-                boot_log_panel=self.query_one(BootLogPanel),
+                boot_log_panel=boot_log_panel,
+                mock_mode=getattr(self, "mock_mode", False),
             )
 
             # Assign components to instance attributes
@@ -473,15 +501,47 @@ class ASISTUI(App):
             # to keep local references for backward compatibility
             self._ollama_owned = components.get("ollama_owned", False)
 
+            # Boot successful - enable input (only if not headless)
+            try:
+                input_box = self.query_one(InputBox)
+                input_box.placeholder = "Type a message..."
+                input_box.disabled = False
+            except Exception:
+                pass  # Headless mode
+
+        except BootError as exc:
+            # Boot failed - log error, disable input, stay mounted
+            self.state.add_boot_log("FAIL", f"Boot failed: {exc}")
+            try:
+                input_box = self.query_one(InputBox)
+                input_box.placeholder = "Boot failed - see log above"
+                input_box.disabled = True
+            except Exception:
+                pass
         except Exception as exc:
             self.state.add_boot_log("FAIL", f"Boot failed: {exc}")
+            try:
+                input_box = self.query_one(InputBox)
+                input_box.placeholder = "Boot failed - see log above"
+                input_box.disabled = True
+            except Exception:
+                pass
 
-        # Trigger UI refresh
-        self.call_from_thread(self.refresh)
+        # Trigger UI refresh (already on app thread)
+        try:
+            self.refresh()
+        except Exception:
+            pass
 
     async def on_input_box_message_sent(self, message: InputBox.MessageSent) -> None:
         """Handle user message sent."""
         if not self.assistant_app:
+            return
+
+        # Don't process messages until model is ready
+        if not self.state.model_ready:
+            conv_panel = self.query_one(ConversationPanel)
+            await conv_panel.add_system_message("Model not ready yet. Please wait for boot to complete.")
             return
 
         text = message.text
@@ -806,7 +866,24 @@ class ASISTUI(App):
 
 def entry(argv: list[str] | None = None) -> int:
     """Console entry point for asis-tui."""
-    app = ASISTUI()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="A.S.I.S. TUI", add_help=False)
+    parser.add_argument("--mock", action="store_true", help="Run in mock mode (no Ollama required)")
+    parser.add_argument("--ai-temperature", type=float, help="Set AI temperature")
+    parser.add_argument("--ai-think", choices=["auto", "true", "false"], help="Set AI think mode")
+    parser.add_argument("--ai-num-predict", type=int, help="Set max tokens to predict")
+    parser.add_argument("--ai-keep-alive", type=str, help="Set model keep-alive duration")
+    # Parse known args, leave the rest for potential future use
+    args, _ = parser.parse_known_args(argv or [])
+
+    app = ASISTUI(
+        mock_mode=args.mock,
+        ai_temperature=args.ai_temperature,
+        ai_think=args.ai_think,
+        ai_num_predict=args.ai_num_predict,
+        ai_keep_alive=args.ai_keep_alive,
+    )
     app.run()
     return 0
 
