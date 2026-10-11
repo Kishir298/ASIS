@@ -217,6 +217,26 @@ def build_parser() -> argparse.ArgumentParser:
         help="launch the Textual TUI interface (alternate-screen)",
     )
     parser.add_argument(
+        "--ai-temperature",
+        type=float,
+        help="Set AI temperature (forwarded to TUI)",
+    )
+    parser.add_argument(
+        "--ai-think",
+        choices=["auto", "true", "false"],
+        help="Set AI think mode (forwarded to TUI)",
+    )
+    parser.add_argument(
+        "--ai-num-predict",
+        type=int,
+        help="Set max tokens to predict (forwarded to TUI)",
+    )
+    parser.add_argument(
+        "--ai-keep-alive",
+        type=str,
+        help="Set model keep-alive duration (forwarded to TUI)",
+    )
+    parser.add_argument(
         "--update",
         action="store_true",
         help="check for updates and optionally install them",
