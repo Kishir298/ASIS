@@ -87,7 +87,7 @@ def test_starts_owned_and_records_pid():
     ownership = ensure_ollama(
         "http://127.0.0.1:11434",
         available_fn=fake_up,
-        popen_factory=lambda: proc,
+        popen_factory=lambda bh: proc,
         sleep=lambda s: None,
     )
     assert ownership.owned is True
@@ -109,7 +109,7 @@ def test_early_child_exit_is_reported_and_cleaned():
         ensure_ollama(
             "http://127.0.0.1:11434",
             available_fn=lambda: False,
-            popen_factory=lambda: Dead(),
+            popen_factory=lambda bh: Dead(),
             sleep=lambda s: None,
         )
 

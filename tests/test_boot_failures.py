@@ -130,7 +130,7 @@ async def test_boot_fails_when_model_missing():
     orchestrator = BootOrchestrator(state=state, event_bus=event_bus, mock_mode=False)
     orchestrator._components.ai_provider = MissingModelProvider(model="test")
     
-    with pytest.raises(BootError, match="Model readiness check failed"):
+    with pytest.raises(BootError, match="Model readiness probe failed"):
         await orchestrator._verify_model()
     
     # Verify model_ready is NOT set to True
@@ -170,7 +170,7 @@ async def test_boot_fails_on_timeout():
     
     orchestrator._components.ai_provider = TimeoutSimProvider(model="test")
     
-    with pytest.raises(BootError, match="timed out"):
+    with pytest.raises(BootError, match="Model readiness probe failed"):
         await orchestrator._verify_model()
     
     assert state.model_ready is False
@@ -185,7 +185,7 @@ async def test_boot_fails_on_invalid_provider():
     orchestrator = BootOrchestrator(state=state, event_bus=event_bus, mock_mode=False)
     orchestrator._components.ai_provider = InvalidConfigProvider()
     
-    with pytest.raises(BootError, match="Model readiness check failed"):
+    with pytest.raises(BootError, match="AI provider has no chat"):
         await orchestrator._verify_model()
     
     assert state.model_ready is False
