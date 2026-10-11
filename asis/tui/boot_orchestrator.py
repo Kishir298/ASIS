@@ -118,6 +118,7 @@ class BootOrchestrator:
         self._identity_provider = identity_provider or DefaultIdentityProvider()
         self._memory_provider_factory = memory_provider_factory or self._default_memory_factory
         self._tool_router_provider = tool_router_provider or DefaultToolRouterProvider()
+        self._ai_provider_factory = ai_provider_factory
         self._voice_pipeline_factory = voice_pipeline_factory or DefaultVoicePipelineFactory()
 
     def _add_boot_log(self, status: str, message: str) -> None:
@@ -160,6 +161,9 @@ class BootOrchestrator:
 
         # Step 8: Voice Pipeline
         await self._boot_voice_pipeline()
+
+        # Propagate event bus to components
+        self._components.event_bus = self.event_bus
 
         self._add_boot_log("OK", "A.S.I.S. ready.")
         return self._components
@@ -206,59 +210,66 @@ class BootOrchestrator:
                 self.state.model_name = settings.ai.model
                 self._add_boot_log("OK", "AI provider ready (MOCK)")
             else:
-                # Create provider with CLI overrides if provided
-                from asis.ai.providers import OllamaProvider, resolve_think
-                from asis.configuration import settings as global_settings
-
-                model = global_settings.ai.model
-                host = global_settings.ai.endpoint
-                timeout = global_settings.ai.request_timeout
-                temperature = self.state.ai_temperature if self.state.ai_temperature is not None else global_settings.ai.temperature
-                retries = global_settings.network.retries
-                think = resolve_think(
-                    self.state.ai_think if self.state.ai_think is not None else global_settings.ai.think,
-                    model
-                )
-                num_predict = self.state.ai_num_predict if self.state.ai_num_predict is not None else (global_settings.ai.num_predict or None)
-                keep_alive = self.state.ai_keep_alive if self.state.ai_keep_alive is not None else (global_settings.ai.keep_alive or None)
-
-                provider = OllamaProvider(
-                    model=model,
-                    host=host,
-                    timeout=timeout,
-                    temperature=temperature,
-                    retries=retries,
-                    think=think,
-                    num_predict=num_predict,
-                    keep_alive=keep_alive,
-                )
-                self.state.model_name = model
-                self._add_boot_log("BOOT", f"Connecting to {provider.name} ({provider.model})...")
-
-                # Check availability in executor to avoid blocking
-                loop = asyncio.get_event_loop()
-                available = False
-                avail_fn = getattr(provider, "available", None)
-                if callable(avail_fn):
-                    try:
-                        available = await asyncio.wait_for(
-                            loop.run_in_executor(None, lambda: avail_fn(timeout=5.0)),
-                            timeout=10.0,
-                        )
-                    except TypeError:
-                        available = await asyncio.wait_for(
-                            loop.run_in_executor(None, avail_fn),
-                            timeout=10.0,
-                        )
-                    except Exception:
-                        available = False
-
-                if available:
-                    self.state.ollama_online = True
-                    self._add_boot_log("OK", f"{provider.name.capitalize()} ready")
+                # Use injected factory if provided, otherwise fall back to default Ollama provider
+                if self._ai_provider_factory is not None:
+                    provider = self._ai_provider_factory.create(settings)
+                    self.state.model_name = getattr(provider, 'model', settings.ai.model)
+                    self._add_boot_log("OK", f"AI provider ready ({provider.name})")
                 else:
-                    self._add_boot_log("FAIL", f"{provider.name.capitalize()} server not reachable")
-                    raise BootError(f"{provider.name.capitalize()} server not reachable at {getattr(provider, 'host', global_settings.ai.endpoint)}")
+                    # Create provider with CLI overrides if provided
+                    from asis.ai.providers import OllamaProvider, resolve_think
+                    from asis.configuration import settings as global_settings
+
+                    # Use CLI overrides or fall back to settings
+                    model = self.state.ai_model_override if self.state.ai_model_override else global_settings.ai.model
+                    host = global_settings.ai.endpoint
+                    timeout = global_settings.ai.request_timeout
+                    temperature = self.state.ai_temperature if self.state.ai_temperature is not None else global_settings.ai.temperature
+                    retries = global_settings.network.retries
+                    think = resolve_think(
+                        self.state.ai_think if self.state.ai_think is not None else global_settings.ai.think,
+                        model
+                    )
+                    num_predict = self.state.ai_num_predict if self.state.ai_num_predict is not None else (global_settings.ai.num_predict or None)
+                    keep_alive = self.state.ai_keep_alive if self.state.ai_keep_alive is not None else (global_settings.ai.keep_alive or None)
+
+                    provider = OllamaProvider(
+                        model=model,
+                        host=host,
+                        timeout=timeout,
+                        temperature=temperature,
+                        retries=retries,
+                        think=think,
+                        num_predict=num_predict,
+                        keep_alive=keep_alive,
+                    )
+                    self.state.model_name = model
+                    self._add_boot_log("BOOT", f"Connecting to {provider.name} ({provider.model})...")
+
+                    # Check availability in executor to avoid blocking
+                    loop = asyncio.get_event_loop()
+                    available = False
+                    avail_fn = getattr(provider, "available", None)
+                    if callable(avail_fn):
+                        try:
+                            available = await asyncio.wait_for(
+                                loop.run_in_executor(None, lambda: avail_fn(timeout=5.0)),
+                                timeout=10.0,
+                            )
+                        except TypeError:
+                            available = await asyncio.wait_for(
+                                loop.run_in_executor(None, avail_fn),
+                                timeout=10.0,
+                            )
+                        except Exception:
+                            available = False
+
+                    if available:
+                        self.state.ollama_online = True
+                        self._add_boot_log("OK", f"{provider.name.capitalize()} ready")
+                    else:
+                        self._add_boot_log("FAIL", f"{provider.name.capitalize()} server not reachable")
+                        raise BootError(f"{provider.name.capitalize()} server not reachable at {getattr(provider, 'host', global_settings.ai.endpoint)}")
 
             self._components.ai_provider = provider
         except BootError:
@@ -268,26 +279,33 @@ class BootOrchestrator:
             raise BootError(f"AI provider boot failed: {exc}") from exc
 
     async def _verify_model(self) -> None:
-        """Verify model readiness with a real inference probe."""
+        """Verify model readiness with a real inference probe using shared policy."""
         self._add_boot_log("BOOT", "Verifying model...")
         try:
-            from asis.ai.models import AIMessage, MessageRole
+            from asis.app.boot import verify_model_readiness, ReadinessPolicy
             provider = self._components.ai_provider
             if not provider:
                 raise BootError("AI provider not initialized")
 
-            messages = [AIMessage(role=MessageRole.USER, content="hello")]
+            # Apply probe-specific settings (disable thinking, bound num_predict)
+            policy = ReadinessPolicy.from_settings()
 
             # Run chat in executor to avoid blocking the event loop
             loop = asyncio.get_event_loop()
+            
+            # Use the provider's own timeout for the chat call, but wrap with overall deadline
+            # The verify_model_readiness function handles think/num_predict patching
+            def probe_call():
+                return verify_model_readiness(provider, policy)
+            
+            # Apply overall timeout from policy
             response = await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: provider.chat(messages)),
-                timeout=30.0,
+                loop.run_in_executor(None, probe_call),
+                timeout=policy.overall_timeout_s,
             )
-            content = getattr(response, "content", "")
-            text = content if isinstance(content, str) else str(content or "")
+            chars, probe_ms = response
 
-            if text.strip():
+            if chars > 0:
                 self.state.model_ready = True
                 self._add_boot_log("OK", "Model ready")
             else:
@@ -295,8 +313,8 @@ class BootOrchestrator:
         except BootError:
             raise
         except asyncio.TimeoutError:
-            self._add_boot_log("FAIL", "Model readiness probe timed out")
-            raise BootError("Model readiness probe timed out after 30s")
+            self._add_boot_log("FAIL", f"Model readiness probe timed out after {int(policy.overall_timeout_s)}s")
+            raise BootError(f"Model readiness probe timed out after {int(policy.overall_timeout_s)}s")
         except Exception as exc:
             self._add_boot_log("FAIL", f"Model readiness check failed: {exc}")
             raise BootError(f"Model readiness check failed: {exc}") from exc
@@ -347,7 +365,14 @@ class BootOrchestrator:
             voice_pipeline = self._voice_pipeline_factory.create(self.event_bus)
             self._components.voice_pipeline = voice_pipeline
             self.state.voice_state = VoiceState.READY
-            self._add_boot_log("OK", "Voice pipeline initialized")
+            # Check if using mock engines and label honestly
+            is_mock = (
+                getattr(voice_pipeline, 'audio_input', None) and type(voice_pipeline.audio_input).__name__.startswith('Mock') or
+                getattr(voice_pipeline, 'speech_recognizer', None) and type(voice_pipeline.speech_recognizer).__name__.startswith('Mock') or
+                getattr(voice_pipeline, 'tts', None) and type(voice_pipeline.tts).__name__.startswith('Mock')
+            )
+            label = "Voice pipeline initialized (MOCK)" if is_mock else "Voice pipeline initialized"
+            self._add_boot_log("OK", label)
         except Exception as exc:
             self.state.voice_state = VoiceState.ERROR
             self._add_boot_log("WARN", f"Voice pipeline unavailable: {exc}")
@@ -390,6 +415,8 @@ async def run_boot_sequence_legacy(
     event_bus: EventBus,
     boot_log_panel: BootLogPanel | None = None,
     mock_mode: bool = False,
+    ai_provider: str | None = None,
+    ai_model: str | None = None,
 ) -> dict[str, Any]:
     """
     Legacy compatibility wrapper for the old boot sequence.
@@ -403,6 +430,11 @@ async def run_boot_sequence_legacy(
         boot_log_panel=boot_log_panel,
         mock_mode=mock_mode,
     )
+    # Pass provider/model through state for the orchestrator to use
+    if ai_provider:
+        state.ai_provider_override = ai_provider
+    if ai_model:
+        state.ai_model_override = ai_model
     components = await orchestrator.run()
     return {
         "identity": components.identity,
@@ -413,4 +445,5 @@ async def run_boot_sequence_legacy(
         "assistant_app": components.assistant_app,
         "voice_pipeline": components.voice_pipeline,
         "event_bus": components.event_bus,
+        "ollama_owned": False,  # TUI doesn't own Ollama; launcher handles lifecycle
     }

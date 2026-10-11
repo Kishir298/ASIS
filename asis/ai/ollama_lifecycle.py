@@ -65,7 +65,7 @@ def is_ollama_running(host: str, timeout: float = 5.0) -> bool:
         return False
 
 
-def _launch_serve() -> Any:
+def _launch_serve(bind_host: str = "127.0.0.1:11434") -> Any:
     """Launch ``ollama serve`` detached with suppressed stdio."""
     binary = shutil.which("ollama")
     if not binary:
@@ -88,8 +88,9 @@ def _launch_serve() -> Any:
             kwargs["start_new_session"] = True
     except Exception:
         pass
+    env = {**os.environ, "OLLAMA_HOST": bind_host}
     try:
-        return subprocess.Popen([binary, "serve"], **kwargs)
+        return subprocess.Popen([binary, "serve"], env=env, **kwargs)
     except FileNotFoundError as exc:
         raise OllamaLifecycleError(
             "Ollama is not running and `ollama serve` could not start."
@@ -102,9 +103,10 @@ def ensure_ollama(
     host: str,
     managed: str = "auto",
     serve_timeout: float = 60.0,
+    bind_host: str = "127.0.0.1:11434",
     *,
     available_fn: Callable[[], bool] | None = None,
-    popen_factory: Callable[[], Any] | None = None,
+    popen_factory: Callable[[str], Any] | None = None,
     sleep: Callable[[float], None] | None = None,
 ) -> OllamaOwnership:
     """Ensure an Ollama server is reachable, starting one only when allowed.
@@ -141,7 +143,7 @@ def ensure_ollama(
 
     factory = popen_factory if popen_factory is not None else _launch_serve
     try:
-        process = factory()
+        process = factory(bind_host)
     except OllamaLifecycleError:
         raise
     except Exception as exc:

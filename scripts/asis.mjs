@@ -42,15 +42,21 @@ const PYTHON_LAUNCHER = IS_WINDOWS ? "py" : "python3";
 // Overridable for testing (e.g. ASIS_OLLAMA_PORT=1 forces the down-path).
 const OLLAMA_HOST = process.env.ASIS_OLLAMA_HOST ?? "127.0.0.1";
 const OLLAMA_PORT = Number(process.env.ASIS_OLLAMA_PORT ?? 11434);
-// Parse ASIS_AI_ENDPOINT if set (format: http://host:port)
+// Parse ASIS_AI_ENDPOINT if set (format: http://host:port/path)
+let ENDPOINT_URL = null;
 let ENDPOINT_HOST = OLLAMA_HOST;
 let ENDPOINT_PORT = OLLAMA_PORT;
+let ENDPOINT_PROTOCOL = "http:";
+let ENDPOINT_PATH = "";
 const AI_ENDPOINT = process.env.ASIS_AI_ENDPOINT;
 if (AI_ENDPOINT) {
   try {
     const url = new URL(AI_ENDPOINT);
+    ENDPOINT_URL = url;
     ENDPOINT_HOST = url.hostname;
     ENDPOINT_PORT = Number(url.port) || (url.protocol === "https:" ? 443 : 80);
+    ENDPOINT_PROTOCOL = url.protocol;
+    ENDPOINT_PATH = url.pathname || "";
   } catch {
     // Ignore parse errors, fall back to defaults
   }
@@ -175,22 +181,28 @@ function voiceDepsPresent() {
 
 function fetchJson(path) {
   return new Promise((resolvePromise, rejectPromise) => {
-    const request = httpRequest(
-      { host: ENDPOINT_HOST, port: ENDPOINT_PORT, path, method: "GET", timeout: 5000 },
-      (response) => {
-        let body = "";
-        response.on("data", (chunk) => {
-          body += chunk;
-        });
-        response.on("end", () => {
-          try {
-            resolvePromise(JSON.parse(body));
-          } catch (error) {
-            rejectPromise(error);
-          }
-        });
-      }
-    );
+    const requestOptions = {
+      host: ENDPOINT_HOST,
+      port: ENDPOINT_PORT,
+      path: ENDPOINT_PATH + path,
+      method: "GET",
+      timeout: 5000,
+    };
+    const requestModule = ENDPOINT_PROTOCOL === "https:" ? "https" : "http";
+    const { request } = require(requestModule);
+    const request = request(requestOptions, (response) => {
+      let body = "";
+      response.on("data", (chunk) => {
+        body += chunk;
+      });
+      response.on("end", () => {
+        try {
+          resolvePromise(JSON.parse(body));
+        } catch (error) {
+          rejectPromise(error);
+        }
+      });
+    });
     request.on("timeout", () => {
       request.destroy(new Error("timed out"));
     });
@@ -219,6 +231,13 @@ function sleep(ms) {
 async function ensureOllama() {
   if (await ollamaUp()) {
     return { owned: false, servePid: null };
+  }
+  // Refuse automatic local startup for remote endpoints
+  if (ENDPOINT_URL && ENDPOINT_URL.hostname !== "127.0.0.1" && ENDPOINT_URL.hostname !== "localhost") {
+    fail(
+      `Ollama is not reachable at ${AI_ENDPOINT} and automatic local startup is disabled for remote endpoints. ` +
+      `Start Ollama manually or configure a local endpoint.`
+    );
   }
   console.error("asis: Ollama is down; starting 'ollama serve' ...");
   const server = spawn("ollama", ["serve"], {
@@ -289,10 +308,17 @@ function unloadModel(model) {
   }
 }
 
+function normalizeModelTag(tag) {
+  // Normalize model tag for comparison: strip digest suffix if present
+  // e.g., "qwen3:14b@sha256:abc" -> "qwen3:14b"
+  return tag.split("@")[0];
+}
+
 async function checkModel() {
   const tags = await fetchJson("/api/tags");
-  const names = new Set((tags.models ?? []).map((model) => model.name));
-  const present = [...names].some((name) => name.startsWith(MODEL));
+  const names = new Set((tags.models ?? []).map((model) => normalizeModelTag(model.name)));
+  const normalizedModel = normalizeModelTag(MODEL);
+  const present = names.has(normalizedModel);
   if (!present) {
     fail(
       `model '${MODEL}' is not pulled. Run 'ollama pull ${MODEL}', then retry.`
@@ -312,41 +338,41 @@ async function probeInference() {
       think: false,
       options: { num_predict: 64 },
     });
-    const request = httpRequest(
-      {
-        host: ENDPOINT_HOST,
-        port: ENDPOINT_PORT,
-        path: "/api/chat",
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(payload),
-        },
-        timeout: 30000,
+    const requestOptions = {
+      host: ENDPOINT_HOST,
+      port: ENDPOINT_PORT,
+      path: ENDPOINT_PATH + "/api/chat",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(payload),
       },
-      (response) => {
-        let body = "";
-        response.on("data", (chunk) => {
-          body += chunk;
-        });
-        response.on("end", () => {
-          try {
-            const data = JSON.parse(body);
-            // Check both content and thinking fields (for thinking models)
-            const content = data?.message?.content ?? "";
-            const thinking = data?.message?.thinking ?? "";
-            const visible = content.trim() || thinking.trim();
-            if (visible) {
-              resolvePromise(true);
-            } else {
-              rejectPromise(new Error("Empty response from model"));
-            }
-          } catch (error) {
-            rejectPromise(error);
+      timeout: 30000,
+    };
+    const requestModule = ENDPOINT_PROTOCOL === "https:" ? "https" : "http";
+    const { request } = require(requestModule);
+    const request = request(requestOptions, (response) => {
+      let body = "";
+      response.on("data", (chunk) => {
+        body += chunk;
+      });
+      response.on("end", () => {
+        try {
+          const data = JSON.parse(body);
+          // Check both content and thinking fields (for thinking models)
+          const content = data?.message?.content ?? "";
+          const thinking = data?.message?.thinking ?? "";
+          const visible = content.trim() || thinking.trim();
+          if (visible) {
+            resolvePromise(true);
+          } else {
+            rejectPromise(new Error("Empty response from model"));
           }
-        });
-      }
-    );
+        } catch (error) {
+          rejectPromise(error);
+        }
+      });
+    });
     request.on("timeout", () => {
       request.destroy(new Error("inference probe timed out"));
     });
@@ -370,6 +396,14 @@ async function main() {
   // Remove --mock from args passed to Python (Python uses --provider mock)
   const filteredArgs = rawArgs.filter(arg => arg !== "--mock");
 
+  // Extract provider/model/inference overrides for forwarding
+  const providerArg = rawArgs.includes("--provider") ? rawArgs[rawArgs.indexOf("--provider") + 1] : null;
+  const modelArg = rawArgs.includes("--model") ? rawArgs[rawArgs.indexOf("--model") + 1] : null;
+  const aiTempArg = rawArgs.includes("--ai-temperature") ? rawArgs[rawArgs.indexOf("--ai-temperature") + 1] : null;
+  const aiThinkArg = rawArgs.includes("--ai-think") ? rawArgs[rawArgs.indexOf("--ai-think") + 1] : null;
+  const aiNumPredictArg = rawArgs.includes("--ai-num-predict") ? rawArgs[rawArgs.indexOf("--ai-num-predict") + 1] : null;
+  const aiKeepAliveArg = rawArgs.includes("--ai-keep-alive") ? rawArgs[rawArgs.indexOf("--ai-keep-alive") + 1] : null;
+
   if (rawArgs[0] === "voice" && !voiceDepsPresent()) {
     console.error(
       "asis: voice extras are not installed; voice mode will use mock engines."
@@ -384,6 +418,17 @@ async function main() {
       process.exit(runForeground(VENV_PYTHON, ["-m", "asis", "--identify", "--provider", "mock"]));
     }
     const { owned, servePid } = await ensureOllama();
+    
+    // Register cleanup handlers early (before any risky operations)
+    const shutdownOwned = () => {
+      if (owned) {
+        unloadModel(MODEL);
+        stopServeProcess(servePid);
+      }
+    };
+    process.on("SIGINT", () => { shutdownOwned(); process.exit(130); });
+    process.on("SIGTERM", () => { shutdownOwned(); process.exit(143); });
+
     await checkModel();
     try {
       await probeInference();
@@ -408,6 +453,17 @@ async function main() {
     const result = await ensureOllama();
     owned = result.owned;
     servePid = result.servePid;
+    
+    // Register cleanup handlers immediately after acquiring owned resources
+    const shutdownOwned = () => {
+      if (owned) {
+        unloadModel(MODEL);
+        stopServeProcess(servePid);
+      }
+    };
+    process.on("SIGINT", () => { shutdownOwned(); process.exit(130); });
+    process.on("SIGTERM", () => { shutdownOwned(); process.exit(143); });
+
     await checkModel();
   }
 
@@ -418,19 +474,28 @@ async function main() {
     }
   };
 
-  // Register cleanup handlers early (before any risky operations)
-  process.on("SIGINT", () => {
-    shutdownOwned();
-    process.exit(130);
-  });
-  process.on("SIGTERM", () => {
-    shutdownOwned();
-    process.exit(143);
-  });
-
   const pythonArgs = ["-m", "asis", ...filteredArgs];
   if (isMockMode) {
     pythonArgs.push("--provider", "mock");
+  }
+  // Forward provider/model/inference overrides explicitly
+  if (providerArg) {
+    pythonArgs.push("--provider", providerArg);
+  }
+  if (modelArg) {
+    pythonArgs.push("--model", modelArg);
+  }
+  if (aiTempArg) {
+    pythonArgs.push("--ai-temperature", aiTempArg);
+  }
+  if (aiThinkArg) {
+    pythonArgs.push("--ai-think", aiThinkArg);
+  }
+  if (aiNumPredictArg) {
+    pythonArgs.push("--ai-num-predict", aiNumPredictArg);
+  }
+  if (aiKeepAliveArg) {
+    pythonArgs.push("--ai-keep-alive", aiKeepAliveArg);
   }
   const child = spawn(VENV_PYTHON, pythonArgs, {
     stdio: "inherit",

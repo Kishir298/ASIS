@@ -89,6 +89,10 @@ class AppState:
     ai_num_predict: int | None = None
     ai_keep_alive: str | None = None
 
+    # Provider/Model overrides (from CLI)
+    ai_provider_override: str | None = None
+    ai_model_override: str | None = None
+
     # Subsystem readiness
     memory_ready: bool = False
     tools_ready: bool = False

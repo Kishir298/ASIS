@@ -501,7 +501,21 @@ def entry(argv: Sequence[str] | None = None) -> int:
 
     if args.tui:
         from asis.tui.__main__ import entry as tui_entry
-        return tui_entry([])
+        # Forward all relevant args to TUI
+        tui_argv = []
+        if args.provider:
+            tui_argv.extend(["--provider", args.provider])
+        if args.model:
+            tui_argv.extend(["--model", args.model])
+        if args.ai_temperature is not None:
+            tui_argv.extend(["--ai-temperature", str(args.ai_temperature)])
+        if args.ai_think is not None:
+            tui_argv.extend(["--ai-think", args.ai_think])
+        if args.ai_num_predict is not None:
+            tui_argv.extend(["--ai-num-predict", str(args.ai_num_predict)])
+        if args.ai_keep_alive is not None:
+            tui_argv.extend(["--ai-keep-alive", args.ai_keep_alive])
+        return tui_entry(tui_argv)
 
     if args.version:
         print(f"{settings.app_name} {settings.app_version}")
@@ -560,10 +574,18 @@ def entry(argv: Sequence[str] | None = None) -> int:
     ollama_ownership = OllamaOwnership(owned=False)
     if args.provider == "ollama":
         try:
+            # Extract bind host from endpoint for managed server
+            from urllib.parse import urlparse
+            parsed = urlparse(settings.ai.endpoint)
+            bind_host = f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
+            if not bind_host or bind_host in ("127.0.0.1", "localhost"):
+                bind_host = "127.0.0.1:11434"
+            
             ollama_ownership = ensure_ollama(
                 settings.ai.endpoint,
                 managed=settings.ollama.managed,
                 serve_timeout=settings.ollama.serve_timeout,
+                bind_host=bind_host,
             )
         except OllamaLifecycleError as exc:
             print(f"[FAIL] Ollama unavailable: {exc}")

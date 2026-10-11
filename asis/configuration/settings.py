@@ -51,6 +51,16 @@ class OllamaSettings:
 
 
 @dataclass(frozen=True)
+class BootReadinessSettings:
+    """Boot-time model readiness probe configuration."""
+
+    timeout: int
+    probe_num_predict: int
+    disable_think: bool
+    require_visible: bool
+
+
+@dataclass(frozen=True)
 class ConversationSettings:
     max_history: int
 
@@ -270,6 +280,7 @@ class Settings:
     identity: IdentitySettings
     ai: AISettings
     ollama: OllamaSettings
+    boot_readiness: BootReadinessSettings
     conversation: ConversationSettings
     network: NetworkSettings
     tools: ToolSettings
@@ -336,6 +347,19 @@ def _build_ollama_settings(get_s, environment, d) -> OllamaSettings:
             1,
             120,
         ),
+    )
+
+
+def _build_boot_readiness_settings(get_s, get_b, get_i, d) -> BootReadinessSettings:
+    return BootReadinessSettings(
+        timeout=environment.get_bounded_int(
+            "ASIS_BOOT_READINESS_TIMEOUT", d.BOOT_READINESS_TIMEOUT, 10, 600
+        ),
+        probe_num_predict=environment.get_bounded_int(
+            "ASIS_BOOT_PROBE_NUM_PREDICT", d.BOOT_PROBE_NUM_PREDICT, 1, 1024
+        ),
+        disable_think=get_b("ASIS_BOOT_PROBE_DISABLE_THINK", d.BOOT_PROBE_DISABLE_THINK),
+        require_visible=get_b("ASIS_BOOT_PROBE_REQUIRE_VISIBLE", d.BOOT_PROBE_REQUIRE_VISIBLE),
     )
 
 
@@ -642,6 +666,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             ai=_build_ai_settings(get_s, get_i, get_f, d),
             conversation=_build_conversation_settings(get_i, d),
             ollama=_build_ollama_settings(get_s, environment, d),
+            boot_readiness=_build_boot_readiness_settings(get_s, get_b, get_i, d),
             core=_build_core_settings(get_s, get_b, environment, d),
             network=_build_network_settings(get_i, d),
             tools=_build_tool_settings(get_i, environment, d),

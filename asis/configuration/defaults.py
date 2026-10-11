@@ -49,6 +49,16 @@ OLLAMA_SERVE_TIMEOUT = 60
 # Bounded graceful shutdown for an A.S.I.S.-owned Ollama process.
 OLLAMA_SHUTDOWN_TIMEOUT = 10
 
+# Boot model readiness probe
+# Overall timeout for the readiness probe (cold loads can be slow).
+BOOT_READINESS_TIMEOUT = 120
+# Max tokens for the probe request (bounded, small for fast response).
+BOOT_PROBE_NUM_PREDICT = 32
+# Disable thinking for the probe (faster, avoids thinking-model overhead).
+BOOT_PROBE_DISABLE_THINK = True
+# Require non-empty visible content in probe response.
+BOOT_PROBE_REQUIRE_VISIBLE = True
+
 # Conversation
 CONVERSATION_MAX_HISTORY = 20
 

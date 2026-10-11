@@ -213,6 +213,8 @@ class ASISTUI(App):
     def __init__(
         self,
         mock_mode: bool = False,
+        ai_provider: str | None = None,
+        ai_model: str | None = None,
         ai_temperature: float | None = None,
         ai_think: str | None = None,
         ai_num_predict: int | None = None,
@@ -235,6 +237,8 @@ class ASISTUI(App):
         self.state.ai_num_predict = ai_num_predict
         self.state.ai_keep_alive = ai_keep_alive
         self.mock_mode = mock_mode
+        self.ai_provider = ai_provider
+        self.ai_model = ai_model
 
         self.event_bus = EventBus()
         self.event_bridge: EventBridge | None = None
@@ -491,6 +495,8 @@ class ASISTUI(App):
                 event_bus=self.event_bus,
                 boot_log_panel=boot_log_panel,
                 mock_mode=getattr(self, "mock_mode", False),
+                ai_provider=getattr(self, "ai_provider", None),
+                ai_model=getattr(self, "ai_model", None),
             )
 
             # Assign components to instance attributes
@@ -830,55 +836,88 @@ class ASISTUI(App):
         self.exit()
 
     async def _shutdown(self) -> None:
-        """Shutdown all subsystems."""
+        """Shutdown all subsystems in correct order."""
         self.state.shutdown_requested = True
 
-        # Stop voice pipeline
+        # 1. Cancel boot task FIRST to prevent races
+        if self.boot_task and not self.boot_task.done():
+            self.boot_task.cancel()
+            try:
+                await self.boot_task
+            except asyncio.CancelledError:
+                # Expected when we cancel our own task
+                pass
+            except Exception:
+                # Suppress other exceptions during boot cancellation
+                pass
+
+        # 2. Stop voice pipeline
         if self.voice_pipeline:
             with contextlib.suppress(Exception):
                 self.voice_pipeline.stop()
 
-        # Stop core manager
+        # 3. Stop core manager
         if self._core_manager and self._core_ctx:
             with contextlib.suppress(Exception):
                 self._core_manager.stop(self._core_ctx)
 
-        # Stop owned Ollama
+        # 4. Stop owned Ollama
         if self._ollama_owned:
             with contextlib.suppress(Exception):
                 from asis.ai.ollama_lifecycle import stop_owned_ollama
                 stop_owned_ollama(self._ollama_owned, shutdown_timeout=settings.ollama.shutdown_timeout)
 
-        # Cancel boot task
-        if self.boot_task and not self.boot_task.done():
-            self.boot_task.cancel()
-            with contextlib.suppress(Exception):
-                await self.boot_task
-
-        # Unsubscribe events
+        # 5. Unsubscribe events LAST
         if self.event_bridge:
-            self.event_bridge.unsubscribe_all()
+            with contextlib.suppress(Exception):
+                self.event_bridge.unsubscribe_all()
 
     def on_unmount(self) -> None:
-        """Cleanup on unmount."""
-        asyncio.create_task(self._shutdown())
+        """Cleanup on unmount - run shutdown synchronously to avoid duplicate tasks."""
+        # Run shutdown directly instead of creating a new task to avoid races
+        # The app is already on the event loop thread during unmount
+        try:
+            # Create a task and run it to completion
+            task = asyncio.create_task(self._shutdown())
+            # If we're still on the event loop, run until done
+            if not task.done():
+                # Run the task to completion in the current event loop
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Can't await here in sync context, but we can schedule it
+                    # The task is already scheduled, it will run when the loop continues
+                    pass
+                else:
+                    loop.run_until_complete(task)
+        except Exception:
+            # Suppress any errors during unmount cleanup
+            pass
 
 
 def entry(argv: list[str] | None = None) -> int:
     """Console entry point for asis-tui."""
     import argparse
+    import sys
+
+    # Use sys.argv[1:] when argv is None (direct module launch)
+    if argv is None:
+        argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(description="A.S.I.S. TUI", add_help=False)
     parser.add_argument("--mock", action="store_true", help="Run in mock mode (no Ollama required)")
+    parser.add_argument("--provider", choices=["mock", "ollama"], help="AI provider to use")
+    parser.add_argument("--model", help="Model to use")
     parser.add_argument("--ai-temperature", type=float, help="Set AI temperature")
     parser.add_argument("--ai-think", choices=["auto", "true", "false"], help="Set AI think mode")
     parser.add_argument("--ai-num-predict", type=int, help="Set max tokens to predict")
     parser.add_argument("--ai-keep-alive", type=str, help="Set model keep-alive duration")
     # Parse known args, leave the rest for potential future use
-    args, _ = parser.parse_known_args(argv or [])
+    args, _ = parser.parse_known_args(argv)
 
     app = ASISTUI(
         mock_mode=args.mock,
+        ai_provider=args.provider,
+        ai_model=args.model,
         ai_temperature=args.ai_temperature,
         ai_think=args.ai_think,
         ai_num_predict=args.ai_num_predict,

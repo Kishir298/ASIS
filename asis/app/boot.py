@@ -17,10 +17,31 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from asis.ai.models import AIMessage, MessageRole
+from asis.configuration import settings
 from asis.logging.logger import get_logger
 
 PROBE_TEXT = "hello"
-PROBE_NUM_PREDICT = 32
+
+
+@dataclass(frozen=True)
+class ReadinessPolicy:
+    """Configuration for the model readiness probe."""
+
+    overall_timeout_s: float = 120.0
+    probe_num_predict: int = 32
+    probe_think: bool = False
+    require_visible: bool = True
+
+    @classmethod
+    def from_settings(cls) -> "ReadinessPolicy":
+        """Create policy from global settings."""
+        br = settings.boot_readiness
+        return cls(
+            overall_timeout_s=float(br.timeout),
+            probe_num_predict=br.probe_num_predict,
+            probe_think=not br.disable_think,
+            require_visible=br.require_visible,
+        )
 
 
 class BootError(RuntimeError):
@@ -46,7 +67,7 @@ class BootReport:
     ollama_owned: bool = False
 
 
-def verify_model_readiness(provider: object) -> tuple[int, float]:
+def verify_model_readiness(provider: object, policy: ReadinessPolicy | None = None) -> tuple[int, float]:
     """Send the silent ``hello`` probe via the SAME provider instance.
 
     Returns ``(response_chars, elapsed_ms)``. Raises ``BootError`` when
@@ -58,12 +79,15 @@ def verify_model_readiness(provider: object) -> tuple[int, float]:
     ``num_predict`` on the existing instance (restored afterwards);
     other providers are called untouched.
     """
+    if policy is None:
+        policy = ReadinessPolicy.from_settings()
+
     logger = get_logger("app.boot")
     messages = [AIMessage(role=MessageRole.USER, content=PROBE_TEXT)]
 
     # Reuse the instance (no second client): patch lightweight attrs only.
     saved: dict[str, object] = {}
-    for attr, value in (("think", False), ("num_predict", PROBE_NUM_PREDICT)):
+    for attr, value in (("think", policy.probe_think), ("num_predict", policy.probe_num_predict)):
         try:
             if hasattr(provider, attr):
                 saved[attr] = getattr(provider, attr)
@@ -79,7 +103,7 @@ def verify_model_readiness(provider: object) -> tuple[int, float]:
         response = chat(messages)
         content = getattr(response, "content", "")
         text = content if isinstance(content, str) else str(content or "")
-        if not text.strip():
+        if policy.require_visible and not text.strip():
             raise BootError("Model readiness probe returned an empty response.")
         elapsed_ms = (time.monotonic() - started) * 1000.0
         logger.debug(
@@ -210,7 +234,16 @@ def run_boot_sequence(
 
     _write(stream, "[....] Verifying model...\n")
     started = time.monotonic()
-    probe = probe_fn if probe_fn is not None else verify_model_readiness
+    policy = ReadinessPolicy.from_settings()
+    if probe_fn is not None:
+        # Legacy custom probe - wrap to maintain compatibility
+        def wrapped_probe(p):
+            return probe_fn(p)
+        probe = wrapped_probe
+    else:
+        def default_probe(p):
+            return verify_model_readiness(p, policy)
+        probe = default_probe
     try:
         chars, probe_ms = probe(provider)
     except BootError as exc:
