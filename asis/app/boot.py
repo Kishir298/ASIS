@@ -87,7 +87,7 @@ def verify_model_readiness(provider: object, policy: ReadinessPolicy | None = No
 
     # Reuse the instance (no second client): patch lightweight attrs only.
     saved: dict[str, object] = {}
-    for attr, value in (("think", policy.probe_think), ("num_predict", policy.probe_num_predict)):
+    for attr, value in (("think", policy.probe_think), ("num_predict", policy.probe_num_predict), ("timeout", policy.overall_timeout_s)):
         try:
             if hasattr(provider, attr):
                 saved[attr] = getattr(provider, attr)

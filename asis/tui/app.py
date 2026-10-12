@@ -873,24 +873,11 @@ class ASISTUI(App):
                 self.event_bridge.unsubscribe_all()
 
     def on_unmount(self) -> None:
-        """Cleanup on unmount - run shutdown synchronously to avoid duplicate tasks."""
-        # Run shutdown directly instead of creating a new task to avoid races
-        # The app is already on the event loop thread during unmount
+        """Cleanup on unmount."""
+        # Schedule shutdown on the event loop - it will run when the loop continues
         try:
-            # Create a task and run it to completion
-            task = asyncio.create_task(self._shutdown())
-            # If we're still on the event loop, run until done
-            if not task.done():
-                # Run the task to completion in the current event loop
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # Can't await here in sync context, but we can schedule it
-                    # The task is already scheduled, it will run when the loop continues
-                    pass
-                else:
-                    loop.run_until_complete(task)
+            asyncio.create_task(self._shutdown())
         except Exception:
-            # Suppress any errors during unmount cleanup
             pass
 
 

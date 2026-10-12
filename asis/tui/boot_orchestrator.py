@@ -212,7 +212,9 @@ class BootOrchestrator:
             else:
                 # Use injected factory if provided, otherwise fall back to default Ollama provider
                 if self._ai_provider_factory is not None:
-                    provider = self._ai_provider_factory.create(settings)
+                    # Create a settings object with CLI overrides applied for the factory
+                    factory_settings = self._create_factory_settings()
+                    provider = self._ai_provider_factory.create(factory_settings)
                     self.state.model_name = getattr(provider, 'model', settings.ai.model)
                     self._add_boot_log("OK", f"AI provider ready ({provider.name})")
                 else:
@@ -278,6 +280,27 @@ class BootOrchestrator:
             self._add_boot_log("FAIL", f"AI provider failed: {exc}")
             raise BootError(f"AI provider boot failed: {exc}") from exc
 
+    def _create_factory_settings(self):
+        """Create a settings-like object with CLI overrides for AI provider factory."""
+        from asis.configuration import settings as global_settings
+        
+        class FactorySettings:
+            def __init__(self, base, state):
+                self.ai = type('AI', (), {})()
+                self.ai.model = state.ai_model_override if state.ai_model_override else global_settings.ai.model
+                self.ai.endpoint = global_settings.ai.endpoint
+                self.ai.request_timeout = global_settings.ai.request_timeout
+                self.ai.temperature = state.ai_temperature if state.ai_temperature is not None else global_settings.ai.temperature
+                self.network = type('Network', (), {'retries': global_settings.network.retries})()
+                # Add think resolution
+                from asis.ai.providers import resolve_think
+                think_val = state.ai_think if state.ai_think is not None else global_settings.ai.think
+                self.ai.think = resolve_think(think_val, self.ai.model)
+                self.ai.num_predict = state.ai_num_predict if state.ai_num_predict is not None else (global_settings.ai.num_predict or None)
+                self.ai.keep_alive = state.ai_keep_alive if state.ai_keep_alive is not None else (global_settings.ai.keep_alive or None)
+        
+        return FactorySettings(global_settings, self.state)
+
     async def _verify_model(self) -> None:
         """Verify model readiness with a real inference probe using shared policy."""
         self._add_boot_log("BOOT", "Verifying model...")
@@ -287,22 +310,19 @@ class BootOrchestrator:
             if not provider:
                 raise BootError("AI provider not initialized")
 
-            # Apply probe-specific settings (disable thinking, bound num_predict)
+            # Apply probe-specific settings (disable thinking, bound num_predict, set timeout)
             policy = ReadinessPolicy.from_settings()
 
             # Run chat in executor to avoid blocking the event loop
+            # The verify_model_readiness function handles think/num_predict/timeout patching
+            # and the provider's timeout will handle the overall deadline
             loop = asyncio.get_event_loop()
             
-            # Use the provider's own timeout for the chat call, but wrap with overall deadline
-            # The verify_model_readiness function handles think/num_predict patching
             def probe_call():
                 return verify_model_readiness(provider, policy)
             
-            # Apply overall timeout from policy
-            response = await asyncio.wait_for(
-                loop.run_in_executor(None, probe_call),
-                timeout=policy.overall_timeout_s,
-            )
+            # Use run_in_executor but without wait_for - provider timeout handles it
+            response = await loop.run_in_executor(None, probe_call)
             chars, probe_ms = response
 
             if chars > 0:
@@ -366,11 +386,20 @@ class BootOrchestrator:
             self._components.voice_pipeline = voice_pipeline
             self.state.voice_state = VoiceState.READY
             # Check if using mock engines and label honestly
-            is_mock = (
-                getattr(voice_pipeline, 'audio_input', None) and type(voice_pipeline.audio_input).__name__.startswith('Mock') or
-                getattr(voice_pipeline, 'speech_recognizer', None) and type(voice_pipeline.speech_recognizer).__name__.startswith('Mock') or
-                getattr(voice_pipeline, 'tts', None) and type(voice_pipeline.tts).__name__.startswith('Mock')
+            # Explicit parentheses for clarity: check if ANY component is a mock
+            has_mock_audio = (
+                getattr(voice_pipeline, 'audio_input', None)
+                and type(voice_pipeline.audio_input).__name__.startswith('Mock')
             )
+            has_mock_stt = (
+                getattr(voice_pipeline, 'speech_recognizer', None)
+                and type(voice_pipeline.speech_recognizer).__name__.startswith('Mock')
+            )
+            has_mock_tts = (
+                getattr(voice_pipeline, 'tts', None)
+                and type(voice_pipeline.tts).__name__.startswith('Mock')
+            )
+            is_mock = has_mock_audio or has_mock_stt or has_mock_tts
             label = "Voice pipeline initialized (MOCK)" if is_mock else "Voice pipeline initialized"
             self._add_boot_log("OK", label)
         except Exception as exc:

@@ -190,7 +190,7 @@ function fetchJson(path) {
     };
     const requestModule = ENDPOINT_PROTOCOL === "https:" ? "https" : "http";
     const { request } = require(requestModule);
-    const request = request(requestOptions, (response) => {
+    const req = request(requestOptions, (response) => {
       let body = "";
       response.on("data", (chunk) => {
         body += chunk;
@@ -203,11 +203,11 @@ function fetchJson(path) {
         }
       });
     });
-    request.on("timeout", () => {
-      request.destroy(new Error("timed out"));
+    req.on("timeout", () => {
+      req.destroy(new Error("timed out"));
     });
-    request.on("error", rejectPromise);
-    request.end();
+    req.on("error", rejectPromise);
+    req.end();
   });
 }
 
@@ -314,14 +314,14 @@ function normalizeModelTag(tag) {
   return tag.split("@")[0];
 }
 
-async function checkModel() {
+async function checkModel(model = MODEL) {
   const tags = await fetchJson("/api/tags");
   const names = new Set((tags.models ?? []).map((model) => normalizeModelTag(model.name)));
-  const normalizedModel = normalizeModelTag(MODEL);
+  const normalizedModel = normalizeModelTag(model);
   const present = names.has(normalizedModel);
   if (!present) {
     fail(
-      `model '${MODEL}' is not pulled. Run 'ollama pull ${MODEL}', then retry.`
+      `model '${model}' is not pulled. Run 'ollama pull ${model}', then retry.`
     );
   }
 }
@@ -351,7 +351,7 @@ async function probeInference() {
     };
     const requestModule = ENDPOINT_PROTOCOL === "https:" ? "https" : "http";
     const { request } = require(requestModule);
-    const request = request(requestOptions, (response) => {
+    const req = request(requestOptions, (response) => {
       let body = "";
       response.on("data", (chunk) => {
         body += chunk;
@@ -373,12 +373,12 @@ async function probeInference() {
         }
       });
     });
-    request.on("timeout", () => {
-      request.destroy(new Error("inference probe timed out"));
+    req.on("timeout", () => {
+      req.destroy(new Error("inference probe timed out"));
     });
-    request.on("error", rejectPromise);
-    request.write(payload);
-    request.end();
+    req.on("error", rejectPromise);
+    req.write(payload);
+    req.end();
   });
 }
 
@@ -429,7 +429,7 @@ async function main() {
     process.on("SIGINT", () => { shutdownOwned(); process.exit(130); });
     process.on("SIGTERM", () => { shutdownOwned(); process.exit(143); });
 
-    await checkModel();
+    await checkModel(modelArg);
     try {
       await probeInference();
       console.error("asis: Inference probe successful.");
@@ -464,7 +464,7 @@ async function main() {
     process.on("SIGINT", () => { shutdownOwned(); process.exit(130); });
     process.on("SIGTERM", () => { shutdownOwned(); process.exit(143); });
 
-    await checkModel();
+    await checkModel(modelArg);
   }
 
   const shutdownOwned = () => {

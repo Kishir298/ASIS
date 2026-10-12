@@ -618,9 +618,6 @@ def entry(argv: Sequence[str] | None = None) -> int:
 
     core_manager = build_core_manager()
     core_ctx: RuntimeContext | None = None
-    if core_manager is not None:
-        core_ctx = RuntimeContext()
-        core_manager.start(core_ctx)
 
     pipeline = None
 
@@ -637,6 +634,10 @@ def entry(argv: Sequence[str] | None = None) -> int:
                 core_manager.stop(core_ctx)
 
     try:
+        if core_manager is not None:
+            core_ctx = RuntimeContext()
+            core_manager.start(core_ctx)
+
         app = build_assistant(
             identity,
             ai,
