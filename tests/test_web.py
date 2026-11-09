@@ -515,7 +515,8 @@ def test_provider_fetch_follows_bounded_public_redirects(monkeypatch):
     assert out["final_url"] == "https://example.com/final"
 
 
-def test_provider_fetch_redirect_to_private_is_blocked():
+def test_provider_fetch_redirect_to_private_is_blocked(monkeypatch):
+    _public_dns(monkeypatch)
     def _route(url, kw):
         if "start" in url:
             return FakeResponse(
