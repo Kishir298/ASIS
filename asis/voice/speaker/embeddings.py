@@ -113,6 +113,7 @@ class SpeechBrainEmbeddingProvider(SpeakerEmbeddingProvider):
         try:
             import hashlib
             from pathlib import Path
+
             from asis.configuration import settings
 
             source = Path(model).expanduser()

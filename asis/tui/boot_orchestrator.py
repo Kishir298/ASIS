@@ -305,7 +305,7 @@ class BootOrchestrator:
         """Verify model readiness with a real inference probe using shared policy."""
         self._add_boot_log("BOOT", "Verifying model...")
         try:
-            from asis.app.boot import verify_model_readiness, ReadinessPolicy
+            from asis.app.boot import ReadinessPolicy, verify_model_readiness
             provider = self._components.ai_provider
             if not provider:
                 raise BootError("AI provider not initialized")

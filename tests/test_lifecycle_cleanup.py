@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import Mock
 
+import pytest
+
 from asis.ai.ollama_lifecycle import OllamaOwnership
+from asis.events import EventBus
 from asis.tui.boot_orchestrator import BootOrchestrator
 from asis.tui.state import AppState
-from asis.events import EventBus
 
 
 class TestLifecycleCleanup:
@@ -33,14 +34,15 @@ class TestLifecycleCleanup:
 
     def test_ollama_ownership_flag_in_boot_report(self):
         """Boot report should include Ollama ownership flag."""
-        from asis.app.boot import run_boot_sequence
-        from asis.identity import build_identity
-        from asis.memory import MemoryManager, MemoryStorage, MemoryDatabase
-        from asis.app.assistant import AssistantApp
-        from asis.ai.manager import AIManager
-        from asis.ai.providers import MockAIProvider
         import tempfile
         from pathlib import Path
+
+        from asis.ai.manager import AIManager
+        from asis.ai.providers import MockAIProvider
+        from asis.app.assistant import AssistantApp
+        from asis.app.boot import run_boot_sequence
+        from asis.identity import build_identity
+        from asis.memory import MemoryDatabase, MemoryManager, MemoryStorage
         
         # Create test components
         tmp = Path(tempfile.mkdtemp()) / "test.db"

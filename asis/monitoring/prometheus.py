@@ -1,7 +1,13 @@
 """Prometheus metrics exporter for ASIS."""
 
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
 from fastapi import Response
+from prometheus_client import (
+    CONTENT_TYPE_LATEST,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 # Tool execution metrics
 asis_tool_executions_total = Counter(

@@ -10,10 +10,10 @@ import pytest
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from asis.configuration.settings import load_settings, reset_settings
-from asis.tui.state import AppState
 from asis.ai.manager import create_provider
 from asis.ai.providers import OllamaProvider
+from asis.configuration.settings import load_settings, reset_settings
+from asis.tui.state import AppState
 
 
 def test_settings_use_env_vars():

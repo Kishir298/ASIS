@@ -10,10 +10,10 @@ from typing import TYPE_CHECKING, Any
 
 from asis.configuration.defaults import AI_MODEL as DEFAULT_OLLAMA_MODEL
 from asis.errors import InferenceError
+from asis.pi.policy import approval, enabled
+from asis.pi.runtime import guarded
 
 from ..models import AIMessage, AIResponse, NativeToolCall
-from asis.pi.runtime import guarded
-from asis.pi.policy import enabled, approval
 from .base import AIProvider
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, never imported at runtime

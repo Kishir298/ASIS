@@ -54,7 +54,7 @@ def build_memory(db_path: str | Path | None = None) -> MemoryManager:
 def _provider(provider_name: str, model: str):
     """Construct the requested provider, honouring the model override."""
     if provider_name == "mock":
-        from asis.pi.policy import enabled, PolicyError
+        from asis.pi.policy import PolicyError, enabled
         if enabled():
             raise PolicyError("Pi deployment requires a verified real local model; mock inference is disabled.")
         return MockAIProvider(model=model)

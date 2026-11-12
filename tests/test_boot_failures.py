@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import asyncio
+
 import pytest
 
 from asis.ai.models import AIResponse
 from asis.ai.providers import MockAIProvider
 from asis.app.boot import BootError, verify_model_readiness
+from asis.events import EventBus
 from asis.tui.boot_orchestrator import BootOrchestrator
 from asis.tui.state import AppState
-from asis.events import EventBus
 
 
 class UnavailableProvider(MockAIProvider):

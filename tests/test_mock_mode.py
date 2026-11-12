@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from asis.ai.providers import MockAIProvider
+from asis.events import EventBus
 from asis.tui.app import ASISTUI
 from asis.tui.boot_orchestrator import BootOrchestrator
 from asis.tui.state import AppState
-from asis.events import EventBus
-from asis.ai.providers import MockAIProvider
 
 
 def test_mock_mode_tui_mount():

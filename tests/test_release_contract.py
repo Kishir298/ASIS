@@ -13,7 +13,6 @@ import pytest
 
 from asis.configuration.settings import load_settings
 
-
 PARTS = ("DATA", "CONFIG", "CACHE", "LOG", "MEMORY", "RUNTIME")
 
 
@@ -117,7 +116,7 @@ def test_ollama_process_os_adapters(target, monkeypatch):
 @pytest.mark.parametrize("endpoint,bind", [("https://remote.example:11434", "127.0.0.1:11434"),
                                              ("http://127.0.0.1:11434", "0.0.0.0:11434")])
 def test_no_remote_substitution_or_automatic_public_bind(endpoint, bind):
-    from asis.ai.ollama_lifecycle import ensure_ollama, OllamaLifecycleError
+    from asis.ai.ollama_lifecycle import OllamaLifecycleError, ensure_ollama
     spawn = Mock()
     with pytest.raises(OllamaLifecycleError):
         ensure_ollama(endpoint, bind_host=bind, available_fn=lambda: False, popen_factory=spawn)

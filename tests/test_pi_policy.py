@@ -1,5 +1,6 @@
 """Pi policy unit tests plus real loopback/process plumbing, without real weights."""
 from __future__ import annotations
+
 import contextlib
 import importlib.util
 import json
@@ -13,6 +14,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+
 from asis.pi import policy, runtime
 
 DIGEST = 'a' * 64
@@ -80,11 +82,11 @@ def test_remote_endpoints_not_substituted(endpoint):
 
 
 def test_coding_modes_blocked_even_when_enum(pi,memory_manager):
-    from asis.cli.main import build_assistant
     from asis.ai import AIManager
     from asis.ai.providers import MockAIProvider
-    from asis.identity import build_identity
     from asis.app.modes import AssistantMode
+    from asis.cli.main import build_assistant
+    from asis.identity import build_identity
     with pytest.raises(policy.PolicyError,match='sandbox'):
         build_assistant(build_identity(),AIManager(MockAIProvider()),memory_manager,mode=AssistantMode.CODING)
 
@@ -116,8 +118,8 @@ def server():
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux queue adapter")
 def test_real_http_provider_contract_and_pin(pi,server):
+    from asis.ai.models import AIMessage, MessageRole
     from asis.ai.providers.ollama import OllamaProvider
-    from asis.ai.models import AIMessage,MessageRole
     host,calls=server
     p=OllamaProvider(model=MODEL,host=host,num_predict=999,keep_alive='1h',retries=3)
     messages=[AIMessage(role=MessageRole.USER,content='hello')]
@@ -136,8 +138,8 @@ def test_real_http_provider_contract_and_pin(pi,server):
 
 
 def test_incomplete_stream_is_failure_without_retry(pi,monkeypatch):
+    from asis.ai.models import AIMessage, MessageRole
     from asis.ai.providers.ollama import OllamaProvider
-    from asis.ai.models import AIMessage,MessageRole
     from asis.errors import InferenceError
     @contextlib.contextmanager
     def fake_lease(*a):yield 2048,{'capabilities':['completion']},RECORD
@@ -250,7 +252,7 @@ def test_pi_adapter_refuses_unsupported_platforms(monkeypatch, platform):
 
 
 def test_pi_never_autostarts_unmanaged_daemon(pi):
-    from asis.ai.ollama_lifecycle import ensure_ollama, OllamaLifecycleError
+    from asis.ai.ollama_lifecycle import OllamaLifecycleError, ensure_ollama
     launch=Mock()
     with pytest.raises(OllamaLifecycleError, match="automatic daemon launch"):
         ensure_ollama("http://127.0.0.1:11434", managed="on", available_fn=lambda:False, popen_factory=launch)

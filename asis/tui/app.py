@@ -21,14 +21,14 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.reactive import Reactive
 from textual.timer import Timer
-from textual.widgets import Static, RichLog
+from textual.widgets import RichLog, Static
 
 # Import backend modules
 from asis.app.assistant import AssistantApp
+from asis.app.boot import BootError
 from asis.app.modes import AssistantMode as AppAssistantMode
 from asis.configuration import settings
 from asis.events import EventBus
-from asis.app.boot import BootError
 from asis.logging.logger import configure_logging
 from asis.tui.boot_orchestrator import run_boot_sequence_legacy
 from asis.tui.config import load_tui_settings, save_tui_setting
@@ -737,6 +737,7 @@ class ASISTUI(App):
     async def on_input_box_attach_clicked(self, message: InputBox.AttachClicked) -> None:
         """Handle attach button - open file browser modal."""
         from pathlib import Path
+
         from asis.tui.widgets.file_browser_modal import FileBrowserModal
 
         def on_file_selected(path: Path | None) -> None:
