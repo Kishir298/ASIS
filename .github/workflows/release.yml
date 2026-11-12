@@ -62,7 +62,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install ".[ai,dev,tui,docs]"
           python -m pip install ruff
-          ruff check --select F asis tests
+          ruff check --select E9,F,I asis tests
           python -m pytest -o addopts= -q --tb=no
 
   wheel:

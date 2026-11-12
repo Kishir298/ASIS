@@ -23,7 +23,7 @@ jobs:
       - name: Run lint
         run: |
           pip install ruff
-          ruff check --select F asis tests
+          ruff check --select E9,F,I asis tests
       - name: Run tests
         run: |
           python -m pytest -o addopts= -q --tb=no
